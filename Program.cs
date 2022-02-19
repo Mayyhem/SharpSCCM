@@ -228,10 +228,12 @@ namespace SharpSCCM
                     Array.Resize(ref protectedUsernameBytes, length);
                     try
                     {
-                        // Decrypt the data in memory. The result is stored in the same array as the original data.
-                        ProtectedMemory.Unprotect(protectedUsernameBytes, MemoryProtectionScope.SameLogon);
-                        Console.WriteLine(System.Text.Encoding.Default.GetString(protectedUsernameBytes));
-                        //ProtectedData.Unprotect(protectedUsernameBytes, null, DataProtectionScope.LocalMachine);
+                        
+                        Dpapi.Execute(protectedUsername);
+                        //// Decrypt the data in memory. The result is stored in the same array as the original data.
+                        //ProtectedMemory.Unprotect(protectedUsernameBytes, MemoryProtectionScope.SameLogon);
+                        //Console.WriteLine(System.Text.Encoding.Default.GetString(protectedUsernameBytes));
+                        ////ProtectedData.Unprotect(protectedUsernameBytes, null, DataProtectionScope.LocalMachine);
                     }
                     catch (CryptographicException e)
                     {
