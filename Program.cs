@@ -902,6 +902,13 @@ namespace SharpSCCM
             return certificate;
         }
 
+        static MessageCertificateX509 GetClientAuthCertificate()
+        {
+            // Get client authentication certificate used by the legitimate client
+            MessageCertificateX509 certificate = MessageCertificateX509File.Find(StoreLocation.LocalMachine, "SMS", X509FindType.FindByApplicationPolicy, "1.3.6.1.5.5.7.3.2", false);
+            return certificate;
+        }
+
         static MessageCertificateX509Volatile CreateUserCertificate()
         {
             // Generate certificate for signing and encrypting messages
