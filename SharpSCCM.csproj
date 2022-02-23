@@ -99,9 +99,9 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="lib\Dpapi.cs" />
-    <Compile Include="lib\Helpers.cs" />
-    <Compile Include="lib\Interop.cs" />
+    <None Include="lib\Dpapi.cs" />
+    <None Include="lib\Helpers.cs" />
+    <None Include="lib\Interop.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
