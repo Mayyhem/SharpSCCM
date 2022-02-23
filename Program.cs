@@ -94,6 +94,7 @@ namespace SharpSCCM
             // Get certificates from local machine
             MessageCertificateX509 signingCertificate = GetSigningCertificate();
             MessageCertificateX509 encryptionCertificate = GetEncryptionCertificate();
+            MessageCertificateX509 clientAuthCertificate = GetClientAuthCertificate();
             //MessageCertificateX509 certificate = CreateUserCertificate();
 
             // Register a new client. Using existing client does not work, likely because the certificate does not match what the server expects
@@ -106,6 +107,7 @@ namespace SharpSCCM
             // Add our certificate for message signing and encryption
             assignmentRequest.AddCertificateToMessage(signingCertificate, CertificatePurposes.Signing);
             assignmentRequest.AddCertificateToMessage(encryptionCertificate, CertificatePurposes.Encryption);
+            assignmentRequest.AddCertificateToMessage(clientAuthCertificate, CertificatePurposes.All);
             //assignmentRequest.AddCertificateToMessage(certificate, CertificatePurposes.Signing | CertificatePurposes.Encryption);
 
             SmsClientId clientId = GetSmsId();
