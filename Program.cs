@@ -1094,8 +1094,8 @@ namespace SharpSCCM
             addUserToAdmins.Handler = CommandHandler.Create(
                 (string server, string sitecode, string userName) =>
                 {
-                    var connection = Database.Connect(server, sitecode);
-                    Database.Query(connection, "SELECT * FROM RBAC_Admins");
+                    //var connection = Database.Connect(server, sitecode);
+                    //Database.Query(connection, "SELECT * FROM RBAC_Admins");
                 });
 
             // get 
