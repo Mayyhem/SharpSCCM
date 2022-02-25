@@ -33,9 +33,15 @@ namespace SharpSCCM
             Buffer.BlockCopy(blobBytes, 4, dedupedArray, 0, blobBytes.Length - offset);
             //System.Convert.ToBase64String(dedupedArray);
 
+            // Temporarily use SharpDPAPI to get masterkey and pass to this function
+            // Temporarily set static path to masterkey file
+            string filePath = "%userprofile%\\Desktop\\keys.txt";
+            Dictionary<string, string> masterkeys = new Dictionary<string, string>();
+            masterkeys = Helpers.ParseMasterKeyFile(filePath);
+
             if (blobBytes.Length > 0)
             {
-                byte[] decBytesRaw = DescribeDPAPIBlob(blobBytes, masterkeys, "blob", unprotect, entropy);
+                byte[] decBytesRaw = DescribeDPAPIBlob(blobBytes, masterkeys);
                 
                 if ((decBytesRaw != null) && (decBytesRaw.Length != 0))
                 {
@@ -46,7 +52,7 @@ namespace SharpSCCM
                         if (finalIndex > 1)
                         {
                             byte[] decBytes = new byte[finalIndex + 1];
-                            Array.Copy(decBytesRaw, 0, decBytes, finalIndex);
+                            Array.Copy(decBytesRaw, 0, decBytes, 0, finalIndex);
                             data = Encoding.Unicode.GetString(decBytes);
                         }
                         else
@@ -69,6 +75,86 @@ namespace SharpSCCM
             // Parses a DPAPI blob returning the decrypted plaintext
 
             var offset = 24; // Set to 24 since we're only working with 'blob' blobType
+            var guidMasterKeyBytes = new byte[16];
+            Array.Copy(blobBytes, offset, guidMasterKeyBytes, 0, 16);
+            var guidMasterKey = new Guid(guidMasterKeyBytes);
+            var guidString = $"{{{guidMasterKey}}}";
+
+            Console.WriteLine("    guidMasterKey    : {0}", guidString);
+            offset += 16;
+            Console.WriteLine("    size     : {0}", blobBytes.Length);
+
+            var flags = BitConverter.ToUInt32(blobBytes, offset);
+            offset += 4;
+
+            Console.Write("    flags     : 0x{0}", flags.ToString("X"));
+            if ((flags != 0) && ((flags & 0x20000000) == flags))
+            {
+                Console.Write(" (CRYPTPROTECT_SYSTEM)");
+            }
+            Console.WriteLine();
+
+            var descLength = BitConverter.ToInt32(blobBytes, offset);
+            offset += 4;
+            var description = Encoding.Unicode.GetString(blobBytes, offset, descLength);
+            offset += descLength;
+
+            var algCrypt = BitConverter.ToInt32(blobBytes, offset);
+            offset += 4;
+
+            var algCryptLen = BitConverter.ToInt32(blobBytes, offset);
+            offset += 4;
+
+            var saltLen = BitConverter.ToInt32(blobBytes, offset);
+            offset += 4;
+
+            var saltBytes = new byte[saltLen];
+            Array.Copy(blobBytes, offset, saltBytes, 0, saltLen);
+            offset += saltLen;
+
+            var hmacKeyLen = BitConverter.ToInt32(blobBytes, offset);
+            offset += 4 + hmacKeyLen;
+
+            var alghash = BitConverter.ToInt32(blobBytes, offset);
+            offset += 4;
+
+            Console.WriteLine("    algHash/algCrypt : {0} ({1}) / {2} ({3})", alghash, (Interop.CryptAlg)alghash, algCrypt, (Interop.CryptAlg)algCrypt);
+            Console.WriteLine("    desccription     : {0}", description);
+
+            var algHashLen = BitConverter.ToInt32(blobBytes, offset);
+            offset += 4;
+
+            var hmac2KeyLen = BitConverter.ToInt32(blobBytes, offset);
+            offset += 4 + hmac2KeyLen;
+
+            var dataLen = BitConverter.ToInt32(blobBytes, offset);
+            offset += 4;
+            var dataBytes = new byte[dataLen];
+            Array.Copy(blobBytes, offset, dataBytes, 0, dataLen);
+
+            if (MasterKeys.ContainsKey(guidString))
+            {
+                // if this key is present, decrypt this blob
+                if (alghash == 32782)
+                {
+                    // grab the sha1(masterkey) from the cache
+                    try
+                    {
+                        var keyBytes = Helpers.StringToByteArray(MasterKeys[guidString].ToString());
+
+                        // derive the session key
+                        var derivedKeyBytes = Crypto.DeriveKey(keyBytes, saltBytes, alghash);
+                        var finalKeyBytes = new byte[algCryptLen / 8];
+                        Array.Copy(derivedKeyBytes, finalKeyBytes, algCryptLen / 8);
+
+                        return Crypto.DecryptBlob(dataBytes, finalKeyBytes, algCrypt);
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine("    [X] Error retrieving GUID:SHA1 from cache {0} : {1}", guidString, e.Message);
+                    }
+                }
+            }
 
             return new byte[0]; //temp
 
