@@ -1,18 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Diagnostics;
-using System.IO;
-using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
-using System.Security.Principal;
-using System.Text;
-using System.Text.RegularExpressions;
 
 namespace SharpSCCM
 {
@@ -31,7 +20,7 @@ namespace SharpSCCM
             // Stolen from SharpDPAPI:
             // helper that parses a {GUID}:SHA1 masterkey file
             Dictionary<string, string> masterkeys = new Dictionary<string, string>();
-            
+
             if (File.Exists(filePath))
             {
                 string[] lines = File.ReadAllLines(filePath);

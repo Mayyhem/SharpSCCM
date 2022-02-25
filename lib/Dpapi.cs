@@ -1,7 +1,5 @@
 ﻿using System;
-using System.IO;
 using System.Text;
-using System.Collections;
 using System.Collections.Generic;
 using System.Security.Cryptography;
 
@@ -29,13 +27,16 @@ namespace SharpSCCM
 
             // NAA has a header larger than a normal DPAPI blob. Remove the first 4 bytes from the array.
             var offset = 4;
-            var dedupedArray = new byte[blob.Length - offset];
-            Buffer.BlockCopy(blobBytes, 4, dedupedArray, 0, blobBytes.Length - offset);
+            byte[] unmangledArray = new byte[blob.Length - offset];
+            Buffer.BlockCopy(blobBytes, 4, unmangledArray, 0, blobBytes.Length - offset);
+            
+            // Copy the demangled array back into blobBytes
+            blobBytes = unmangledArray;
             //System.Convert.ToBase64String(dedupedArray);
 
             // Temporarily use SharpDPAPI to get masterkey and pass to this function
             // Temporarily set static path to masterkey file
-            string filePath = "%userprofile%\\Desktop\\keys.txt";
+            string filePath = "C:\\users\\hurin.thalion\\Desktop\\keys.txt";
             Dictionary<string, string> masterkeys = new Dictionary<string, string>();
             masterkeys = Helpers.ParseMasterKeyFile(filePath);
 

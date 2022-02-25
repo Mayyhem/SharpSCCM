@@ -1,10 +1,7 @@
 ﻿using System;
 using System.Security.Cryptography;
-using System.Runtime.InteropServices;
-using System.ComponentModel;
-using System.IO;
 
-namespace SharpDPAPI
+namespace SharpSCCM
 {
     public class Crypto
     {
@@ -67,9 +64,7 @@ namespace SharpDPAPI
             //Console.WriteLine("[*] key       : {0}", BitConverter.ToString(keyBytes).Replace("-", ""));
             //Console.WriteLine("[*] saltBytes : {0}", BitConverter.ToString(saltBytes).Replace("-", ""));
             //Console.WriteLine("[*] entropy   : {0}", BitConverter.ToString(entropy).Replace("-", ""));
-            //Console.WriteLine("[*] algHash   : {0}", algHash);
-
-            byte[] entropy = null;
+            //Console.WriteLine("[*] algHash   : {0}", algHash)
 
             if (algHash == 32782)
             {
@@ -111,11 +106,15 @@ namespace SharpDPAPI
                     return DeriveKeyRaw(sha1Buffer0, algHash);
                 }
             }
+            else
+            {
+                return new byte[0];
+            }
         }
 
         // Stolen from SharpDPAPI:
         // Adapted from https://github.com/gentilkiwi/mimikatz/blob/fa42ed93aa4d5aa73825295e2ab757ac96005581/modules/kull_m_crypto.c#L79-L101
-        public static byte[] DriveKeyRaw(byte[] hashBytes, int algHash)
+        public static byte[] DeriveKeyRaw(byte[] hashBytes, int algHash)
         {
             var ipad = new byte[64];
             var opad = new byte[64];
