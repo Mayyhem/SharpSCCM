@@ -17,22 +17,26 @@ namespace SharpSCCM
             // 3. Trim the extra header
 
             //$bytes = for($i=0; $i -lt $bdpass.Length; $i++) {[byte]::Parse($bdpass.Substring($i, 2), [System.Globalization.NumberStyles]::HexNumber); $i++}
-            byte[] blobBytes = new byte[blob.Length];
-            for (int i = 0; i < blob.Length; i++)
+            byte[] blobBytes = new byte[blob.Length / 2];
+            for (int i = 0; i < blob.Length; i+=2)
             {
-                blobBytes[i] = Byte.Parse(blob.Substring(i, 2), System.Globalization.NumberStyles.HexNumber);
-                Console.WriteLine(blobBytes[i]);
-                i++;
+                blobBytes[i/2] = Byte.Parse(blob.Substring(i, 2), System.Globalization.NumberStyles.HexNumber);
             }
 
             // NAA has a header larger than a normal DPAPI blob. Remove the first 4 bytes from the array.
             var offset = 4;
-            byte[] unmangledArray = new byte[blob.Length - offset];
+            byte[] unmangledArray = new byte[blob.Length / 2];
             Buffer.BlockCopy(blobBytes, 4, unmangledArray, 0, blobBytes.Length - offset);
             
+            // Super pro debug printing
+            //foreach(byte b in unmangledArray)
+            //{
+            //    Console.Write("0x" + b.ToString("X2") + " ");
+            //}
+
             // Copy the demangled array back into blobBytes
             blobBytes = unmangledArray;
-            //System.Convert.ToBase64String(dedupedArray);
+
 
             // Temporarily use SharpDPAPI to get masterkey and pass to this function
             // Temporarily set static path to masterkey file
@@ -60,12 +64,12 @@ namespace SharpSCCM
                         {
                             data = Encoding.ASCII.GetString(decBytesRaw);
                         }
-                        Console.WriteLine("   dec(blob)     : {0}", data);
+                        Console.WriteLine("    dec(blob)     : {0}", data);
                     }
                     else
                     {
                         string hexData = BitConverter.ToString(decBytesRaw).Replace("-", " ");
-                        Console.WriteLine("   dec(blob)     : {0}", hexData);
+                        Console.WriteLine("    dec(blob)     : {0}", hexData);
                     }
                 }
             }
@@ -83,12 +87,12 @@ namespace SharpSCCM
 
             Console.WriteLine("    guidMasterKey    : {0}", guidString);
             offset += 16;
-            Console.WriteLine("    size     : {0}", blobBytes.Length);
+            Console.WriteLine("    size             : {0}", blobBytes.Length);
 
             var flags = BitConverter.ToUInt32(blobBytes, offset);
             offset += 4;
 
-            Console.Write("    flags     : 0x{0}", flags.ToString("X"));
+            Console.WriteLine("    flags            : 0x{0}", flags.ToString("X"));
             if ((flags != 0) && ((flags & 0x20000000) == flags))
             {
                 Console.Write(" (CRYPTPROTECT_SYSTEM)");
@@ -120,7 +124,7 @@ namespace SharpSCCM
             offset += 4;
 
             Console.WriteLine("    algHash/algCrypt : {0} ({1}) / {2} ({3})", alghash, (Interop.CryptAlg)alghash, algCrypt, (Interop.CryptAlg)algCrypt);
-            Console.WriteLine("    desccription     : {0}", description);
+            Console.WriteLine("    description      : {0}", description);
 
             var algHashLen = BitConverter.ToInt32(blobBytes, offset);
             offset += 4;

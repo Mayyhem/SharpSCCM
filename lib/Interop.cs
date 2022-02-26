@@ -167,7 +167,7 @@ namespace SharpSCCM
             IS_TEXT_UNICODE_NOT_ASCII_MASK = 0xF000
         }
 
-        [DllImport("advapi.dll", CharSet = CharSet.Auto)]
+        [DllImport("advapi32.dll", CharSet = CharSet.Auto)]
         public static extern bool IsTextUnicode
         (
             byte[] buf,
