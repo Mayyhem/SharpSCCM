@@ -5,7 +5,7 @@ namespace SharpSCCM
 {
     public class Crypto
     {
-        // Stolen from SharpDPAPI: 
+        // This code is credited to Will Schroeder @harmj0y and his SharpDPAPI project: https://github.com/GhostPack/SharpDPAPI
         public static byte[] DecryptBlob(byte[] ciphertext, byte[] key, int algCrypt, PaddingMode padding = PaddingMode.Zeros)
         {
             // Decrypts a DPAPI blob using 3DES or AES
@@ -56,7 +56,6 @@ namespace SharpSCCM
             }
         }
 
-        // Stolen from SharpDPAPI:
         public static byte[] DeriveKey(byte[] keyBytes, byte[] saltBytes, int algHash)
         {
             // derives a dpapi session key using Microsoft crypto "magic"
@@ -112,7 +111,6 @@ namespace SharpSCCM
             }
         }
 
-        // Stolen from SharpDPAPI:
         // Adapted from https://github.com/gentilkiwi/mimikatz/blob/fa42ed93aa4d5aa73825295e2ab757ac96005581/modules/kull_m_crypto.c#L79-L101
         public static byte[] DeriveKeyRaw(byte[] hashBytes, int algHash)
         {

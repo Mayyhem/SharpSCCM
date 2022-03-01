@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Runtime.InteropServices;
 
-
 namespace SharpSCCM
 {
     public class Interop

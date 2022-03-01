@@ -24,11 +24,10 @@ namespace SharpSCCM
     public class Credentials
     {
 
-        static void LocalNetworkAccessAccounts(string masterkey)
+        public static void LocalNetworkAccessAccountsWmi(string masterkey)
         {
-            ManagementScope sccmConnection = NewSccmConnection("\\\\localhost\\root\\ccm\\policy\\Machine\\ActualConfig");
-            NewSccmConnection();
-            GetClassInstances(sccmConnection, "CCM_NetworkAccessAccount");
+            ManagementScope sccmConnection = Management.NewSccmConnection("\\\\localhost\\root\\ccm\\policy\\Machine\\ActualConfig");
+            Management.GetClassInstances(sccmConnection, "CCM_NetworkAccessAccount");
             ManagementObjectSearcher searcher = new ManagementObjectSearcher(sccmConnection, new ObjectQuery("SELECT * FROM CCM_NetworkAccessAccount"));
             ManagementObjectCollection accounts = searcher.Get();
             if (accounts.Count > 0)
@@ -58,6 +57,11 @@ namespace SharpSCCM
             {
                 Console.WriteLine($"[+] Found 0 instances of CCM_NetworkAccessAccount");
             }
+        }
+
+        public static void LocalNetworkAccessAccountsDisk(string masterkey)
+        {
+            // TO DO
         }
     }
 }

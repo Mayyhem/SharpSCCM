@@ -3,12 +3,11 @@ using System.Text;
 using System.Collections.Generic;
 using System.Security.Cryptography;
 
-
 namespace SharpSCCM
 {
     public class Dpapi
     {
-        // Stolen from SharpDPAPI: https://github.com/GhostPack/SharpDPAPI
+        // This code is credited to Will Schroeder @harmj0y and his SharpDPAPI project: https://github.com/GhostPack/SharpDPAPI
         public static void Execute(string blob, string masterkey)
         {
             Console.WriteLine("\r\n[*] Action: Describe DPAPI blob");
