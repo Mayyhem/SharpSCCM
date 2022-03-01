@@ -377,7 +377,6 @@ namespace SharpSCCM
                     ClientFileSystem.LocalGrepFile(path, stringToFind)
                 );
 
-
             // local naa
             var getLocalNetworkAccessAccounts = new Command("naa", "Get any network access accounts for the site using WMI (requires admin privileges)");
             localCommand.Add(getLocalNetworkAccessAccounts);
