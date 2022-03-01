@@ -100,7 +100,11 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="lib\Cleanup.cs" />
-    <Compile Include="lib\Management.cs" />
+    <Compile Include="lib\ClientWmi.cs" />
+    <Compile Include="lib\ClientFileSystem.cs" />
+    <Compile Include="lib\MgmtPointMessaging.cs" />
+    <Compile Include="lib\MgmtPointWmi.cs" />
+    <Compile Include="lib\MgmtUtil.cs" />
     <Compile Include="lib\Credentials.cs" />
     <Compile Include="lib\Helpers.cs" />
     <Compile Include="lib\Crypto.cs" />

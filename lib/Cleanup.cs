@@ -1,21 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.CommandLine;
-using System.CommandLine.Builder;
-using System.CommandLine.Parsing;
-using System.CommandLine.NamingConventionBinder;
-using System.Linq;
 using System.Management;
-using System.Reflection;
-using System.Security.Cryptography;
-using System.Security.Cryptography.X509Certificates;
-using System.Xml;
-
-// Configuration Manager SDK
-using Microsoft.ConfigurationManagement.Messaging.Framework;
-using Microsoft.ConfigurationManagement.Messaging.Messages;
-using Microsoft.ConfigurationManagement.Messaging.Sender.Http;
-
 
 namespace SharpSCCM
 {
@@ -36,7 +20,7 @@ namespace SharpSCCM
                 Console.WriteLine($"[+] Deleted all applications named {applicationName}");
                 Console.WriteLine($"[+] Querying for applications named {applicationName}");
                 string whereCondition = "LocalizedDisplayName='" + applicationName + "'";
-                Management.GetClassInstances(scope, "SMS_Application", false, null, whereCondition);
+                MgmtUtil.GetClassInstances(scope, "SMS_Application", false, null, whereCondition);
             }
             else
             {
@@ -58,7 +42,7 @@ namespace SharpSCCM
                 Console.WriteLine($"[+] Deleted all collections named {collection}");
                 Console.WriteLine($"[+] Querying for applications named {collection}");
                 string whereCondition = "Name='" + collection + "'";
-                Management.GetClassInstances(scope, "SMS_Collection", false, null, whereCondition);
+                MgmtUtil.GetClassInstances(scope, "SMS_Collection", false, null, whereCondition);
             }
             else
             {
@@ -80,7 +64,7 @@ namespace SharpSCCM
                 }
                 Console.WriteLine($"[+] Querying for deployments of {application} to {collection}");
                 string whereCondition = "ApplicationName='" + application + "' AND CollectionName='" + collection + "'";
-                Management.GetClassInstances(scope, "SMS_ApplicationAssignment", false, null, whereCondition);
+                MgmtUtil.GetClassInstances(scope, "SMS_ApplicationAssignment", false, null, whereCondition);
             }
             else
             {

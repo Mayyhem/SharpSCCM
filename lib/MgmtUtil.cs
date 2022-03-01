@@ -1,27 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.CommandLine;
-using System.CommandLine.Builder;
-using System.CommandLine.Parsing;
-using System.CommandLine.NamingConventionBinder;
 using System.Linq;
 using System.Management;
-using System.Reflection;
-using System.Security.Cryptography;
-using System.Security.Cryptography.X509Certificates;
-using System.Xml;
-
-// Configuration Manager SDK
-using Microsoft.ConfigurationManagement.Messaging.Framework;
-using Microsoft.ConfigurationManagement.Messaging.Messages;
-using Microsoft.ConfigurationManagement.Messaging.Sender.Http;
-
 
 namespace SharpSCCM
 {
-    public class Management
+    public class MgmtUtil
     {
-
         public static void GetClasses(ManagementScope scope)
         {
             string query = "SELECT * FROM meta_class";
@@ -191,6 +176,28 @@ namespace SharpSCCM
             }
         }
 
+        public static void InvokeQuery(ManagementScope scope, string query)
+        {
+            try
+            {
+                ObjectQuery objQuery = new ObjectQuery(query);
+                ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, objQuery);
+                Console.WriteLine("-----------------------------------");
+                Console.WriteLine(objQuery);
+                Console.WriteLine("-----------------------------------");
+                foreach (ManagementObject queryObj in searcher.Get())
+                {
+                    foreach (PropertyData prop in queryObj.Properties)
+                    {
+                        Console.WriteLine("{0}: {1}", prop.Name, prop.Value);
+                    }
+                    Console.WriteLine("-----------------------------------");
+                }
+            }
+            catch (ManagementException err)
+            {
+                Console.WriteLine("An error occurred while querying for WMI data: " + err.Message);
+            }
+        }
     }
-
 }

@@ -1,34 +1,15 @@
 ﻿using System;
 using System.Runtime.InteropServices;
-using System.Collections.Generic;
-using System.CommandLine;
-using System.CommandLine.Builder;
-using System.CommandLine.Parsing;
-using System.CommandLine.NamingConventionBinder;
-using System.Linq;
 using System.Management;
-using System.Reflection;
-using System.Security.Cryptography;
-using System.Security.Cryptography.X509Certificates;
-using System.Xml;
-
-// Configuration Manager SDK
-using Microsoft.ConfigurationManagement.Messaging;
-using Microsoft.ConfigurationManagement.Messaging.Framework;
-using Microsoft.ConfigurationManagement.Messaging.Messages;
-using Microsoft.ConfigurationManagement.Messaging.Sender.Http;
-
-
 
 namespace SharpSCCM
 {
     public class Credentials
     {
-
         public static void LocalNetworkAccessAccountsWmi(string masterkey)
         {
-            ManagementScope sccmConnection = Management.NewSccmConnection("\\\\localhost\\root\\ccm\\policy\\Machine\\ActualConfig");
-            Management.GetClassInstances(sccmConnection, "CCM_NetworkAccessAccount");
+            ManagementScope sccmConnection = MgmtUtil.NewSccmConnection("\\\\localhost\\root\\ccm\\policy\\Machine\\ActualConfig");
+            MgmtUtil.GetClassInstances(sccmConnection, "CCM_NetworkAccessAccount");
             ManagementObjectSearcher searcher = new ManagementObjectSearcher(sccmConnection, new ObjectQuery("SELECT * FROM CCM_NetworkAccessAccount"));
             ManagementObjectCollection accounts = searcher.Get();
             if (accounts.Count > 0)
