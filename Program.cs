@@ -1403,8 +1403,8 @@ namespace SharpSCCM
                     LocalGrepFile(path, stringToFind)
                 );
 
-            // local naa
-            var getLocalNetworkAccessAccounts = new Command("naa", "Get any network access accounts for the site");
+            // local naa-wmi
+            var getLocalNetworkAccessAccounts = new Command("naa-wmi", "Get any network access accounts for the site");
             localCommand.Add(getLocalNetworkAccessAccounts);
             getLocalNetworkAccessAccounts.Add(new Argument<string>("masterkey", "The {GUID}:SHA1 DPAPI SYSTEM masterkey"));
             getLocalNetworkAccessAccounts.Handler = CommandHandler.Create(
