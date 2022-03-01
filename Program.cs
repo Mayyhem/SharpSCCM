@@ -289,7 +289,7 @@ namespace SharpSCCM
             DateTime startDateObj = DateTime.Parse(startDate);
         }
 
-        static void LocalNetworkAccessAccounts()
+        static void LocalNetworkAccessAccounts(string masterkey)
         {
             ManagementScope sccmConnection = NewSccmConnection("\\\\localhost\\root\\ccm\\policy\\Machine\\ActualConfig");
             GetClassInstances(sccmConnection, "CCM_NetworkAccessAccount");
@@ -307,8 +307,8 @@ namespace SharpSCCM
                     try
                     {
 
-                        Dpapi.Execute(protectedUsername);
-                        Dpapi.Execute(protectedPassword);
+                        Dpapi.Execute(protectedUsername, masterkey);
+                        Dpapi.Execute(protectedPassword, masterkey);
 
                     }
                     catch (Exception e)
@@ -1406,6 +1406,7 @@ namespace SharpSCCM
             // local naa
             var getLocalNetworkAccessAccounts = new Command("naa", "Get any network access accounts for the site");
             localCommand.Add(getLocalNetworkAccessAccounts);
+            getLocalNetworkAccessAccounts.Add(new Argument<string>("masterkey", "The {GUID}:SHA1 DPAPI SYSTEM masterkey"));
             getLocalNetworkAccessAccounts.Handler = CommandHandler.Create(
                 new Action(() =>
                 {

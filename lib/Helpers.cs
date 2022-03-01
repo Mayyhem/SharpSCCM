@@ -69,6 +69,50 @@ namespace SharpSCCM
             return masterkeys;
         }
 
+        public static Dictionary<string, string> ParseMasterKeyCmdLine(string masterkey)
+        {
+            // Stolen from SharpDPAPI:
+            // helper that parses a {GUID}:SHA1 masterkey file
+            Dictionary<string, string> masterkeys = new Dictionary<string, string>();
+
+            try
+            {
+                string[] parts = masterkey.Split(' '); // in case we have multiple keys on one line
+                foreach (string part in parts)
+                {
+                    if (!String.IsNullOrEmpty(part.Trim()))
+                    {
+                        if (part.StartsWith("{"))
+                        {
+                            // SharpDPAPI {GUID}:SHA1 format
+                            string[] mk = part.Split(':');
+                            if (!masterkeys.ContainsKey(mk[0]))
+                            {
+                                masterkeys.Add(mk[0], mk[1]);
+                            }
+                        }
+                        else if (part.StartsWith("GUID:"))
+                        {
+                            // Mimikatz dpapi::cache format
+                            string[] mk = part.Split(';');
+                            string[] guid = mk[0].Split(':');
+                            string[] sha1 = mk[1].Split(':');
+                            if (!masterkeys.ContainsKey(guid[0]))
+                            {
+                                masterkeys.Add(guid[1], sha1[1]);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("[X] Error parsing masterkey file '{0}' : {1}", masterkey, e.Message);
+            }
+
+            return masterkeys;
+        }
+
         public static byte[] StringToByteArray(string hex)
         {
             // helper to convert a string hex representation to a byte array

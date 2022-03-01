@@ -9,7 +9,7 @@ namespace SharpSCCM
     public class Dpapi
     {
         // Stolen from SharpDPAPI: https://github.com/GhostPack/SharpDPAPI
-        public static void Execute(string blob)
+        public static void Execute(string blob, string masterkey)
         {
             Console.WriteLine("\r\n[*] Action: Describe DPAPI blob");
 
@@ -40,9 +40,11 @@ namespace SharpSCCM
 
             // Use SharpDPAPI to get masterkey and pass to this function, store in file
             // Temporarily set static path to masterkey file
-            string filePath = "C:\\users\\hurin.thalion\\Desktop\\keys.txt";
             Dictionary<string, string> masterkeys = new Dictionary<string, string>();
-            masterkeys = Helpers.ParseMasterKeyFile(filePath);
+
+            //string filePath = "C:\\users\\hurin.thalion\\Desktop\\keys.txt";
+            
+            masterkeys = Helpers.ParseMasterKeyCmdLine(masterkey);
 
             if (blobBytes.Length > 0)
             {
