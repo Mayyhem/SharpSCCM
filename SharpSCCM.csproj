@@ -99,6 +99,8 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="lib\Management.cs" />
+    <Compile Include="lib\Credentials.cs" />
     <Compile Include="lib\Helpers.cs" />
     <Compile Include="lib\Crypto.cs" />
     <Compile Include="lib\Dpapi.cs" />

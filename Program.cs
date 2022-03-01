@@ -1404,13 +1404,23 @@ namespace SharpSCCM
                 );
 
             // local naa-wmi
-            var getLocalNetworkAccessAccounts = new Command("naa-wmi", "Get any network access accounts for the site");
-            localCommand.Add(getLocalNetworkAccessAccounts);
-            getLocalNetworkAccessAccounts.Add(new Argument<string>("masterkey", "The {GUID}:SHA1 DPAPI SYSTEM masterkey"));
-            getLocalNetworkAccessAccounts.Handler = CommandHandler.Create(
+            var getLocalNetworkAccessAccountsWmi = new Command("naa-wmi", "Get any network access accounts for the site using WMI (requires admin privileges)");
+            localCommand.Add(getLocalNetworkAccessAccountsWmi);
+            getLocalNetworkAccessAccountsWmi.Add(new Argument<string>("masterkey", "The {GUID}:SHA1 DPAPI SYSTEM masterkey"));
+            getLocalNetworkAccessAccountsWmi.Handler = CommandHandler.Create(
                 new Action(() =>
                 {
                     LocalNetworkAccessAccounts();
+                }));
+
+            // local naa-disk
+            var getLocalNetworkAccessAccountsDisk = new Command("naa-disk", "Get any network access accounts from the WMI database file");
+            localCommand.Add(getLocalNetworkAccessAccountsDisk);
+            getLocalNetworkAccessAccountsDisk.Add(new Argument<string>("masterkey", "The {GUID}:SHA1 DPAPI SYSTEM masterkey"));
+            getLocalNetworkAccessAccountsDisk.Handler = CommandHandler.Create(
+                new Action(() =>
+                {
+                    Credentials.LocalNetworkAccessAccountsDisk();
                 }));
 
             // local siteinfo
