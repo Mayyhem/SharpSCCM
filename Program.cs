@@ -378,7 +378,7 @@ namespace SharpSCCM
                 );
 
 
-            // local naa-wmi
+            // local naa
             var getLocalNetworkAccessAccounts = new Command("naa", "Get any network access accounts for the site using WMI (requires admin privileges)");
             localCommand.Add(getLocalNetworkAccessAccounts);
             getLocalNetworkAccessAccounts.Add(new Argument<string>("method", "The method of obtaining the DPAPI blob: WMI or Disk"));
