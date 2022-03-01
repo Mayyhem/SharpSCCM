@@ -8,6 +8,7 @@ namespace SharpSCCM
 {
     public class Dpapi
     {
+        // Stolen from SharpDPAPI: https://github.com/GhostPack/SharpDPAPI
         public static void Execute(string blob)
         {
             Console.WriteLine("\r\n[*] Action: Describe DPAPI blob");
@@ -16,7 +17,6 @@ namespace SharpSCCM
             // 2. Convert it to bytes
             // 3. Trim the extra header
 
-            //$bytes = for($i=0; $i -lt $bdpass.Length; $i++) {[byte]::Parse($bdpass.Substring($i, 2), [System.Globalization.NumberStyles]::HexNumber); $i++}
             byte[] blobBytes = new byte[blob.Length / 2];
             for (int i = 0; i < blob.Length; i+=2)
             {
@@ -38,7 +38,7 @@ namespace SharpSCCM
             blobBytes = unmangledArray;
 
 
-            // Temporarily use SharpDPAPI to get masterkey and pass to this function
+            // Use SharpDPAPI to get masterkey and pass to this function, store in file
             // Temporarily set static path to masterkey file
             string filePath = "C:\\users\\hurin.thalion\\Desktop\\keys.txt";
             Dictionary<string, string> masterkeys = new Dictionary<string, string>();
@@ -64,12 +64,12 @@ namespace SharpSCCM
                         {
                             data = Encoding.ASCII.GetString(decBytesRaw);
                         }
-                        Console.WriteLine("    dec(blob)     : {0}", data);
+                        Console.WriteLine("    dec(blob)        : {0}", data);
                     }
                     else
                     {
                         string hexData = BitConverter.ToString(decBytesRaw).Replace("-", " ");
-                        Console.WriteLine("    dec(blob)     : {0}", hexData);
+                        Console.WriteLine("    dec(blob)        : {0}", hexData);
                     }
                 }
             }
