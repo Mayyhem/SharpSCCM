@@ -386,11 +386,11 @@ namespace SharpSCCM
             getLocalNetworkAccessAccounts.Handler = CommandHandler.Create(
                 (string method, string masterkey) =>
                 {
-                    if (method == "wmi")
+                    if ((method == "wmi") && (masterkey != null))
                     {
                         Credentials.LocalNetworkAccessAccountsWmi(masterkey);
                     }
-                    else if (method == "disk")
+                    else if ((method == "disk") && (masterkey != null))
                     {
                         Credentials.LocalNetworkAccessAccountsDisk(masterkey);
                     }
@@ -399,7 +399,6 @@ namespace SharpSCCM
                         Console.WriteLine("[X] A method (wmi or disk) and masterkey are required!");
                     }
                 });
-
 
             // local siteinfo
             var localSiteInfo = new Command("siteinfo", "Get the primary MgmtUtil Point and Site Code for the local host");
