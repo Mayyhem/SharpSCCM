@@ -47,6 +47,7 @@ namespace SharpSCCM
 
             if (blobBytes.Length > 0)
             {
+                
                 byte[] decBytesRaw = DescribeDPAPIBlob(blobBytes, masterkeys);
                 
                 if ((decBytesRaw != null) && (decBytesRaw.Length != 0))
