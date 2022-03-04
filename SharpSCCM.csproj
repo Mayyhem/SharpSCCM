@@ -99,8 +99,16 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="lib\Dpapi.cs" />
+    <Compile Include="lib\Cleanup.cs" />
+    <Compile Include="lib\ClientWmi.cs" />
+    <Compile Include="lib\ClientFileSystem.cs" />
+    <Compile Include="lib\MgmtPointMessaging.cs" />
+    <Compile Include="lib\MgmtPointWmi.cs" />
+    <Compile Include="lib\MgmtUtil.cs" />
+    <Compile Include="lib\Credentials.cs" />
     <Compile Include="lib\Helpers.cs" />
+    <Compile Include="lib\Crypto.cs" />
+    <Compile Include="lib\Dpapi.cs" />
     <Compile Include="lib\Interop.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
@@ -117,4 +125,7 @@
     </PropertyGroup>
     <Error Condition="!Exists('packages\ILMerge.3.0.41\build\ILMerge.props')" Text="$([System.String]::Format('$(ErrorText)', 'packages\ILMerge.3.0.41\build\ILMerge.props'))" />
   </Target>
+  <PropertyGroup>
+    <PostBuildEvent>$(ProjectDir)packages\ILMerge.3.0.41\tools\net452\ILMerge.exe $(TargetPath) $(TargetDir)System.CommandLine.dll $(TargetDir)System.CommandLine.NamingConventionBinder.dll $(TargetDir)System.Memory.dll $(TargetDir)Microsoft.ConfigurationManagement.Messaging.dll $(TargetDir)Microsoft.ConfigurationManagement.Security.Cryptography.dll /out:$(TargetDir)SharpSCCM_merged.exe</PostBuildEvent>
+  </PropertyGroup>
 </Project>
