@@ -12,6 +12,28 @@ namespace SharpSCCM
 {
     static class MgmtPointMessaging
     {
+        public static MessageCertificateX509Volatile CreateUserCertificate()
+        {
+            // Generate certificate for signing and encrypting messages
+            RSA rsaKey = RSA.Create(2048);
+            CertificateRequest certRequest = new CertificateRequest("CN=ConfigMgr Client", rsaKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            certRequest.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.DataEncipherment, false));
+            // Any extended key usage
+            certRequest.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(new OidCollection { new Oid("1.3.6.1.4.1.311.101.2"), new Oid("1.3.6.1.4.1.311.101") }, true));
+            X509Certificate2 certificate2 = certRequest.CreateSelfSigned(DateTimeOffset.Now, DateTimeOffset.Now.AddYears(1));
+            certificate2.FriendlyName = "ConfigMgr Client Certificate";
+            X509Certificate2 exportedCert = new X509Certificate2(certificate2.Export(X509ContentType.Pfx, string.Empty));
+            MessageCertificateX509Volatile certificate = new MessageCertificateX509Volatile(exportedCert);
+            return certificate;
+        }
+
+        public static MessageCertificateX509 GetEncryptionCertificate()
+        {
+            // Get encryption certificate used by the legitimate client
+            MessageCertificateX509 certificate = MessageCertificateX509File.Find(StoreLocation.LocalMachine, "SMS", X509FindType.FindByApplicationPolicy, "1.3.6.1.4.1.311.101.2", false);
+            return certificate;
+        }
+
         public static void GetNetworkAccessAccounts(string server, string sitecode)
         {
             // HTTP sender is used for sending messages to the MP
@@ -105,32 +127,10 @@ namespace SharpSCCM
             }
         }
 
-        public static MessageCertificateX509 GetEncryptionCertificate()
-        {
-            // Get encryption certificate used by the legitimate client
-            MessageCertificateX509 certificate = MessageCertificateX509File.Find(StoreLocation.LocalMachine, "SMS", X509FindType.FindByApplicationPolicy, "1.3.6.1.4.1.311.101.2", false);
-            return certificate;
-        }
-
         public static MessageCertificateX509 GetSigningCertificate()
         {
             // Get signing certificate used by the legitimate client
             MessageCertificateX509 certificate = MessageCertificateX509File.Find(StoreLocation.LocalMachine, "SMS", X509FindType.FindByApplicationPolicy, "1.3.6.1.4.1.311.101", false);
-            return certificate;
-        }
-
-        public static MessageCertificateX509Volatile CreateUserCertificate()
-        {
-            // Generate certificate for signing and encrypting messages
-            RSA rsaKey = RSA.Create(2048);
-            CertificateRequest certRequest = new CertificateRequest("CN=ConfigMgr Client", rsaKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
-            certRequest.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.DataEncipherment, false));
-            // Any extended key usage
-            certRequest.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(new OidCollection { new Oid("1.3.6.1.4.1.311.101.2"), new Oid("1.3.6.1.4.1.311.101") }, true));
-            X509Certificate2 certificate2 = certRequest.CreateSelfSigned(DateTimeOffset.Now, DateTimeOffset.Now.AddYears(1));
-            certificate2.FriendlyName = "ConfigMgr Client Certificate";
-            X509Certificate2 exportedCert = new X509Certificate2(certificate2.Export(X509ContentType.Pfx, string.Empty));
-            MessageCertificateX509Volatile certificate = new MessageCertificateX509Volatile(exportedCert);
             return certificate;
         }
 

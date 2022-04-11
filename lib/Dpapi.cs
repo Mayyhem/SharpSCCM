@@ -8,73 +8,21 @@ namespace SharpSCCM
     public class Dpapi
     {
         // This code is credited to Will Schroeder @harmj0y and his SharpDPAPI project: https://github.com/GhostPack/SharpDPAPI
-        public static void Execute(string blob, string masterkey)
+        public static byte[] DecryptBlob(byte[] ciphertext, byte[] key, int algCrypt, PaddingMode padding = PaddingMode.Zeros)
         {
-            Console.WriteLine("\r\n[*] Action: Describe DPAPI blob");
+            // decrypts a DPAPI blob using AES
 
-            // 1. Read in the hex dpapi blob
-            // 2. Convert it to bytes
-            // 3. Trim the extra header
+            // takes a byte array of ciphertext bytes and a key array, decrypt the blob with AES256
+            var aesCryptoProvider = new AesManaged();
+            var ivBytes = new byte[16];
+            aesCryptoProvider.Key = key;
+            aesCryptoProvider.IV = ivBytes;
+            aesCryptoProvider.Mode = CipherMode.CBC;
+            aesCryptoProvider.Padding = padding;
 
-            byte[] blobBytes = new byte[blob.Length / 2];
-            for (int i = 0; i < blob.Length; i+=2)
-            {
-                blobBytes[i/2] = Byte.Parse(blob.Substring(i, 2), System.Globalization.NumberStyles.HexNumber);
-            }
+            var plaintextBytes = aesCryptoProvider.CreateDecryptor().TransformFinalBlock(ciphertext, 0, ciphertext.Length);
 
-            // NAA has a header larger than a normal DPAPI blob. Remove the first 4 bytes from the array.
-            var offset = 4;
-            byte[] unmangledArray = new byte[blob.Length / 2];
-            Buffer.BlockCopy(blobBytes, 4, unmangledArray, 0, blobBytes.Length - offset);
-            
-            // Super pro debug printing
-            //foreach(byte b in unmangledArray)
-            //{
-            //    Console.Write("0x" + b.ToString("X2") + " ");
-            //}
-
-            // Copy the demangled array back into blobBytes
-            blobBytes = unmangledArray;
-
-
-            // Use SharpDPAPI to get masterkey and pass to this function, store in file
-            // Temporarily set static path to masterkey file
-            Dictionary<string, string> masterkeys = new Dictionary<string, string>();
-
-            //string filePath = "C:\\users\\hurin.thalion\\Desktop\\keys.txt";
-            
-            masterkeys = Helpers.ParseMasterKeyCmdLine(masterkey);
-
-            if (blobBytes.Length > 0)
-            {
-                
-                byte[] decBytesRaw = DescribeDPAPIBlob(blobBytes, masterkeys);
-                
-                if ((decBytesRaw != null) && (decBytesRaw.Length != 0))
-                {
-                    if (Helpers.IsUnicode(decBytesRaw))
-                    {
-                        string data = "";
-                        int finalIndex = Array.LastIndexOf(decBytesRaw, (byte)0);
-                        if (finalIndex > 1)
-                        {
-                            byte[] decBytes = new byte[finalIndex + 1];
-                            Array.Copy(decBytesRaw, 0, decBytes, 0, finalIndex);
-                            data = Encoding.Unicode.GetString(decBytes);
-                        }
-                        else
-                        {
-                            data = Encoding.ASCII.GetString(decBytesRaw);
-                        }
-                        Console.WriteLine("    dec(blob)        : {0}", data);
-                    }
-                    else
-                    {
-                        string hexData = BitConverter.ToString(decBytesRaw).Replace("-", " ");
-                        Console.WriteLine("    dec(blob)        : {0}", hexData);
-                    }
-                }
-            }
+            return plaintextBytes;
         }
 
         public static byte[] DescribeDPAPIBlob(byte[] blobBytes, Dictionary<string, string> MasterKeys)
@@ -167,21 +115,73 @@ namespace SharpSCCM
 
         }
 
-        public static byte[] DecryptBlob(byte [] ciphertext, byte[] key, int algCrypt, PaddingMode padding = PaddingMode.Zeros)
+        public static void Execute(string blob, string masterkey)
         {
-            // decrypts a DPAPI blob using AES
+            Console.WriteLine("\r\n[*] Action: Describe DPAPI blob");
 
-            // takes a byte array of ciphertext bytes and a key array, decrypt the blob with AES256
-            var aesCryptoProvider = new AesManaged();
-            var ivBytes = new byte[16];
-            aesCryptoProvider.Key = key;
-            aesCryptoProvider.IV = ivBytes;
-            aesCryptoProvider.Mode = CipherMode.CBC;
-            aesCryptoProvider.Padding = padding;
+            // 1. Read in the hex dpapi blob
+            // 2. Convert it to bytes
+            // 3. Trim the extra header
 
-            var plaintextBytes = aesCryptoProvider.CreateDecryptor().TransformFinalBlock(ciphertext, 0, ciphertext.Length);
+            byte[] blobBytes = new byte[blob.Length / 2];
+            for (int i = 0; i < blob.Length; i+=2)
+            {
+                blobBytes[i/2] = Byte.Parse(blob.Substring(i, 2), System.Globalization.NumberStyles.HexNumber);
+            }
 
-            return plaintextBytes;
+            // NAA has a header larger than a normal DPAPI blob. Remove the first 4 bytes from the array.
+            var offset = 4;
+            byte[] unmangledArray = new byte[blob.Length / 2];
+            Buffer.BlockCopy(blobBytes, 4, unmangledArray, 0, blobBytes.Length - offset);
+            
+            // Super pro debug printing
+            //foreach(byte b in unmangledArray)
+            //{
+            //    Console.Write("0x" + b.ToString("X2") + " ");
+            //}
+
+            // Copy the demangled array back into blobBytes
+            blobBytes = unmangledArray;
+
+
+            // Use SharpDPAPI to get masterkey and pass to this function, store in file
+            // Temporarily set static path to masterkey file
+            Dictionary<string, string> masterkeys = new Dictionary<string, string>();
+
+            //string filePath = "C:\\users\\hurin.thalion\\Desktop\\keys.txt";
+            
+            masterkeys = Helpers.ParseMasterKeyCmdLine(masterkey);
+
+            if (blobBytes.Length > 0)
+            {
+                
+                byte[] decBytesRaw = DescribeDPAPIBlob(blobBytes, masterkeys);
+                
+                if ((decBytesRaw != null) && (decBytesRaw.Length != 0))
+                {
+                    if (Helpers.IsUnicode(decBytesRaw))
+                    {
+                        string data = "";
+                        int finalIndex = Array.LastIndexOf(decBytesRaw, (byte)0);
+                        if (finalIndex > 1)
+                        {
+                            byte[] decBytes = new byte[finalIndex + 1];
+                            Array.Copy(decBytesRaw, 0, decBytes, 0, finalIndex);
+                            data = Encoding.Unicode.GetString(decBytes);
+                        }
+                        else
+                        {
+                            data = Encoding.ASCII.GetString(decBytesRaw);
+                        }
+                        Console.WriteLine("    dec(blob)        : {0}", data);
+                    }
+                    else
+                    {
+                        string hexData = BitConverter.ToString(decBytesRaw).Replace("-", " ");
+                        Console.WriteLine("    dec(blob)        : {0}", hexData);
+                    }
+                }
+            }
         }
     }
 }

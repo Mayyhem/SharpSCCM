@@ -38,6 +38,17 @@ namespace SharpSCCM
                     MgmtPointWmi.AddDeviceToCollection(sccmConnection, deviceName, collectionName);
                 });
 
+            // add user-to-admins
+            var addUserToAdmins = new Command("user-to-admins", "Add a user to the RBAC_Admins table to obtain Full Administrator access to ConfigMgr console and WMI objects. This command requires local Administrator privileges on the server running the site database.");
+            addCommand.Add(addUserToAdmins);
+            addUserToAdmins.Add(new Argument<string>("user-name", "The domain and user name you would like to grant Full Administrator privilege to (e.g., DOMAIN-SHORTNAME\\USERNAME)"));
+            //addUserToAdmins.Handler = CommandHandler.Create(
+            //    (string server, string sitecode, string userName) =>
+            //    {
+            //        var connection = Database.Connect(server, sitecode);
+            //        Database.Query(connection, "SELECT * FROM RBAC_Admins");
+            //    });
+
             // add user-to-collection
             var addUserToCollection = new Command("user-to-collection", "Add a user to a collection for application deployment");
             addCommand.Add(addUserToCollection);
@@ -49,17 +60,6 @@ namespace SharpSCCM
                     ManagementScope sccmConnection = MgmtUtil.NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
                     MgmtPointWmi.AddUserToCollection(sccmConnection, userName, collectionName);
                 });
-
-            // add user-to-admins
-            var addUserToAdmins = new Command("user-to-admins", "Add a user to the RBAC_Admins table to obtain Full Administrator access to ConfigMgr console and WMI objects. This command requires local Administrator privileges on the server running the site database.");
-            addCommand.Add(addUserToAdmins);
-            addUserToAdmins.Add(new Argument<string>("user-name", "The domain and user name you would like to grant Full Administrator privilege to (e.g., DOMAIN-SHORTNAME\\USERNAME)"));
-            //addUserToAdmins.Handler = CommandHandler.Create(
-            //    (string server, string sitecode, string userName) =>
-            //    {
-            //        var connection = Database.Connect(server, sitecode);
-            //        Database.Query(connection, "SELECT * FROM RBAC_Admins");
-            //    });
 
             // get 
             var getCommand = new Command("get", "A group of commands that query certain objects and display their contents");
@@ -338,7 +338,7 @@ namespace SharpSCCM
                 });
 
             // local clientinfo
-            var getLocalClientInfo = new Command("clientinfo", "Get the primary MgmtUtil Point and Site Code for the local host");
+            var getLocalClientInfo = new Command("clientinfo", "Get the primary Management Point and Site Code for the local host");
             localCommand.Add(getLocalClientInfo);
             getLocalClientInfo.Handler = CommandHandler.Create(
                 new Action(() =>
@@ -364,6 +364,7 @@ namespace SharpSCCM
             localPushLogs.Handler = CommandHandler.Create(
                 new Action(() =>
                 {
+                    //To-do
                     //LocalPushLogs();
                 }));
 
@@ -395,12 +396,12 @@ namespace SharpSCCM
                     }
                     else
                     {
-                        Console.WriteLine("[X] A method (wmi or disk) and masterkey are required!");
+                        Console.WriteLine("[!] A method (wmi or disk) and masterkey are required!");
                     }
                 });
 
             // local siteinfo
-            var localSiteInfo = new Command("siteinfo", "Get the primary MgmtUtil Point and Site Code for the local host");
+            var localSiteInfo = new Command("siteinfo", "Get the primary Management Point and Site Code for the local host");
             localCommand.Add(localSiteInfo);
             localSiteInfo.Handler = CommandHandler.Create(
                 new Action(() =>

@@ -6,6 +6,12 @@ namespace SharpSCCM
 {
     public class Credentials
     {
+
+        public static void LocalNetworkAccessAccountsDisk(string masterkey)
+        {
+            // TO DO
+        }
+
         public static void LocalNetworkAccessAccountsWmi(string masterkey)
         {
             ManagementScope sccmConnection = MgmtUtil.NewSccmConnection("\\\\localhost\\root\\ccm\\policy\\Machine\\ActualConfig");
@@ -41,24 +47,8 @@ namespace SharpSCCM
             }
         }
 
-        public static void LocalNetworkAccessAccountsDisk(string masterkey)
-        {
-            // TO DO
-        }
-
-
         // -------------------------------------------------------------------------------------------------------------------------------
         // https://gist.github.com/EvanMcBroom/525d84b86f99c7a4eeb4e3495cffcbf0
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct THeaderInfo
-        {
-            UInt32 nHeaderLength; // Must be 0x14
-            UInt32 nEncryptedSize;
-            UInt32 nPlainSize;
-            UInt32 nAlgorithm;
-            UInt32 nFlag;
-        }
 
         [StructLayout(LayoutKind.Sequential)]
         public struct GarbledData
@@ -69,17 +59,23 @@ namespace SharpSCCM
             Byte[] pData;
         }
 
+        [StructLayout(LayoutKind.Sequential)]
+        public struct THeaderInfo
+        {
+            UInt32 nHeaderLength; // Must be 0x14
+            UInt32 nEncryptedSize;
+            UInt32 nPlainSize;
+            UInt32 nAlgorithm;
+            UInt32 nFlag;
+        }
         public static void QueryDecryptNetworkAccessAccount()
         {
             /*
             * Research by Evan McBroom and Chris Thompson (@_Mayyhem)
             * Roger Zander made security recommendations for SCCM based on the claim that NAA credentials could be recovered.
             * Source: https://rzander.azurewebsites.net/network-access-accounts-are-evil/
-            * Roger stated that recover was "possible with a few lines of code" but did not provide any code. Here is working code.
+            * Roger stated that recovery was "possible with a few lines of code" but did not provide any code. Here is working code.
             */
-
-
-
         }
     }
 }

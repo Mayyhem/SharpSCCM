@@ -140,26 +140,6 @@ namespace SharpSCCM
             }
         }
 
-        public static ManagementScope NewSccmConnection(string path)
-        {
-            ConnectionOptions connection = new ConnectionOptions();
-            ManagementScope sccmConnection = new ManagementScope(path, connection);
-            try
-            {
-                Console.WriteLine($"[+] Connecting to {sccmConnection.Path}");
-                sccmConnection.Connect();
-            }
-            catch (System.UnauthorizedAccessException unauthorizedErr)
-            {
-                Console.WriteLine("[!] Access to WMI was not authorized (user name or password might be incorrect): " + unauthorizedErr.Message);
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine("[!] Error connecting to WMI: " + e.Message);
-            }
-            return sccmConnection;
-        }
-
         public static string[] GetKeyPropertyNames(ManagementScope sccmConnection, string className)
         {
             using (ManagementClass managementClass = new ManagementClass(sccmConnection, new ManagementPath(className), new ObjectGetOptions()))
@@ -198,6 +178,26 @@ namespace SharpSCCM
             {
                 Console.WriteLine("An error occurred while querying for WMI data: " + err.Message);
             }
+        }
+
+        public static ManagementScope NewSccmConnection(string path)
+        {
+            ConnectionOptions connection = new ConnectionOptions();
+            ManagementScope sccmConnection = new ManagementScope(path, connection);
+            try
+            {
+                Console.WriteLine($"[+] Connecting to {sccmConnection.Path}");
+                sccmConnection.Connect();
+            }
+            catch (System.UnauthorizedAccessException unauthorizedErr)
+            {
+                Console.WriteLine("[!] Access to WMI was not authorized (user name or password might be incorrect): " + unauthorizedErr.Message);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("[!] Error connecting to WMI: " + e.Message);
+            }
+            return sccmConnection;
         }
     }
 }

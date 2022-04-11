@@ -89,6 +89,5 @@ namespace SharpSCCM
                 Console.WriteLine($"[+] Found {devices.Count} devices with SMSUniqueIdentifier {guid}");
             }
         }
-
     }
 }

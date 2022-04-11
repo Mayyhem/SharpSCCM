@@ -70,6 +70,85 @@ namespace SharpSCCM
             }
         }
 
+        public static void GetSitePushSettings(string server, string sitecode)
+        {
+            ManagementScope sccmConnection = MgmtUtil.NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
+            ManagementObjectSearcher searcher = new ManagementObjectSearcher(sccmConnection, new ObjectQuery($"SELECT PropertyName, Value, Value1 FROM SMS_SCI_SCProperty WHERE ItemType='SMS_DISCOVERY_DATA_MANAGER' AND (PropertyName='ENABLEKERBEROSCHECK' OR PropertyName='FILTERS' OR PropertyName='SETTINGS')"));
+            ManagementObjectCollection results = searcher.Get();
+            foreach (ManagementObject result in results)
+            {
+                if (result["PropertyName"].ToString() == "SETTINGS" && result["Value1"].ToString() == "Active")
+                {
+                    Console.WriteLine("[+] Automatic site-wide client push installation is enabled");
+                }
+                else if (result["PropertyName"].ToString() == "ENABLEKERBEROSCHECK" && result["Value"].ToString() == "3")
+                {
+                    Console.WriteLine("[+] Fallback to NTLM is enabled");
+                }
+                else if (result["PropertyName"].ToString() == "FILTERS")
+                {
+                    Console.WriteLine("[+] Install client software on the following computers:");
+                    if (result["Value"].ToString() == "0")
+                    {
+                        Console.WriteLine("  Workstations and Servers (including domain controllers)");
+                    }
+                    else if (result["Value"].ToString() == "1")
+                    {
+                        Console.WriteLine("  Servers only (including domain controllers)");
+                    }
+                    else if (result["Value"].ToString() == "2")
+                    {
+                        Console.WriteLine("  Workstations and Servers (excluding domain controllers)");
+                    }
+                    else if (result["Value"].ToString() == "3")
+                    {
+                        Console.WriteLine("  Servers only (excluding domain controllers)");
+                    }
+                    else if (result["Value"].ToString() == "4")
+                    {
+                        Console.WriteLine("  Workstations and domain controllers only (excluding other servers)");
+                    }
+                    else if (result["Value"].ToString() == "5")
+                    {
+                        Console.WriteLine("  Domain controllers only");
+                    }
+                    else if (result["Value"].ToString() == "6")
+                    {
+                        Console.WriteLine("  Workstations only");
+                    }
+                    else if (result["Value"].ToString() == "7")
+                    {
+                        Console.WriteLine("  No computers");
+                    }
+                }
+            }
+            searcher = new ManagementObjectSearcher(sccmConnection, new ObjectQuery($"SELECT Values FROM SMS_SCI_SCPropertyList WHERE PropertyListName='Reserved2'"));
+            results = searcher.Get();
+            foreach (ManagementObject result in results)
+            {
+                foreach (string value in (string[])result["Values"])
+                {
+                    Console.WriteLine($"[+] Discovered client push installation account: {value}");
+
+                }
+            }
+        }
+
+        public static void InvokeUpdate(ManagementScope scope, string collectionName)
+        {
+            Console.WriteLine($"[+] Forcing all members of {collectionName} to check for updates and execute any new applications available");
+            ManagementClass clientOperation = new ManagementClass(scope, new ManagementPath("SMS_ClientOperation"), null);
+            ManagementBaseObject initiateClientOpParams = clientOperation.GetMethodParameters("InitiateClientOperation");
+            initiateClientOpParams.SetPropertyValue("Type", 8); // RequestPolicyNow
+
+            ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, new ObjectQuery($"SELECT * FROM SMS_Collection WHERE Name='{collectionName}'"));
+            foreach (ManagementObject collection in searcher.Get())
+            {
+                initiateClientOpParams["TargetCollectionID"] = collection.GetPropertyValue("CollectionID");
+            }
+            clientOperation.InvokeMethod("InitiateClientOperation", initiateClientOpParams, null);
+        }
+
         public static void NewApplication(ManagementScope scope, string name, string path, bool runAsUser = false, bool stealth = false)
         {
             // Check for existing application before creating a new one
@@ -334,85 +413,6 @@ namespace SharpSCCM
                 deployment.Put();
                 MgmtUtil.GetClassInstances(scope, "SMS_ApplicationAssignment", false, null, $"ApplicationName='{application}' AND CollectionName='{collection}'");
             }
-        }
-
-        public static void GetSitePushSettings(string server, string sitecode)
-        {
-            ManagementScope sccmConnection = MgmtUtil.NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
-            ManagementObjectSearcher searcher = new ManagementObjectSearcher(sccmConnection, new ObjectQuery($"SELECT PropertyName, Value, Value1 FROM SMS_SCI_SCProperty WHERE ItemType='SMS_DISCOVERY_DATA_MANAGER' AND (PropertyName='ENABLEKERBEROSCHECK' OR PropertyName='FILTERS' OR PropertyName='SETTINGS')"));
-            ManagementObjectCollection results = searcher.Get();
-            foreach (ManagementObject result in results)
-            {
-                if (result["PropertyName"].ToString() == "SETTINGS" && result["Value1"].ToString() == "Active")
-                {
-                    Console.WriteLine("[+] Automatic site-wide client push installation is enabled");
-                }
-                else if (result["PropertyName"].ToString() == "ENABLEKERBEROSCHECK" && result["Value"].ToString() == "3")
-                {
-                    Console.WriteLine("[+] Fallback to NTLM is enabled");
-                }
-                else if (result["PropertyName"].ToString() == "FILTERS")
-                {
-                    Console.WriteLine("[+] Install client software on the following computers:");
-                    if (result["Value"].ToString() == "0")
-                    {
-                        Console.WriteLine("  Workstations and Servers (including domain controllers)");
-                    }
-                    else if (result["Value"].ToString() == "1")
-                    {
-                        Console.WriteLine("  Servers only (including domain controllers)");
-                    }
-                    else if (result["Value"].ToString() == "2")
-                    {
-                        Console.WriteLine("  Workstations and Servers (excluding domain controllers)");
-                    }
-                    else if (result["Value"].ToString() == "3")
-                    {
-                        Console.WriteLine("  Servers only (excluding domain controllers)");
-                    }
-                    else if (result["Value"].ToString() == "4")
-                    {
-                        Console.WriteLine("  Workstations and domain controllers only (excluding other servers)");
-                    }
-                    else if (result["Value"].ToString() == "5")
-                    {
-                        Console.WriteLine("  Domain controllers only");
-                    }
-                    else if (result["Value"].ToString() == "6")
-                    {
-                        Console.WriteLine("  Workstations only");
-                    }
-                    else if (result["Value"].ToString() == "7")
-                    {
-                        Console.WriteLine("  No computers");
-                    }
-                }
-            }
-            searcher = new ManagementObjectSearcher(sccmConnection, new ObjectQuery($"SELECT Values FROM SMS_SCI_SCPropertyList WHERE PropertyListName='Reserved2'"));
-            results = searcher.Get();
-            foreach (ManagementObject result in results)
-            {
-                foreach (string value in (string[])result["Values"])
-                {
-                    Console.WriteLine($"[+] Discovered client push installation account: {value}");
-
-                }
-            }
-        }
-
-        public static void InvokeUpdate(ManagementScope scope, string collectionName)
-        {
-            Console.WriteLine($"[+] Forcing all members of {collectionName} to check for updates and execute any new applications available");
-            ManagementClass clientOperation = new ManagementClass(scope, new ManagementPath("SMS_ClientOperation"), null);
-            ManagementBaseObject initiateClientOpParams = clientOperation.GetMethodParameters("InitiateClientOperation");
-            initiateClientOpParams.SetPropertyValue("Type", 8); // RequestPolicyNow
-
-            ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, new ObjectQuery($"SELECT * FROM SMS_Collection WHERE Name='{collectionName}'"));
-            foreach (ManagementObject collection in searcher.Get())
-            {
-                initiateClientOpParams["TargetCollectionID"] = collection.GetPropertyValue("CollectionID");
-            }
-            clientOperation.InvokeMethod("InitiateClientOperation", initiateClientOpParams, null);
         }
     }
 }

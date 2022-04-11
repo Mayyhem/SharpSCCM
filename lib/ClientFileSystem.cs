@@ -21,6 +21,7 @@ namespace SharpSCCM
         {
             ManagementScope sccmConnection = MgmtUtil.NewSccmConnection("\\\\localhost\\root\\cimv2");
             DateTime startDateObj = DateTime.Parse(startDate);
+            // To-do
         }
     }
 }
