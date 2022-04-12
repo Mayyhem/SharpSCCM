@@ -17,3 +17,6 @@ All commands and subcommands have a help page that is automatically generated us
 
 ### Author
 Chris Thompson (@_Mayyhem) is the primary author of this project. Duane Michael (@subat0mik) and Evan McBroom (@mcbroom_evan) are active contributors to this project as well.
+
+### Warning
+This tool was written as a proof of concept in a lab environment and has not been thoroughly tested. There are lots of unfinished bits, terrible error handling, and functions I may never complete. Please be careful and use at your own risk.
