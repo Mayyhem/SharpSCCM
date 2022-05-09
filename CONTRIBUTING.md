@@ -9,10 +9,11 @@ The following is a set of guidelines for contributing to SharpSCCM, including su
 1. [Important Resources](#important-resources)
 2. [Questions](#questions)
 3. [Issues and Bug Reports](#issues-and-bug-reports)
-4. [Development](#development)
-5. [Pull Requests](#pull-requests)
-6. [Feature Requests](#feature-requests)
-7. [Code of Conduct](#code-of-conduct)
+4. [Security Vulnerabilities](#security-vulnerabilities)
+5. [Development](#development)
+6. [Pull Requests](#pull-requests)
+7. [Feature Requests](#feature-requests)
+8. [Code of Conduct](#code-of-conduct)
 
 ## Important Resources
 
@@ -26,9 +27,6 @@ If you have a question, please review the following resources before opening an 
 Still have a question, but not an issue to report? Please reach out to Chris at @_Mayyhem on Twitter or @Mayyhem in the [BloodHoundGang Slack](https://bloodhoundhq.slack.com), or start a [Discussion](https://github.com/Mayyhem/SharpSCCM/discussions/categories/q-a).
 
 ## Issues and Bug Reports
-
-**If you find a security vulnerability, please do not open an issue and first privately contact Chris at @_Mayyhem on Twitter or @Mayyhem in the [BloodHoundGang Slack](https://bloodhoundhq.slack.com).**
-
 If you find a bug in the source code, please help us by submitting an issue to our [GitHub issue tracker](https://github.com/Mayyhem/SharpSCCM/issues) or a pull request with a fix.
 
 Before submitting an issue, please:
@@ -38,6 +36,17 @@ Before submitting an issue, please:
 * make sure you are using the latest release.
  
 When submitting a new issue, please use the provided templates. Please fill out each section to ensure we have the basic information needed to begin reviewing the issue and reproducing it.
+
+## Security Vulnerabilities
+**If you find a security vulnerability, please do not open an issue and first privately contact Chris at @_Mayyhem on Twitter or @Mayyhem in the [BloodHoundGang Slack](https://bloodhoundhq.slack.com).**
+
+Please include:
+
+- a concise description of the vulnerability and its impact.
+- step-by-step instructions to reproduce or observe the issue.
+- relevant stack traces, screenshots, or other information.
+
+The maintainer will respond as soon as possible. Depending on the impact and work required to resolve the issue, expect a patch within 14-30 days.
 
 ## Development
 
