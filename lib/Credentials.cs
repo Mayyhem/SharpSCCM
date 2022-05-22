@@ -14,6 +14,7 @@ namespace SharpSCCM
 
         public static void LocalNetworkAccessAccountsWmi(string masterkey)
         {
+
             ManagementScope sccmConnection = MgmtUtil.NewSccmConnection("\\\\localhost\\root\\ccm\\policy\\Machine\\ActualConfig");
             MgmtUtil.GetClassInstances(sccmConnection, "CCM_NetworkAccessAccount");
             ManagementObjectSearcher searcher = new ManagementObjectSearcher(sccmConnection, new ObjectQuery("SELECT * FROM CCM_NetworkAccessAccount"));

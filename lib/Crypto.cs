@@ -153,5 +153,18 @@ namespace SharpSCCM
 
             return sessionKeyBytes;
         }
-    }
+
+        public static byte[] LSASHA256Hash(byte[] key, byte[] rawData)
+        {
+            // yay
+            using (var sha256Hash = SHA256.Create())
+            {
+                var buffer = new byte[key.Length + (rawData.Length * 1000)];
+                Array.Copy(key, 0, buffer, 0, key.Length);
+                for (var i = 0; i < 1000; ++i)
+                {
+                    Array.Copy(rawData, 0, buffer, key.Length + (i * rawData.Length), rawData.Length);
+                }
+                return sha256Hash.ComputeHash(buffer);
+            }
 }
