@@ -121,6 +121,91 @@ namespace SharpSCCM
 
         }
 
+        //public static Dictionary<string, string> TriageSystemMasterKeys(bool show = false)
+        //{
+        //    // retrieve the DPAPI_SYSTEM key and use it to decrypt any SYSTEM DPAPI masterkeys
+
+        //    var mappings = new Dictionary<string, string>();
+
+        //    if (Helpers.IsHighIntegrity())
+        //    {
+        //        // get the system and user DPAPI backup keys, showing the machine DPAPI keys
+        //        //  { machine , user }
+
+        //        var keys = LSADump.GetDPAPIKeys(true);
+        //        Helpers.GetSystem();
+        //        var systemFolder =
+        //            $"{Environment.GetEnvironmentVariable("SystemDrive")}\\Windows\\System32\\Microsoft\\Protect\\";
+
+        //        var systemDirs = Directory.GetDirectories(systemFolder);
+
+        //        foreach (var directory in systemDirs)
+        //        {
+        //            var machineFiles = Directory.GetFiles(directory);
+        //            var userFiles = new string[0];
+
+        //            if (Directory.Exists($"{directory}\\User\\"))
+        //            {
+        //                userFiles = Directory.GetFiles($"{directory}\\User\\");
+        //            }
+
+        //            foreach (var file in machineFiles)
+        //            {
+        //                if (!Regex.IsMatch(file, @".*\\[0-9A-Fa-f]{8}[-][0-9A-Fa-f]{4}[-][0-9A-Fa-f]{4}[-][0-9A-Fa-f]{4}[-][0-9A-Fa-f]{12}"))
+        //                    continue;
+
+        //                var fileName = Path.GetFileName(file);
+        //                if (show)
+        //                {
+        //                    Console.WriteLine("[*] Found SYSTEM system MasterKey : {0}", file);
+        //                }
+
+        //                var masteyKeyBytes = File.ReadAllBytes(file);
+        //                try
+        //                {
+        //                    // use the "machine" DPAPI key
+        //                    var plaintextMasterkey = Dpapi.DecryptMasterKeyWithSha(masteyKeyBytes, keys[0]);
+        //                    mappings.Add(plaintextMasterkey.Key, plaintextMasterkey.Value);
+        //                }
+        //                catch (Exception e)
+        //                {
+        //                    Console.WriteLine("[X] Error triaging {0} : {1}", file, e.Message);
+        //                }
+        //            }
+
+        //            foreach (var file in userFiles)
+        //            {
+        //                if (!Regex.IsMatch(file, @".*\\[0-9A-Fa-f]{8}[-][0-9A-Fa-f]{4}[-][0-9A-Fa-f]{4}[-][0-9A-Fa-f]{4}[-][0-9A-Fa-f]{12}"))
+        //                    continue;
+
+        //                var fileName = Path.GetFileName(file);
+        //                if (show)
+        //                {
+        //                    Console.WriteLine("[*] Found SYSTEM user MasterKey : {0}", file);
+        //                }
+
+        //                var masteyKeyBytes = File.ReadAllBytes(file);
+        //                try
+        //                {
+        //                    // use the "user" DPAPI key
+        //                    var plaintextMasterKey = Dpapi.DecryptMasterKeyWithSha(masteyKeyBytes, keys[1]);
+        //                    mappings.Add(plaintextMasterKey.Key, plaintextMasterKey.Value);
+        //                }
+        //                catch (Exception e)
+        //                {
+        //                    Console.WriteLine("[X] Error triaging {0} : {1}", file, e.Message);
+        //                }
+        //            }
+        //        }
+        //    }
+        //    else
+        //    {
+        //        Console.WriteLine("\r\n[X] Must be elevated to triage SYSTEM masterkeys!\r\n");
+        //    }
+
+        //    return mappings;
+        //}
+
         public static Dictionary<string, string> TriageSystemMasterKeys(bool show = false)
         {
             // retrieve the DPAPI_SYSTEM key and use it to decrypt any SYSTEM DPAPI masterkeys
@@ -205,6 +290,7 @@ namespace SharpSCCM
 
             return mappings;
         }
+
 
         public static KeyValuePair<string, string> DecryptMasterKeyWithSha(byte[] masterKeyBytes, byte[] shaBytes)
         {
@@ -395,7 +481,8 @@ namespace SharpSCCM
         }
 
 
-        public static void Execute(string blob, string masterkey)
+        //public static void Execute(string blob, string masterkey)
+        public static void Execute(string blob, Dictionary<string, string> masterkeys)
         {
             Console.WriteLine("\r\n[*] Action: Describe DPAPI blob");
 
@@ -424,13 +511,13 @@ namespace SharpSCCM
             blobBytes = unmangledArray;
 
 
-            // Use SharpDPAPI to get masterkey and pass to this function, store in file
-            // Temporarily set static path to masterkey file
-            Dictionary<string, string> masterkeys = new Dictionary<string, string>();
+            //// Use SharpDPAPI to get masterkey and pass to this function, store in file
+            //// Temporarily set static path to masterkey file
+            //Dictionary<string, string> masterkeys = new Dictionary<string, string>();
 
-            //string filePath = "C:\\users\\hurin.thalion\\Desktop\\keys.txt";
+            ////string filePath = "C:\\users\\hurin.thalion\\Desktop\\keys.txt";
             
-            masterkeys = Helpers.ParseMasterKeyCmdLine(masterkey);
+            //masterkeys = Helpers.ParseMasterKeyCmdLine(masterkey);
 
             if (blobBytes.Length > 0)
             {

