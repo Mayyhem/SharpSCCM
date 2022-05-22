@@ -59,7 +59,7 @@ namespace SharpSCCM
                     Console.WriteLine($"[+]    1. The SCCM environment does not have a Network Access Account configured\n");
                     Console.WriteLine($"[+]    2. This host is not an SCCM client (and never has been)\n");
                     Console.WriteLine($"[+]    3. This host is no longer an SCCM client (but used to be)\n");
-                    Console.WriteLine($"[+] You can attempt running 'SharpSCCM naa disk' to retrieve NAA credentials from machines\n");
+                    Console.WriteLine($"[+] You can attempt running 'SharpSCCM local naa disk' to retrieve NAA credentials from machines\n");
                     Console.WriteLine($"[+] that used to be SCCm clients but have since had the client uninstalled.");
                 }
             }
