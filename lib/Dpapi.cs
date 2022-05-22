@@ -13,7 +13,6 @@ namespace SharpSCCM
 {
     public class Dpapi
     {
-        // This code is credited to Will Schroeder @harmj0y and his SharpDPAPI project: https://github.com/GhostPack/SharpDPAPI
         public static byte[] DecryptBlob(byte[] ciphertext, byte[] key, int algCrypt, PaddingMode padding = PaddingMode.Zeros)
         {
             // decrypts a DPAPI blob using AES
