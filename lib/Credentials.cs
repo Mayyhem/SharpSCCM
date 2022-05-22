@@ -11,7 +11,13 @@ namespace SharpSCCM
 
         public static void LocalNetworkAccessAccountsDisk(string masterkey)
         {
-            // TO DO
+            // We don't need to be elevated to read the blob...
+
+            // but we do need to be elevated to retrieve the key to decrypt the blob
+            if (Helpers.IsHighIntegrity())
+            {
+                
+            }
         }
 
         public static void LocalNetworkAccessAccountsWmi(string masterkey)
@@ -54,7 +60,7 @@ namespace SharpSCCM
                     Console.WriteLine($"[+]    2. This host is not an SCCM client (and never has been)\n");
                     Console.WriteLine($"[+]    3. This host is no longer an SCCM client (but used to be)\n");
                     Console.WriteLine($"[+] You can attempt running 'SharpSCCM naa disk' to retrieve NAA credentials from machines\n");
-                    Console.WriteLine($"[+} that used to be SCCm clients but have since had the client uninstalled.");
+                    Console.WriteLine($"[+] that used to be SCCm clients but have since had the client uninstalled.");
                 }
             }
         }
