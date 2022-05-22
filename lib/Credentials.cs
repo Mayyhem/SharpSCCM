@@ -1,5 +1,7 @@
-﻿using System;
-using System.Runtime.InteropServices;
+﻿// This code was taken/derived from Will Schroeder's (@harmj0y) SharpDPAPI project
+// https://github.com/GhostPack/SharpDPAPI
+
+using System;
 using System.Management;
 
 namespace SharpSCCM

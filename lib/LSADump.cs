@@ -1,15 +1,11 @@
-﻿using System;
+﻿// This code was taken/derived from Will Schroeder's (@harmj0y) SharpDPAPI project
+// https://github.com/GhostPack/SharpDPAPI
+
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Diagnostics;
-using System.IO;
-using System.Linq;
 using System.Runtime.InteropServices;
-using System.Security.Principal;
-using System.Text.RegularExpressions;
 using System.Text;
-using System.Security.Cryptography;
-using System.Collections;
 
 namespace SharpSCCM
 {

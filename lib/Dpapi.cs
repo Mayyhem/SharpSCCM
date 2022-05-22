@@ -1,12 +1,13 @@
-﻿using PBKDF2;
+﻿// This code was taken/derived from Will Schroeder's (@harmj0y) SharpDPAPI project
+// https://github.com/GhostPack/SharpDPAPI
+
+using PBKDF2;
 using System;
 using System.Text;
 using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.IO;
-using System.Security.AccessControl;
 using System.Text.RegularExpressions;
-using System.Xml;
 
 namespace SharpSCCM
 {
