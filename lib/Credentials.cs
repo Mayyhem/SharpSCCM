@@ -12,14 +12,39 @@ namespace SharpSCCM
     public class Credentials
     {
 
-        public static void LocalNetworkAccessAccountsDisk(string masterkey)
+        public static void LocalNetworkAccessAccountsDisk()
         {
             // We don't need to be elevated to read the blob...
 
-            // but we do need to be elevated to retrieve the key to decrypt the blob
+            string protectedUsername = "";
+            string protectedPassword = "";
+            byte[] protectedUsernameBytes = Helpers.StringToByteArray(protectedUsername);
+            int length = (protectedUsernameBytes.Length + 16 - 1) / 16 * 16;
+            Array.Resize(ref protectedUsernameBytes, length);
+
+
+            // But we do need to be elevated to retrieve the key to decrypt the blob...
             if (Helpers.IsHighIntegrity())
             {
-                
+                Dictionary<string, string> mappings = Dpapi.TriageSystemMasterKeys();
+
+                Console.WriteLine("\r\n[*] SYSTEM master key cache:\r\n");
+                foreach (KeyValuePair<string, string> kvp in mappings)
+                {
+                    Console.WriteLine("{0}:{1}", kvp.Key, kvp.Value);
+                }
+                Console.WriteLine();
+
+                try
+                {
+                    Dpapi.Execute(protectedUsername, mappings);
+                    Dpapi.Execute(protectedPassword, mappings);
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine("[!] Data was not decrypted. An error occurred.");
+                    Console.WriteLine(e.ToString());
+                }
             }
         }
 
@@ -61,19 +86,6 @@ namespace SharpSCCM
                             Console.WriteLine("[!] Data was not decrypted. An error occurred.");
                             Console.WriteLine(e.ToString());
                         }
-
-                        //try
-                        //{
-
-                        //    Dpapi.Execute(protectedUsername, masterkey);
-                        //    Dpapi.Execute(protectedPassword, masterkey);
-
-                        //}
-                        //catch (Exception e)
-                        //{
-                        //    Console.WriteLine("[!] Data was not decrypted. An error occurred.");
-                        //    Console.WriteLine(e.ToString());
-                        //}
                     }
                 }
                 else

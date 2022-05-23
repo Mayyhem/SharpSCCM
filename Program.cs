@@ -382,21 +382,20 @@ namespace SharpSCCM
             var getLocalNetworkAccessAccounts = new Command("naa", "Get any network access accounts for the site using WMI (requires admin privileges)");
             localCommand.Add(getLocalNetworkAccessAccounts);
             getLocalNetworkAccessAccounts.Add(new Argument<string>("method", "The method of obtaining the DPAPI blob: WMI or Disk"));
-            //getLocalNetworkAccessAccounts.Add(new Option<string>(new[] { "--masterkey", "-m" }, "The {GUID}:SHA1 DPAPI SYSTEM masterkey"));
             getLocalNetworkAccessAccounts.Handler = CommandHandler.Create(
                 (string method, string masterkey) =>
                 {
-                    if ((method == "wmi"))
+                    if (method == "wmi")
                     {
                         Credentials.LocalNetworkAccessAccountsWmi();
                     }
-                    else if ((method == "disk") && (masterkey != null))
+                    else if (method == "disk")
                     {
-                        Credentials.LocalNetworkAccessAccountsDisk(masterkey);
+                        Credentials.LocalNetworkAccessAccountsDisk();
                     }
                     else
                     {
-                        Console.WriteLine("[!] A method (wmi or disk) and masterkey are required!");
+                        Console.WriteLine("[!] A method (wmi or disk) is required!");
                     }
                 });
 
