@@ -210,7 +210,7 @@ namespace SharpSCCM
                     }
                     if (properties.Length == 0 && !verbose)
                     {
-                        properties = new[] { "Active", "ADSiteName", "Client", "DistinguishedName", "FullDomainName", "HardwareID", "IPAddresses", "IPSubnets", "IPv6Addresses", "IPv6Prefixes", "IsVirtualMachine", "LastLogontimeStamp", "LastLogonUserDomain", "LastLogonUserName", "MACAddresses", "Name", "NetbiosName", "Obsolete", "OperatingSystemNameandVersion", "PrimaryGroupID", "ResourceDomainORWorkgroup", "ResourceNames", "SID", "SMSInstalledSites", "SMSUniqueIdentifier", "SNMPCommunityName", "SystemContainerName", "SystemGroupName", "SystemOUName" };
+                        properties = new[] { "Active", "ADSiteName", "Client", "DistinguishedName", "FullDomainName", "HardwareID", "IPAddresses", "IPSubnets", "IPv6Addresses", "IPv6Prefixes", "IsVirtualMachine", "LastLogonTimestamp", "LastLogonUserDomain", "LastLogonUserName", "MACAddresses", "Name", "NetbiosName", "Obsolete", "OperatingSystemNameandVersion", "PrimaryGroupID", "ResourceDomainORWorkgroup", "ResourceNames", "SID", "SMSInstalledSites", "SMSUniqueIdentifier", "SNMPCommunityName", "SystemContainerName", "SystemGroupName", "SystemOUName" };
                     }
                     ManagementScope sccmConnection = MgmtUtil.NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
                     MgmtUtil.GetClassInstances(sccmConnection, "SMS_R_System", count, properties, whereCondition, orderBy, dryRun, verbose);
@@ -247,7 +247,7 @@ namespace SharpSCCM
                         verbose = true;
                     }
                     ManagementScope sccmConnection = MgmtUtil.NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
-                    MgmtUtil.GetClassInstances(sccmConnection, "SMS_UserMachineRelationShip", count, properties, whereCondition, orderBy, dryRun, verbose);
+                    MgmtUtil.GetClassInstances(sccmConnection, "SMS_UserMachineRelationship", count, properties, whereCondition, orderBy, dryRun, verbose, false); // Don't get lazy props for this function, ResourceName won't populate
                 });
 
             // get site-push-settings
@@ -263,10 +263,24 @@ namespace SharpSCCM
             var invokeCommand = new Command("invoke", "A group of commands that execute actions on the server");
             rootCommand.Add(invokeCommand);
 
+            // invoke client-auth
+            var invokeClientAuth = new Command("client-auth", "Request NTLM authentication from an SCCM client device or device collection to an arbitrary destination via NTLM (requires Full Administrator access)");
+            invokeCommand.Add(invokeClientAuth);
+            invokeClientAuth.Add(new Option<string>(new[] { "--device", "-d" }, "The ResourceName of the device you would like to receive NTLM authentication from."));
+            invokeClientAuth.Add(new Option<string>(new[] { "--collection", "-c" }, "The Name of the device collection you would like to receive NTLM authentication from."));
+            invokeClientAuth.Add(new Option<string>(new[] { "--relay-server", "-r" }, "The NetBIOS name, IP address, or if WebClient is enabled on the targeted client device, the IP address and port (e.g., 192.168.1.1@8080) of the relay/capture server. If left blank, NTLM authentication attempts will be sent to the machine running SharpSCCM."));
+            invokeClientAuth.Add(new Option<bool>(new[] { "--run-as-system", "-s" }, "Request NTLM authentication from the specified device's machine account rather than the default setting, which requests NTLM authentication from the logged on user."));
+            invokeClientAuth.Handler = CommandHandler.Create(
+                (string server, string sitecode, string device, string collection, string relayServer, bool runAsSystem) =>
+                {
+                    ManagementScope sccmConnection = MgmtUtil.NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
+                    MgmtPointWmi.InvokeClientAuth(sccmConnection, device, collection, relayServer, !runAsSystem);
+                });
+
             // invoke client-push
             var invokeClientPush = new Command("client-push", "Coerce the server to authenticate to an arbitrary destination via NTLM (if enabled) by registering a new device and sending a heartbeat data discovery record (DDR) with the ClientInstalled flag set to false. This command does not require local Administrator privileges but must be run from a client device. This command can also be run as an SCCM Administrator with the '--as-admin' option to use built-in functionality to initiate client push installation rather than registering a new client device.");
             invokeCommand.Add(invokeClientPush);
-            invokeClientPush.Add(new Option<bool>(new[] { "--as-admin", "-a" }, "Use this option if you are in a user context with Administrator privileges to manage SCCM."));
+            invokeClientPush.Add(new Option<bool>(new[] { "--as-admin", "-a" }, "Use this option if you are in a user context with administrator privileges to manage SCCM."));
             invokeClientPush.Add(new Option<string>(new[] { "--target", "-t" }, "The NetBIOS name, IP address, or if WebClient is enabled on the site server, the IP address and port (e.g., 192.168.1.1@8080) of the relay/capture server. The server will attempt to authenticate to the ADMIN$ share on this target. If left blank, NTLM authentication attempts will be sent to the machine running SharpSCCM."));
             invokeClientPush.Handler = CommandHandler.Create(
                 (string server, string sitecode, bool asAdmin, string target) =>
@@ -338,7 +352,7 @@ namespace SharpSCCM
                 });
 
             // local clientinfo
-            var getLocalClientInfo = new Command("clientinfo", "Get the primary Management Point and Site Code for the local host");
+            var getLocalClientInfo = new Command("clientinfo", "Get the client software version for the local host");
             localCommand.Add(getLocalClientInfo);
             getLocalClientInfo.Handler = CommandHandler.Create(
                 new Action(() =>
