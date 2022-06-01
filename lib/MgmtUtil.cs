@@ -22,7 +22,7 @@ namespace SharpSCCM
             Console.WriteLine(String.Join("\n", classes.ToArray()));
         }
 
-        public static void GetClassInstances(ManagementScope scope, string wmiClass, bool count = false, string[] properties = null, string whereCondition = null, string orderByColumn = null, bool dryRun = false, bool verbose = false)
+        public static void GetClassInstances(ManagementScope scope, string wmiClass, bool count = false, string[] properties = null, string whereCondition = null, string orderByColumn = null, bool dryRun = false, bool verbose = false, bool getLazyProps = true)
         {
             try
             {
@@ -72,8 +72,8 @@ namespace SharpSCCM
                     Console.WriteLine("-----------------------------------");
                     foreach (ManagementObject queryObj in searcher.Get())
                     {
-                        // Get lazy properties unless we're just counting instances
-                        if (!count)
+                        // Get lazy properties unless we're just counting instances or we explicitly don't want lazy props
+                        if (!count && getLazyProps)
                         {
                             queryObj.Get();
                         }
