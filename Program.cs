@@ -66,9 +66,9 @@ namespace SharpSCCM
             rootCommand.Add(execCommand);
             execCommand.Add(new Option<string>(new[] { "--device", "-d" }, "The ResourceName of the device you would like to receive NTLM authentication from."));
             execCommand.Add(new Option<string>(new[] { "--collection", "-c" }, "The Name of the device collection you would like to receive NTLM authentication from."));
-            execCommand.Add(new Option<string>(new[] { "--path", "-p" }, "The UNC path of the application to execute on the client device(s). "));
+            execCommand.Add(new Option<string>(new[] { "--path", "-p" }, "The local or UNC path of the binary/script the application will execute (e.g., \"C:\\Windows\\System32\\calc.exe\", \"\\\\site-server.domain.com\\Sources$\\my.exe\")"));
             execCommand.Add(new Option<string>(new[] { "--relay-server", "-r" }, "To coerce NTLM authentication, specify the NetBIOS name, IP address, or if WebClient is enabled on the targeted client device, the IP address and port (e.g., 192.168.1.1@8080) of the relay/capture server. If left blank, NTLM authentication attempts will be sent to the machine running SharpSCCM."));
-            execCommand.Add(new Option<bool>(new[] { "--run-as-system", "-s" }, "Request NTLM authentication from the specified device's machine account rather than the default setting, which requests NTLM authentication from the logged on user."));
+            execCommand.Add(new Option<bool>(new[] { "--run-as-system", "-s" }, "Execute code or request NTLM authentication from the specified device's machine account rather than the default setting, which executes in the context of the logged on user."));
             execCommand.Handler = CommandHandler.Create(
                 (string server, string sitecode, string device, string collection, string path, string relayServer, bool runAsSystem) =>
                 {
