@@ -167,7 +167,7 @@ namespace SharpSCCM
 
             // Serialize message XML and display to user
             registrationRequest.SerializeMessageBody();
-            Console.WriteLine($"\n[+] Registration Request Body:\n{System.Xml.Linq.XElement.Parse(registrationRequest.Body.ToString())}");
+            //Console.WriteLine($"\n[+] Registration Request Body:\n{System.Xml.Linq.XElement.Parse(registrationRequest.Body.ToString())}");
 
             // Register client and wait for a confirmation with the SMSID
             Console.WriteLine($"[+] Sending HTTP registration request to {registrationRequest.Settings.HostName}:{registrationRequest.Settings.HttpPort}");
@@ -245,8 +245,8 @@ namespace SharpSCCM
             typeof(InventoryReportBody).GetProperty("RawXml").SetValue(ddrMessage.InventoryReport.ReportBody, inventoryReportXml);
 
             // Display XML to user
-            Console.WriteLine($"\n[+] DDR Body:\n{System.Xml.Linq.XElement.Parse(ddrBodyXml)}");
-            Console.WriteLine($"\n[+] Inventory Report Body:\n{System.Xml.Linq.XElement.Parse("<root>" + ddrMessage.InventoryReport.ReportBody.RawXml + "</root>")}\n");
+            //Console.WriteLine($"\n[+] DDR Body:\n{System.Xml.Linq.XElement.Parse(ddrBodyXml)}");
+            //Console.WriteLine($"\n[+] Inventory Report Body:\n{System.Xml.Linq.XElement.Parse("<root>" + ddrMessage.InventoryReport.ReportBody.RawXml + "</root>")}\n");
 
             // Assemble message and send
             ddrMessage.Settings.Compression = MessageCompression.Zlib;
@@ -254,7 +254,7 @@ namespace SharpSCCM
             ddrMessage.Settings.HostName = managementPoint;
             Console.WriteLine($"[+] Sending DDR from {ddrMessage.SmsId} to {ddrMessage.Settings.Endpoint} endpoint on {ddrMessage.Settings.HostName}:{ddrMessage.SiteCode} and requesting client installation on {target}");
             ddrMessage.SendMessage(sender);
+            Console.WriteLine("[+] Done!");
         }
-
     }
 }

