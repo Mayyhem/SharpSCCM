@@ -161,7 +161,7 @@ namespace SharpSCCM
                     }
                     else
                     {
-                        NewApplication(scope, newApplicationName, $"\\\\{path}", runAsUser, true);
+                        NewApplication(scope, newApplicationName, $"{path}", runAsUser, true);
                     }
                     NewDeployment(scope, newApplicationName, newCollectionName);
                     Console.WriteLine("[+] Waiting 30s for new deployment to become available");
