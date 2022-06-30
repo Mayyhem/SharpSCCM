@@ -24,7 +24,7 @@ git clone https://github.com/Mayyhem/SharpSCCM.git
 A version of the SharpSCCM assembly that contains all of its dependencies will be placed in the $(TargetDir) directory (e.g., .\SharpSCCM\bin\x64\Release\SharpSCCM_merged.exe).
 
 ### Command Line Usage
-All commands and subcommands have a help page that is automatically generated using the System.CommandLine library. Help pages can be accessed by entering any SharpSCCM command followed by -h, --help, /h, /?, or -?. Required positional arguments are shown within angle brackets and options are shown within square brackets. SharpSCCM supports command line tab completion with dotnet-suggest. For more information, see https://github.com/dotnet/command-line-api/blob/main/docs/Features-overview.md.
+All commands and subcommands have a help page that is automatically generated using the System.CommandLine library. Help pages can be accessed by entering any SharpSCCM command followed by -h, --help, /h, /?, or -?. Required positional arguments are shown within angle brackets and options are shown within square brackets. SharpSCCM supports command line tab completion with dotnet-suggest. For more information, see [The WIKI](https://github.com/Mayyhem/SharpSCCM/wiki/Usage).
 
 ### Author
 Chris Thompson is the primary author of this project. Duane Michael (@subat0mik) and Evan McBroom (@mcbroom_evan) are active contributors as well. Please feel free to reach out on Twitter (@_Mayyhem) with questions, ideas for improvements, etc., and on GitHub with issues and pull requests.
