@@ -10,7 +10,7 @@ namespace SharpSCCM
         public static void GetClasses(ManagementScope scope)
         {
             string query = "SELECT * FROM meta_class";
-            Console.WriteLine($"[+] Executing WQL query: {query}");
+            Console.WriteLine($"[+]     Executing WQL query: {query}");
             ObjectQuery objQuery = new ObjectQuery(query);
             ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, objQuery);
             var classes = new List<string>();
@@ -64,12 +64,12 @@ namespace SharpSCCM
                 }
                 else
                 {
-                    Console.WriteLine($"[+] Executing WQL query: {query}");
+                    Console.WriteLine($"[+]     Executing WQL query: {query}\n");
                     ObjectQuery objQuery = new ObjectQuery(query);
                     ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, objQuery);
-                    Console.WriteLine("-----------------------------------");
-                    Console.WriteLine(wmiClass);
-                    Console.WriteLine("-----------------------------------");
+                    //Console.WriteLine("-----------------------------------");
+                    //Console.WriteLine(wmiClass);
+                    //Console.WriteLine("-----------------------------------");
                     foreach (ManagementObject queryObj in searcher.Get())
                     {
                         // Get lazy properties unless we're just counting instances or we explicitly don't want lazy props
@@ -88,34 +88,34 @@ namespace SharpSCCM
                                     if (prop.Value is String[])
                                     {
                                         String[] nestedValues = (String[])(prop.Value);
-                                        Console.WriteLine($"{prop.Name}: {string.Join(", ", nestedValues)}");
+                                        //Console.WriteLine($"{prop.Name}: {string.Join(", ", nestedValues)}");
                                     }
                                     else if (prop.Value is int[])
                                     {
                                         int[] nestedValues = (int[])(prop.Value);
                                         string[] nestedValueStrings = nestedValues.Select(x => x.ToString()).ToArray();
-                                        Console.WriteLine($"{prop.Name}: {string.Join(", ", nestedValueStrings)}");
+                                        //Console.WriteLine($"{prop.Name}: {string.Join(", ", nestedValueStrings)}");
                                     }
                                     else
                                     {
                                         string canConvertToString = prop.Value as string;
                                         if (canConvertToString != null)
                                         {
-                                            Console.WriteLine($"{prop.Name}: {canConvertToString}");
+                                            //Console.WriteLine($"{prop.Name}: {canConvertToString}");
                                         }
                                         else
                                         {
-                                            Console.WriteLine($"{prop.Name}: Can't display {prop.Type.ToString()} as a String");
+                                            //Console.WriteLine($"{prop.Name}: Can't display {prop.Type.ToString()} as a String");
                                         }
                                     }
                                 }
                                 else
                                 {
-                                    Console.WriteLine("{0}: {1}", prop.Name, prop.Value);
+                                    //Console.WriteLine("{0}: {1}", prop.Name, prop.Value);
                                 }
                             }
                         }
-                        Console.WriteLine("-----------------------------------");
+                        //Console.WriteLine("-----------------------------------");
                     }
                 }
             }
@@ -186,16 +186,16 @@ namespace SharpSCCM
             ManagementScope sccmConnection = new ManagementScope(path, connection);
             try
             {
-                Console.WriteLine($"[+] Connecting to {sccmConnection.Path}");
+                Console.WriteLine($"[+]     Connecting to {sccmConnection.Path}");
                 sccmConnection.Connect();
             }
             catch (System.UnauthorizedAccessException unauthorizedErr)
             {
-                Console.WriteLine("[!] Access to WMI was not authorized (user name or password might be incorrect): " + unauthorizedErr.Message);
+                Console.WriteLine("[!]      Access to WMI was not authorized (user name or password might be incorrect): " + unauthorizedErr.Message);
             }
             catch (Exception e)
             {
-                Console.WriteLine("[!] Error connecting to WMI: " + e.Message);
+                Console.WriteLine("[!]      Error connecting to WMI: " + e.Message);
             }
             return sccmConnection;
         }
