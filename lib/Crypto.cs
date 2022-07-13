@@ -5,7 +5,7 @@ namespace SharpSCCM
 {
     public class Crypto
     {
-        // This code is credited to Will Schroeder @harmj0y and his SharpDPAPI project: https://github.com/GhostPack/SharpDPAPI
+        // This code is credited to Will Schroeder (@harmj0y) and his SharpDPAPI project: https://github.com/GhostPack/SharpDPAPI
         public static byte[] DecryptBlob(byte[] ciphertext, byte[] key, int algCrypt, PaddingMode padding = PaddingMode.Zeros)
         {
             // Decrypts a DPAPI blob using 3DES or AES
@@ -14,43 +14,43 @@ namespace SharpSCCM
             switch (algCrypt)
             {
                 case 26115: // 26115 == CALG_3DES
-                {
-                    // takes a byte array of ciphertext bytes and a key array, decrypt the blob with 3DES
-                    var desCryptoProvider = new TripleDESCryptoServiceProvider();
-
-                    var ivBytes = new byte[8];
-
-                    desCryptoProvider.Key = key;
-                    desCryptoProvider.IV = ivBytes;
-                    desCryptoProvider.Mode = CipherMode.CBC;
-                    desCryptoProvider.Padding = padding;
-                    try
                     {
-                        var plaintextBytes = desCryptoProvider.CreateDecryptor().TransformFinalBlock(ciphertext, 0, ciphertext.Length);
+                        // takes a byte array of ciphertext bytes and a key array, decrypt the blob with 3DES
+                        var desCryptoProvider = new TripleDESCryptoServiceProvider();
+
+                        var ivBytes = new byte[8];
+
+                        desCryptoProvider.Key = key;
+                        desCryptoProvider.IV = ivBytes;
+                        desCryptoProvider.Mode = CipherMode.CBC;
+                        desCryptoProvider.Padding = padding;
+                        try
+                        {
+                            var plaintextBytes = desCryptoProvider.CreateDecryptor().TransformFinalBlock(ciphertext, 0, ciphertext.Length);
+                            return plaintextBytes;
+                        }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine("[X] An exception occured: {0}", e);
+                        }
+
+                        return new byte[0];
+                    }
+                case 26128: // 25128 == CALG_AES_256
+                    {
+                        // takes a byte array of ciphertext bytes and a key array, decrypt the blob with AES256
+                        var aesCryptoProvider = new AesManaged();
+                        var ivBytes = new byte[16];
+
+                        aesCryptoProvider.Key = key;
+                        aesCryptoProvider.IV = ivBytes;
+                        aesCryptoProvider.Mode = CipherMode.CBC;
+                        aesCryptoProvider.Padding = padding;
+
+                        var plaintextBytes = aesCryptoProvider.CreateDecryptor().TransformFinalBlock(ciphertext, 0, ciphertext.Length);
+
                         return plaintextBytes;
                     }
-                    catch (Exception e)
-                    {
-                        Console.WriteLine("[X] An exception occured: {0}", e);
-                    }
-
-                    return new byte[0];
-                }
-                case 26128: // 25128 == CALG_AES_256
-                {
-                    // takes a byte array of ciphertext bytes and a key array, decrypt the blob with AES256
-                    var aesCryptoProvider = new AesManaged();
-                    var ivBytes = new byte[16];
-
-                    aesCryptoProvider.Key = key;
-                    aesCryptoProvider.IV = ivBytes;
-                    aesCryptoProvider.Mode = CipherMode.CBC;
-                    aesCryptoProvider.Padding = padding;
-
-                    var plaintextBytes = aesCryptoProvider.CreateDecryptor().TransformFinalBlock(ciphertext, 0, ciphertext.Length);
-
-                    return plaintextBytes;
-                }
                 default:
                     throw new Exception($"Could not decrypt blob. Unsupported algorithm: {algCrypt}");
             }
@@ -153,5 +153,18 @@ namespace SharpSCCM
 
             return sessionKeyBytes;
         }
-    }
-}
+
+        public static byte[] LSASHA256Hash(byte[] key, byte[] rawData)
+        {
+            // yay
+            using (var sha256Hash = SHA256.Create())
+            {
+                var buffer = new byte[key.Length + (rawData.Length * 1000)];
+                Array.Copy(key, 0, buffer, 0, key.Length);
+                for (var i = 0; i < 1000; ++i)
+                {
+                    Array.Copy(rawData, 0, buffer, key.Length + (i * rawData.Length), rawData.Length);
+                }
+                return sha256Hash.ComputeHash(buffer);
+            }
+        }
