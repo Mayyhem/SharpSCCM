@@ -13,6 +13,17 @@ namespace SharpSCCM
     {
         static void Main(string[] args)
         {
+            Console.WriteLine("\r\n");
+            Console.WriteLine(@" _____ _                      _____ _____  _____ ___  ___");
+            Console.WriteLine(@"/  ___| |                    /  ___/  __ \/  __ \|  \/  |");
+            Console.WriteLine(@"\ `--.| |__   __ _ _ __ _ __ \ `--.| /  \/| /  \/| .  . |");
+            Console.WriteLine(@" `--. \ '_ \ / _` | '__| '_ \ `--. \ |    | |    | |\/| |");
+            Console.WriteLine(@"/\__/ / | | | (_| | |  | |_) /\__/ / \__/\| \__/\| |  | |");
+            Console.WriteLine(@"\____/|_| |_|\__,_|_|  | .__/\____/ \____/ \____/\_|  |_/");
+            Console.WriteLine(@"                       | |                               ");
+            Console.WriteLine(@"                       |_|                               ");
+            Console.WriteLine("\r\n");
+
             // Gather required arguments
             var rootCommand = new RootCommand("Interact with Microsoft Endpoint Configuration Manager");
             rootCommand.Add(new Argument<string>("server", "The FQDN or NetBIOS name of the Configuration Manager server to connect to"));
