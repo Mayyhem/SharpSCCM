@@ -15,7 +15,7 @@ namespace SharpSCCM
 
             // get size of file
             FileInfo cimRepo = new FileInfo(cimRepoPath);
-            uint bytesToSearch = (uint) (int) cimRepoPath.Length;
+            uint bytesToSearch = (uint) (int) cimRepo.Length;
 
             Console.WriteLine($"[*] Searching the CIM repository for DPAPI blobs\n");
             if (FileContainsDpapiBlob(cimRepoPath, bytesToSearch))
