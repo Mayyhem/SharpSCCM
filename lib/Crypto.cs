@@ -168,3 +168,32 @@ namespace SharpSCCM
                 return sha256Hash.ComputeHash(buffer);
             }
         }
+
+        public static byte[] LSAAESDecrypt(byte[] key, byte[] data)
+        {
+            var aesCryptoProvider = new AesManaged();
+
+            aesCryptoProvider.Key = key;
+            aesCryptoProvider.IV = new byte[16];
+            aesCryptoProvider.Mode = CipherMode.CBC;
+            aesCryptoProvider.BlockSize = 128;
+            aesCryptoProvider.Padding = PaddingMode.Zeros;
+            var transform = aesCryptoProvider.CreateDecryptor();
+
+            var chunks = Decimal.ToInt32(Math.Ceiling((decimal)data.Length / (decimal)16));
+            var plaintext = new byte[chunks * 16];
+
+            for (var i = 0; i < chunks; ++i)
+            {
+                var offset = i * 16;
+                var chunk = new byte[16];
+                Array.Copy(data, offset, chunk, 0, 16);
+
+                var chunkPlaintextBytes = transform.TransformFinalBlock(chunk, 0, chunk.Length);
+                Array.Copy(chunkPlaintextBytes, 0, plaintext, i * 16, 16);
+            }
+
+            return plaintext;
+        }
+    }
+}

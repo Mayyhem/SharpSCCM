@@ -27,6 +27,41 @@ namespace SharpSCCM
 
             return ret;
         }
+
+        public static bool Contains<T>(this T[] array, T[] candidate)
+        {
+            if (IsEmptyLocate(array, candidate))
+                return false;
+
+            if (candidate.Length > array.Length)
+                return false;
+
+            for (int a = 0; a <= array.Length - candidate.Length; a++)
+            {
+                if (array[a].Equals(candidate[0]))
+                {
+                    int i = 0;
+                    for (; i < candidate.Length; i++)
+                    {
+                        if (false == array[a + i].Equals(candidate[i]))
+                            break;
+                    }
+                    if (i == candidate.Length)
+                        return true;
+                }
+            }
+            return false;
+        }
+
+        static bool IsEmptyLocate<T>(T[] array, T[] candidate)
+        {
+            return array == null
+                   || candidate == null
+                   || array.Length == 0
+                   || candidate.Length == 0
+                   || candidate.Length > array.Length;
+        }
+
         // Borrowed from SharpDPAPI: 
         public static bool IsUnicode(byte[] bytes)
         {

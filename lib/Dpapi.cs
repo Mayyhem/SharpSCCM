@@ -1,18 +1,19 @@
-﻿using PBKDF2;
+﻿// This code was taken/derived from Will Schroeder's (@harmj0y) SharpDPAPI project
+// https://github.com/GhostPack/SharpDPAPI
+
+using PBKDF2;
 using System;
-using System.Text;
 using System.Collections.Generic;
-using System.Security.Cryptography;
 using System.IO;
-using System.Security.AccessControl;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.RegularExpressions;
-using System.Xml;
 
 namespace SharpSCCM
 {
     public class Dpapi
     {
-        // This code is credited to Will Schroeder @harmj0y and his SharpDPAPI project: https://github.com/GhostPack/SharpDPAPI
         public static byte[] DecryptBlob(byte[] ciphertext, byte[] key, int algCrypt, PaddingMode padding = PaddingMode.Zeros)
         {
             // decrypts a DPAPI blob using AES
@@ -394,7 +395,8 @@ namespace SharpSCCM
         }
 
 
-        public static void Execute(string blob, string masterkey)
+        //public static void Execute(string blob, string masterkey)
+        public static void Execute(string blob, Dictionary<string, string> masterkeys)
         {
             Console.WriteLine("\r\n[*] Action: Describe DPAPI blob");
 
@@ -423,13 +425,13 @@ namespace SharpSCCM
             blobBytes = unmangledArray;
 
 
-            // Use SharpDPAPI to get masterkey and pass to this function, store in file
-            // Temporarily set static path to masterkey file
-            Dictionary<string, string> masterkeys = new Dictionary<string, string>();
+            //// Use SharpDPAPI to get masterkey and pass to this function, store in file
+            //// Temporarily set static path to masterkey file
+            //Dictionary<string, string> masterkeys = new Dictionary<string, string>();
 
             //string filePath = "C:\\users\\hurin.thalion\\Desktop\\keys.txt";
 
-            masterkeys = Helpers.ParseMasterKeyCmdLine(masterkey);
+            //masterkeys = Helpers.ParseMasterKeyCmdLine(masterkey);
 
             if (blobBytes.Length > 0)
             {
