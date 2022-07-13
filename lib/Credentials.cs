@@ -8,14 +8,14 @@ namespace SharpSCCM
     public class Credentials
     {
 
-        public void LocalNetworkAccessAccountsDisk()
+        public static void LocalNetworkAccessAccountsDisk()
         {
             // Path of the CIM repository
-            string cimRepoPath = "C:\\Windows\\Sysnative\\Wbem\\Repository\\OBJECTS.DATA";
+            string cimRepoPath = "C:\\Windows\\System32\\Wbem\\Repository\\OBJECTS.DATA";
 
             // get size of file
             FileInfo cimRepo = new FileInfo(cimRepoPath);
-            uint bytesToSearch = (uint) cimRepoPath.Length;
+            uint bytesToSearch = (uint) (int) cimRepoPath.Length;
 
             Console.WriteLine($"[*] Searching the CIM repository for DPAPI blobs\n");
             if (FileContainsDpapiBlob(cimRepoPath, bytesToSearch))
@@ -34,7 +34,7 @@ namespace SharpSCCM
             0x01, 0x00, 0x00, 0x00, 0xD0, 0x8C, 0x9D, 0xDF, 0x01, 0x15, 0xD1, 0x11, 0x8C, 0x7A, 0x00, 0xC0, 0x4F, 0xC2, 0x97, 0xEB
         };
 
-        private readonly byte[][] dpapiBlobSearches =
+        private static readonly byte[][] dpapiBlobSearches =
         {
             dpapiBlobHeader,
 
@@ -48,7 +48,7 @@ namespace SharpSCCM
             System.Text.Encoding.ASCII.GetBytes("01000000D08C9DDF0115D1118C7A00C04FC297EB")
         };
 
-        private bool FileContainsDpapiBlob(string path, uint bytesToSearch)
+        private static bool FileContainsDpapiBlob(string path, uint bytesToSearch)
         {
             // Does the file contain a DPAPI blob?
             var fileContents = new byte[bytesToSearch];
@@ -60,7 +60,7 @@ namespace SharpSCCM
             return ContainsDpapiBlob(fileContents);
         }
 
-        private bool ContainsDpapiBlob(byte[] bytes)
+        private static bool ContainsDpapiBlob(byte[] bytes)
         {
             // return bytes.Contains(dpapiProviderGuid);
             foreach (var searchBytes in dpapiBlobSearches)

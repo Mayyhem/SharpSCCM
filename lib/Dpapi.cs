@@ -134,8 +134,7 @@ namespace SharpSCCM
 
                 var keys = LSADump.GetDPAPIKeys(true);
                 Helpers.GetSystem();
-                var systemFolder =
-                    $"{Environment.GetEnvironmentVariable("SystemDrive")}\\Windows\\System32\\Microsoft\\Protect\\";
+                var systemFolder = $"{Environment.GetEnvironmentVariable("SystemDrive")}\\Windows\\System32\\Microsoft\\Protect\\";
 
                 var systemDirs = Directory.GetDirectories(systemFolder);
 
