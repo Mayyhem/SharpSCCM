@@ -10,7 +10,7 @@ namespace SharpSCCM
 
         public static void LocalNetworkAccessAccountsDisk()
         {
-            Console.WriteLine($"[*] Retrieving Network Access Account blobs from CIM repository\n");
+            Console.WriteLine($"[*] Retrieving Network Access Account blobs from CIM repository");
 
             // Path of the CIM repository
             string cimRepoPath = "C:\\Windows\\System32\\Wbem\\Repository\\OBJECTS.DATA";
@@ -22,7 +22,7 @@ namespace SharpSCCM
 
             if (FileContainsDpapiBlob(cimRepoPath, bytesToSearch))
             {
-                Console.WriteLine($"[*]     Found potential DPAPI blob at {cimRepoPath}");
+                Console.WriteLine($"[*]     Found potential DPAPI blob at {cimRepoPath}\n");
             }
             else
             {
@@ -38,26 +38,27 @@ namespace SharpSCCM
             if (Helpers.IsHighIntegrity())
             {
                 Dictionary<string, string> mappings = Dpapi.TriageSystemMasterKeys();
+                Console.WriteLine("\r\n[*] SYSTEM master key cache:\r\n");
                 foreach (KeyValuePair<string, string> kvp in mappings)
                 {
                     Console.WriteLine("{0}:{1}", kvp.Key, kvp.Value);
                 }
                 Console.WriteLine();
 
-                try
-                {
-                    string username = Dpapi.Execute(protectedUsername, mappings);
-                    string password = Dpapi.Execute(protectedPassword, mappings);
+                //try
+                //{
+                //    string username = Dpapi.Execute(protectedUsername, mappings);
+                //    string password = Dpapi.Execute(protectedPassword, mappings);
 
-                    Console.WriteLine("\r\n[*] Triaging Network Access Account Credentials\r\n");
-                    Console.WriteLine("     Plaintext NAA Username         : {0}", username);
-                    Console.WriteLine("     Plaintext NAA Password         : {0}\n", password);
-                }
-                catch (Exception e)
-                {
-                    Console.WriteLine("[!] Data was not decrypted. An error occurred.");
-                    Console.WriteLine(e.ToString());
-                }
+                //    Console.WriteLine("\r\n[*] Triaging Network Access Account Credentials\r\n");
+                //    Console.WriteLine("     Plaintext NAA Username         : {0}", username);
+                //    Console.WriteLine("     Plaintext NAA Password         : {0}\n", password);
+                //}
+                //catch (Exception e)
+                //{
+                //    Console.WriteLine("[!] Data was not decrypted. An error occurred.");
+                //    Console.WriteLine(e.ToString());
+                //}
             }
         }
 
