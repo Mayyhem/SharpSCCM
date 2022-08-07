@@ -163,6 +163,10 @@ namespace SharpSCCM
                     Console.WriteLine($"[+] that used to be SCCM clients but have since had the client uninstalled.");
                 }
             }
+            else
+            {
+                Console.WriteLine("[!] SharpSCCM must be run elevated to retrieve the NAA blobs via WMI.\n");
+            }
         }
     }
 }
