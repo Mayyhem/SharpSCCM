@@ -15,7 +15,7 @@ namespace SharpSCCM
         {
             try
             {
-                Console.WriteLine("\r\n");
+                Console.WriteLine();
                 Console.WriteLine(@" _____ _                      _____ _____  _____ ___  ___");
                 Console.WriteLine(@"/  ___| |                    /  ___/  __ \/  __ \|  \/  |");
                 Console.WriteLine(@"\ `--.| |__   __ _ _ __ _ __ \ `--.| /  \/| /  \/| .  . |");
@@ -24,7 +24,7 @@ namespace SharpSCCM
                 Console.WriteLine(@"\____/|_| |_|\__,_|_|  | .__/\____/ \____/ \____/\_|  |_/");
                 Console.WriteLine(@"                       | |                               ");
                 Console.WriteLine(@"                       |_|                               ");
-                Console.WriteLine("\r\n");
+                Console.WriteLine();
 
                 // Gather required arguments
                 var rootCommand = new RootCommand("Interact with Microsoft Endpoint Configuration Manager");
