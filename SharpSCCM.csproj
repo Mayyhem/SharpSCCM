@@ -102,6 +102,7 @@
     <Compile Include="lib\Cleanup.cs" />
     <Compile Include="lib\ClientWmi.cs" />
     <Compile Include="lib\ClientFileSystem.cs" />
+    <Compile Include="lib\LSADump.cs" />
     <Compile Include="lib\MgmtPointMessaging.cs" />
     <Compile Include="lib\MgmtPointWmi.cs" />
     <Compile Include="lib\MgmtUtil.cs" />
@@ -110,6 +111,7 @@
     <Compile Include="lib\Crypto.cs" />
     <Compile Include="lib\Dpapi.cs" />
     <Compile Include="lib\Interop.cs" />
+    <Compile Include="lib\PBKDF2.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

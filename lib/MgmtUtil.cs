@@ -64,7 +64,7 @@ namespace SharpSCCM
                 }
                 else
                 {
-                    Console.WriteLine($"[+] Executing WQL query: {query}");
+                    Console.WriteLine($"[+] Executing WQL query: {query}\n");
                     ObjectQuery objQuery = new ObjectQuery(query);
                     ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, objQuery);
                     Console.WriteLine("-----------------------------------");

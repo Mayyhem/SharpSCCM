@@ -1,5 +1,12 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Linq;
 using System.Runtime.InteropServices;
+using System.Security.Principal;
+using System.Text;
+using System.Text.RegularExpressions;
 
 namespace SharpSCCM
 {
@@ -173,5 +180,73 @@ namespace SharpSCCM
             IS_TEXT_UNICODE_NOT_UNICODE_MASK = 0x0F00,
             IS_TEXT_UNICODE_NOT_ASCII_MASK = 0xF000
         }
+
+        // for GetSystem()
+        [DllImport("advapi32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool OpenProcessToken(
+            IntPtr ProcessHandle,
+            UInt32 DesiredAccess,
+            out IntPtr TokenHandle);
+
+        [DllImport("advapi32.dll", SetLastError = true)]
+        public static extern bool DuplicateToken(
+            IntPtr ExistingTokenHandle,
+            int SECURITY_IMPERSONATION_LEVEL,
+            ref IntPtr DuplicateTokenHandle);
+
+        [DllImport("advapi32.dll", SetLastError = true)]
+        public static extern bool ImpersonateLoggedOnUser(
+            IntPtr hToken);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool CloseHandle(
+            IntPtr hObject
+        );
+
+        [DllImport("advapi32.dll", SetLastError = true)]
+        public static extern bool RevertToSelf();
+
+        // for LSA Secrets Dump
+        [DllImport("advapi32.dll", CharSet = CharSet.Auto)]
+        public static extern int RegOpenKeyEx(
+            uint hKey,
+            string subKey,
+            int ulOptions,
+            int samDesired,
+            ref IntPtr hkResult
+        );
+
+        [DllImport("advapi32.dll")]
+        public static extern int RegQueryInfoKey(
+            IntPtr hkey,
+            StringBuilder lpClass,
+            ref int lpcbClass,
+            int lpReserved,
+            ref IntPtr lpcSubKeys,
+            ref IntPtr lpcbMaxSubKeyLen,
+            ref IntPtr lpcbMaxClassLen,
+            ref IntPtr lpcValues,
+            ref IntPtr lpcbMaxValueNameLen,
+            ref IntPtr lpcbMaxValueLen,
+            ref IntPtr lpcbSecurityDescriptor,
+            IntPtr lpftLastWriteTime
+        );
+
+        [DllImport("advapi32.dll", SetLastError = true)]
+        public static extern int RegQueryValueEx(
+            IntPtr hKey,
+            string lpValueName,
+            int lpReserved,
+            IntPtr type,
+            IntPtr lpData,
+            ref int lpcbData
+        );
+
+        [DllImport("advapi32.dll", SetLastError = true)]
+        public static extern int RegCloseKey(
+            IntPtr hKey
+        );
     }
 }
