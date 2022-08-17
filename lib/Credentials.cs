@@ -30,8 +30,8 @@ namespace SharpSCCM
             }
 
             // Parse from CIM repo
-            string protectedUsername = "";
-            string protectedPassword = "";
+            //string protectedUsername = "";
+            //string protectedPassword = "";
 
             // TODO -- Logic to strip blob
             // But we do have to be elevated to retrieve the system masterkeys...
@@ -111,9 +111,9 @@ namespace SharpSCCM
             if (Helpers.IsHighIntegrity())
             {
                 Console.WriteLine($"[*] Retrieving Network Access Account blobs via WMI\n");
-                ManagementScope sccmConnection = MgmtUtil.NewSccmConnection("\\\\localhost\\root\\ccm\\policy\\Machine\\ActualConfig");
-                //MgmtUtil.GetClassInstances(sccmConnection, "CCM_NetworkAccessAccount");
-                ManagementObjectSearcher searcher = new ManagementObjectSearcher(sccmConnection, new ObjectQuery("SELECT * FROM CCM_NetworkAccessAccount"));
+                ManagementScope wmiConnection = MgmtUtil.NewWmiConnection("localhost","root\\ccm\\policy\\Machine\\ActualConfig");
+                //MgmtUtil.GetClassInstances(wmiConnection, "CCM_NetworkAccessAccount");
+                ManagementObjectSearcher searcher = new ManagementObjectSearcher(wmiConnection, new ObjectQuery("SELECT * FROM CCM_NetworkAccessAccount"));
                 ManagementObjectCollection accounts = searcher.Get();
                 if (accounts.Count > 0)
                 {

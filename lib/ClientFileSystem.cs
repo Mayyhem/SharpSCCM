@@ -19,7 +19,7 @@ namespace SharpSCCM
 
         public static void LocalPushLogs(string startTime, string startDate)
         {
-            ManagementScope sccmConnection = MgmtUtil.NewSccmConnection("\\\\localhost\\root\\cimv2");
+            ManagementScope wmiConnection = MgmtUtil.NewWmiConnection("localhost", "root\\cimv2");
             DateTime startDateObj = DateTime.Parse(startDate);
             // To-do
         }
