@@ -21,14 +21,9 @@ namespace SharpSCCM
             try
             {
                 Console.WriteLine();
-                Console.WriteLine(@" _____ _                      _____ _____  _____ ___  ___");
-                Console.WriteLine(@"/  ___| |                    /  ___/  __ \/  __ \|  \/  |");
-                Console.WriteLine(@"\ `--.| |__   __ _ _ __ _ __ \ `--.| /  \/| /  \/| .  . |");
-                Console.WriteLine(@" `--. \ '_ \ / _` | '__| '_ \ `--. \ |    | |    | |\/| |");
-                Console.WriteLine(@"/\__/ / | | | (_| | |  | |_) /\__/ / \__/\| \__/\| |  | |");
-                Console.WriteLine(@"\____/|_| |_|\__,_|_|  | .__/\____/ \____/ \____/\_|  |_/");
-                Console.WriteLine(@"                       | |                               ");
-                Console.WriteLine(@"                       |_|                               ");
+                Console.WriteLine("  _______ _     _ _______  ______  _____  _______ _______ _______ _______");
+                Console.WriteLine("  |______ |_____| |_____| |_____/ |_____] |______ |       |       |  |  |");
+                Console.WriteLine("  ______| |     | |     | |    \\_ |       ______| |______ |______ |  |  |");
                 Console.WriteLine();
 
                 // Gather required arguments
@@ -556,10 +551,10 @@ namespace SharpSCCM
                 var commandLine = new CommandLineBuilder(rootCommand)
                    .UseVersionOption()
                    .UseHelp()
-                   .UseEnvironmentVariableDirective()
-                   .UseParseDirective()
-                   .UseSuggestDirective()
-                   .RegisterWithDotnetSuggest()
+                   //.UseEnvironmentVariableDirective()
+                   //.UseParseDirective()
+                   //.UseSuggestDirective()
+                   //.RegisterWithDotnetSuggest()
                    .UseTypoCorrections()
                    .UseParseErrorReporting()
                    .CancelOnProcessTermination()

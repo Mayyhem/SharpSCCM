@@ -4,7 +4,7 @@ using Microsoft.ConfigurationManagement.Messaging.Framework;
 
 namespace SharpSCCM
 {
-    static class ClientWmi
+    public class ClientWmi
     {
         public static (string, string) GetCurrentManagementPointAndSiteCode()
         {
@@ -28,6 +28,8 @@ namespace SharpSCCM
                     }
                 }
             }
+            Console.WriteLine($"[+] Current management point: {currentManagementPoint}");
+            Console.WriteLine($"[+] Site code: {siteCode}");
             return (currentManagementPoint, siteCode);
         }
 
@@ -35,13 +37,13 @@ namespace SharpSCCM
         {
             ManagementScope wmiConnection = MgmtUtil.NewWmiConnection("localhost");
             ManagementObjectSearcher searcher = new ManagementObjectSearcher(wmiConnection, new ObjectQuery("SELECT * FROM CCM_Client"));
-            string SmsId = null;
+            string smsId = null;
             foreach (ManagementObject instance in searcher.Get())
             {
-                SmsId = instance["ClientId"].ToString();
+                smsId = instance["ClientId"].ToString();
             }
-            Console.WriteLine($"[+] Obtained SmsId from local host: {SmsId}");
-            return new SmsClientId(SmsId);
+            Console.WriteLine($"[+] Obtained SmsId from local host: {smsId}");
+            return new SmsClientId(smsId);
         }
     }
 }
