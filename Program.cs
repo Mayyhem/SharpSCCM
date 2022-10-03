@@ -250,10 +250,30 @@ namespace SharpSCCM
                 // get naa
                 var getNetworkAccessAccounts = new Command("naa", "Get network access accounts and passwords from the server policy");
                 getCommand.Add(getNetworkAccessAccounts);
+                getNetworkAccessAccounts.Add(new Option<string>(new[] { "--password", "-p" }, "The password for the specified machine account"));
+                getNetworkAccessAccounts.Add(new Option<string>(new[] { "--machine", "-m" }, "The name of the machine account to register a new device record for"));
+                getNetworkAccessAccounts.Add(new Argument<string>("method", "(machine|cert) Use either a machine account and password or the local client authentication certificate for authentication to the management point (cert method requires local Administrator privileges)"));
                 getNetworkAccessAccounts.Handler = CommandHandler.Create(
-                    (string server, string sitecode) =>
+                    (string server, string sitecode, string method, string machine, string password) =>
                     {
-                        MgmtPointMessaging.GetNetworkAccessAccounts(server, sitecode);
+                        if (server == null || sitecode == null)
+                        {
+                            (server, sitecode) = ClientWmi.GetCurrentManagementPointAndSiteCode();
+                        }
+
+                        if (method != "machine" && method != "cert")
+                        {
+                            Console.WriteLine("[!] The method argument must be set to a value of \"machine\" or \"cert\"");
+                        }
+
+                        //else if (method == "machine" && (string.IsNullOrEmpty(machine) || string.IsNullOrEmpty(password)))
+                        //{
+                        //    Console.WriteLine("[!] A machine account name (-m) and password (-p) must be specified for this method");
+                        //}
+                        else
+                        {
+                            MgmtPointMessaging.GetNetworkAccessAccounts(server, sitecode, method, machine, password);
+                        }
                     });
 
                 // get primary-user
@@ -292,6 +312,8 @@ namespace SharpSCCM
 
                 // invoke
                 var invokeCommand = new Command("invoke", "A group of commands that execute actions on the server");
+                invokeCommand.AddGlobalOption(new Option<string>(new[] { "--server", "-mp" }, "The IP address, FQDN, or NetBIOS name of the Configuration Manager management point server to connect to (default: the current management point of the client running SharpSCCM)"));
+                invokeCommand.AddGlobalOption(new Option<string>(new[] { "--sitecode", "-sc" }, "The three character site code of the Configuration Manager server (e.g., PS1) (default: the sitecode of the client running SharpSCCM)"));
                 rootCommand.Add(invokeCommand);
 
                 // invoke client-push
@@ -302,6 +324,10 @@ namespace SharpSCCM
                 invokeClientPush.Handler = CommandHandler.Create(
                     (string server, string sitecode, bool asAdmin, string target) =>
                     {
+                        if (server == null || sitecode == null)
+                        {
+                            (server, sitecode) = ClientWmi.GetCurrentManagementPointAndSiteCode();
+                        }
                         if (!asAdmin)
                         {
                             MessageCertificateX509 certificate = MgmtPointMessaging.CreateUserCertificate();
@@ -312,7 +338,6 @@ namespace SharpSCCM
                         {
                             MgmtPointWmi.GenerateCCR(target, server, sitecode);
                         }
-
                     });
 
                 // invoke query

