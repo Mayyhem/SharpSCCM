@@ -4,6 +4,7 @@ using System.CommandLine;
 using System.CommandLine.Builder;
 using System.CommandLine.NamingConventionBinder;
 using System.CommandLine.Parsing;
+using System.Diagnostics;
 using System.Management;
 using System.Reflection;
 
@@ -14,9 +15,12 @@ namespace SharpSCCM
         static void Main(string[] args)
         {
             bool debug = false;
+            ConsoleTraceListener consoleTracer = new ConsoleTraceListener();
             if (args.Contains(new[] { "--debug" }))
             {
                 debug = true;
+                MessagingTrace.TraceSwitch.Level = TraceLevel.Verbose;
+                Trace.Listeners.Add(consoleTracer);
             }
             try
             {
@@ -586,8 +590,17 @@ namespace SharpSCCM
                    .Build();
                 commandLine.Invoke(args);
 
-                if (System.Diagnostics.Debugger.IsAttached)
+                if (Debugger.IsAttached)
                     Console.ReadLine();
+                
+                if (debug)
+                {
+                    // Flush any pending trace messages, remove the console trace listener from the collection, and close the console trace listener.
+                    Trace.Flush();
+                    Trace.Listeners.Remove(consoleTracer);
+                    consoleTracer.Close();
+                    Trace.Close();
+                }
             }
             catch (Exception error)
             {
