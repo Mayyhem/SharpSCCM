@@ -126,7 +126,7 @@ namespace SharpSCCM
             }
         }
 
-        public static ManagementScope NewWmiConnection(string server = null, string wmiNamespace = null, string sitecode = null)
+        public static ManagementScope NewWmiConnection(string server = null, string wmiNamespace = null, string siteCode = null)
         {
             string path = "";
             ConnectionOptions connection = new ConnectionOptions();
@@ -142,14 +142,14 @@ namespace SharpSCCM
             {
                 path = $"\\\\{server}\\{wmiNamespace}";
             }
-            else if (!string.IsNullOrEmpty(server) && !string.IsNullOrEmpty(sitecode))
+            else if (!string.IsNullOrEmpty(server) && !string.IsNullOrEmpty(siteCode))
             {
-                path = $"\\\\{server}\\root\\SMS\\site_{sitecode}";
+                path = $"\\\\{server}\\root\\SMS\\site_{siteCode}";
             }
             else
             {
-                (server, sitecode) = ClientWmi.GetCurrentManagementPointAndSiteCode();
-                path = $"\\\\{server}\\root\\SMS\\site_{sitecode}";
+                (server, siteCode) = ClientWmi.GetCurrentManagementPointAndSiteCode();
+                path = $"\\\\{server}\\root\\SMS\\site_{siteCode}";
             }
             ManagementScope wmiConnection = new ManagementScope(path, connection);
             try
