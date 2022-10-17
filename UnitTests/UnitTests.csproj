@@ -65,8 +65,8 @@
     <ErrorReport>prompt</ErrorReport>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="Microsoft.ConfigurationManagement.Messaging, Version=5.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35">
-      <Private>False</Private>
+    <Reference Include="Microsoft.ConfigurationManagement.Messaging">
+      <HintPath>..\Microsoft.ConfigurationManagement.Messaging.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.VisualStudio.TestPlatform.TestFramework, Version=14.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
       <HintPath>..\packages\MSTest.TestFramework.2.1.2\lib\net45\Microsoft.VisualStudio.TestPlatform.TestFramework.dll</HintPath>
@@ -82,6 +82,7 @@
     <Compile Include="ClientWmiTests.cs" />
     <Compile Include="MgmtUtilTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="MgmtPointWmiTests.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

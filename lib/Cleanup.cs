@@ -40,13 +40,13 @@ namespace SharpSCCM
                     collectionObj.Delete();
                 }
                 Console.WriteLine($"[+] Deleted all collections named {collection}");
-                Console.WriteLine($"[+] Querying for applications named {collection}");
+                Console.WriteLine($"[+] Querying for collections named {collection}");
                 string whereCondition = "Name='" + collection + "'";
                 MgmtUtil.GetClassInstances(scope, "SMS_Collection", false, null, whereCondition);
             }
             else
             {
-                Console.WriteLine($"[+] Found {collections.Count} applications named {collections}");
+                Console.WriteLine($"[+] Found {collections.Count} collections named {collections}");
             }
         }
 

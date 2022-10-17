@@ -4,7 +4,7 @@ using System.Management;
 
 namespace SharpSCCM
 {
-    static class MgmtPointWmi
+    public static class MgmtPointWmi
     {
         public static void AddDeviceToCollection(ManagementScope scope, string deviceName, string collectionName)
         {
@@ -39,8 +39,8 @@ namespace SharpSCCM
                 collection.InvokeMethod("AddMembershipRule", addMembershipRuleParams, null);
             }
             Console.WriteLine($"[+] Added {userName} to {collectionName}");
-            Console.WriteLine("[+] Waiting 10s for collection to populate");
-            System.Threading.Thread.Sleep(10000);
+            Console.WriteLine("[+] Waiting 15s for collection to populate");
+            System.Threading.Thread.Sleep(15000);
             GetCollectionMember(scope, collectionName, false, null, null, false, false);
         }
 
@@ -185,7 +185,7 @@ namespace SharpSCCM
         
         public static void InvokeLastLogonUpdate(ManagementScope scope, string collectionName)
         {
-            // TO DO
+            // TODO
         }
 
         public static void InvokeUpdate(ManagementScope scope, string collectionName)

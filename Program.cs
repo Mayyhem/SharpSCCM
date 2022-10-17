@@ -40,6 +40,8 @@ namespace SharpSCCM
 
                 // add
                 var addCommand = new Command("add", "A group of commands that add objects to other objects (e.g., add device to collection)");
+                addCommand.AddGlobalOption(new Option<string>(new[] { "--server", "-mp" }, "The IP address, FQDN, or NetBIOS name of the Configuration Manager management point server to connect to (default: the current management point of the client running SharpSCCM)"));
+                addCommand.AddGlobalOption(new Option<string>(new[] { "--site-code", "-sc" }, "The three character site code of the Configuration Manager server (e.g., PS1) (default: the site code of the client running SharpSCCM)"));
                 rootCommand.Add(addCommand);
 
                 // add device-to-collection
@@ -55,9 +57,9 @@ namespace SharpSCCM
                     });
 
                 // add user-to-admins
-                var addUserToAdmins = new Command("user-to-admins", "Add a user to the RBAC_Admins table to obtain Full Administrator access to ConfigMgr console and WMI objects (requires local Administrator privileges on the server running the site database)");
-                addCommand.Add(addUserToAdmins);
-                addUserToAdmins.Add(new Argument<string>("user-name", "The domain and user name you would like to grant Full Administrator privilege to (e.g., DOMAIN-SHORTNAME\\USERNAME)"));
+                //var addUserToAdmins = new Command("user-to-admins", "Add a user to the RBAC_Admins table to obtain Full Administrator access to ConfigMgr console and WMI objects (requires local Administrator privileges on the server running the site database)");
+                //addCommand.Add(addUserToAdmins);
+                //addUserToAdmins.Add(new Argument<string>("user-name", "The domain and user name you would like to grant Full Administrator privilege to (e.g., DOMAIN-SHORTNAME\\USERNAME)"));
                 //addUserToAdmins.Handler = CommandHandler.Create(
                 //    (string server, string siteCode, string userName) =>
                 //    {
@@ -80,8 +82,8 @@ namespace SharpSCCM
                 // exec command
                 var execCommand = new Command("exec", "Execute an application from a specified UNC path or request NTLM authentication from a client device or collection of client devices (requires Full Administrator or Application Administrator access)");
                 rootCommand.Add(execCommand);
-                execCommand.Add(new Option<string>(new[] { "--device", "-d" }, "The ResourceName of the device you would like to receive NTLM authentication from"));
-                execCommand.Add(new Option<string>(new[] { "--collection", "-c" }, "The Name of the device collection you would like to receive NTLM authentication from"));
+                execCommand.Add(new Option<string>(new[] { "--device", "-d" }, "The ResourceName of the device you would like to execute an application on or receive NTLM authentication from"));
+                execCommand.Add(new Option<string>(new[] { "--collection", "-c" }, "The Name of the device collection you would like to execute an application on or receive NTLM authentication from"));
                 execCommand.Add(new Option<string>(new[] { "--path", "-p" }, "The local or UNC path of the binary/script the application will execute (e.g., \"C:\\Windows\\System32\\calc.exe\", \"\\\\site-server.domain.com\\Sources$\\my.exe\")"));
                 execCommand.Add(new Option<string>(new[] { "--relay-server", "-r" }, "The NetBIOS name, IP address, or if WebClient is enabled on the targeted client device, the IP address and port (e.g., 192.168.1.1@8080) of the relay/capture server (default: the machine running SharpSCCM)"));
                 execCommand.Add(new Option<bool>(new[] { "--run-as-system", "-s" }, "Execute code or request NTLM authentication from the specified device's machine account (default: execute as the logged on user)"));
@@ -130,7 +132,7 @@ namespace SharpSCCM
                 // get classes
                 var getClasses = new Command("classes", "Get information on remote WMI classes");
                 getCommand.Add(getClasses);
-                getClasses.Add(new Argument<string>("wmiNamespace", "The WMI namespace to query (e.g., \"root\\CCM\")"));
+                getClasses.Add(new Option<string>(new[] { "--wmi-namespace", "-ns" }, "The WMI namespace to query (e.g., \"root\\CCM\")"));
                 getClasses.Handler = CommandHandler.Create(
                     (string server, string siteCode, string wmiNamespace, bool count, string whereCondition, string orderBy, bool dryRun, bool verbose) =>
                     {
@@ -319,7 +321,7 @@ namespace SharpSCCM
                 // invoke client-push
                 var invokeClientPush = new Command("client-push", "Force the server to authenticate to an arbitrary destination via NTLM (requires automatic client push installation to be enabled and NTLM fallback to not be disabled)");
                 invokeCommand.Add(invokeClientPush);
-                invokeClientPush.Add(new Option<bool>(new[] { "--as-admin", "-a" }, "Connect to the server via WMI rather than HTTP to force authentication (requires Full Administrator access)"));
+                invokeClientPush.Add(new Option<bool>(new[] { "--as-admin", "-a" }, "Connect to the server via WMI rather than HTTP to force authentication (requires Full Administrator access and device record for target)"));
                 invokeClientPush.Add(new Option<string>(new[] { "--target", "-t" }, "The NetBIOS name, IP address, or if WebClient is enabled on the site server, the IP address and port (e.g., 192.168.1.1@8080) of the relay/capture server (default: the machine running SharpSCCM)"));
                 invokeClientPush.Handler = CommandHandler.Create(
                     (string server, string siteCode, bool asAdmin, string target) =>
@@ -407,7 +409,7 @@ namespace SharpSCCM
                     }));
 
                 // local create-ccr
-                var localCreateCCR = new Command("create-ccr", "Create a CCR that initiates client push installation to a specified target (requires local Administrator privileges on a management point, only works on ConfigMgr 2003 and 2007)");
+                var localCreateCCR = new Command("create-ccr", "Untested function to create a CCR that initiates client push installation to a specified target (requires local Administrator privileges on a management point, only works on ConfigMgr 2003 and 2007)");
                 localCommand.Add(localCreateCCR);
                 localCreateCCR.Add(new Argument<string>("target", "The NetBIOS name, IP address, or if WebClient is enabled on the site server, the IP address and port (e.g., 192.168.1.1@8080) of the relay/capture server"));
                 localCreateCCR.Handler = CommandHandler.Create(

