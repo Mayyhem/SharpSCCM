@@ -72,7 +72,7 @@ namespace SharpSCCM
             var x509Store = new X509Store("My", StoreLocation.CurrentUser);
             x509Store.Open(OpenFlags.MaxAllowed);
             x509Store.Remove(certificate.X509Certificate);
-            Console.WriteLine($"[+] Deleted \"{certificate.X509Certificate.SubjectName}\" certificate from {x509Store.Name} store for {x509Store.Location}");
+            Console.WriteLine($"[+] Deleted \"{certificate.X509Certificate.SubjectName.Name}\" certificate from {x509Store.Name} store for {x509Store.Location}");
         }
         
         public static MessageCertificateX509 GetMachineEncryptionCertificate()
