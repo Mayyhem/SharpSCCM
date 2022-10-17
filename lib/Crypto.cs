@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.ConfigurationManagement.Messaging.Framework;
+using System;
 using System.Security.Cryptography;
 
 namespace SharpSCCM

