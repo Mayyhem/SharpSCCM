@@ -449,7 +449,6 @@ namespace SharpSCCM
                     else
                     {
                         string hexData = BitConverter.ToString(decBytesRaw).Replace("-", " ");
-                        Console.WriteLine("    dec(blob)        : {0}", hexData);
                         return hexData;
                     }
                 }
