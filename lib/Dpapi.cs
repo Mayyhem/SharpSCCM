@@ -79,9 +79,6 @@ namespace SharpSCCM
             var alghash = BitConverter.ToInt32(blobBytes, offset);
             offset += 4;
 
-            //Console.WriteLine("    algHash/algCrypt : {0} ({1}) / {2} ({3})", alghash, (Interop.CryptAlg)alghash, algCrypt, (Interop.CryptAlg)algCrypt);
-            //Console.WriteLine("    description      : {0}", description);
-
             var algHashLen = BitConverter.ToInt32(blobBytes, offset);
             offset += 4;
 
@@ -397,12 +394,6 @@ namespace SharpSCCM
         //public static void Execute(string blob, string masterkey)
         public static string Execute(string blob, Dictionary<string, string> masterkeys)
         {
-            //Console.WriteLine("\r\n[*] Action: Describe DPAPI blob");
-
-            // 1. Read in the hex dpapi blob
-            // 2. Convert it to bytes
-            // 3. Trim the extra header
-
             byte[] blobBytes = new byte[blob.Length / 2];
             for (int i = 0; i < blob.Length; i += 2)
             {
@@ -413,12 +404,6 @@ namespace SharpSCCM
             var offset = 4;
             byte[] unmangledArray = new byte[blob.Length / 2];
             Buffer.BlockCopy(blobBytes, 4, unmangledArray, 0, blobBytes.Length - offset);
-
-            // Super pro debug printing
-            //foreach(byte b in unmangledArray)
-            //{
-            //    Console.Write("0x" + b.ToString("X2") + " ");
-            //}
 
             // Copy the demangled array back into blobBytes
             blobBytes = unmangledArray;
@@ -446,7 +431,6 @@ namespace SharpSCCM
                             data = Encoding.ASCII.GetString(decBytesRaw);
                             return data;
                         }
-                        //Console.WriteLine("    dec(blob)        : {0}", data);
                     }
                     else
                     {
