@@ -93,6 +93,7 @@ namespace SharpSCCM
                     {
                         string protectedUsername = account["NetworkAccessUsername"].ToString().Split('[')[2].Split(']')[0];
                         string protectedPassword = account["NetworkAccessPassword"].ToString().Split('[')[2].Split(']')[0];
+
                         byte[] protectedUsernameBytes = Helpers.StringToByteArray(protectedUsername);
                         int length = (protectedUsernameBytes.Length + 16 - 1) / 16 * 16;
                         Array.Resize(ref protectedUsernameBytes, length);
@@ -112,9 +113,16 @@ namespace SharpSCCM
                             string username = Dpapi.Execute(protectedUsername, mappings);
                             string password = Dpapi.Execute(protectedPassword, mappings);
 
-                            Console.WriteLine("\r\n[*] Triaging Network Access Account Credentials\r\n");
-                            Console.WriteLine("     Plaintext NAA Username         : {0}", username);
-                            Console.WriteLine("     Plaintext NAA Password         : {0}\n", password);
+                            if (username.StartsWith("00 00 0E 0E 0E") || password.StartsWith("00 00 0E 0E 0E"))
+                            {
+                                Console.WriteLine("\r\n[!] SCCM is configured to use the client's machine account instead of NAA\r\n");
+                            }
+                            else
+                            {
+                                Console.WriteLine("\r\n[*] Triaging Network Access Account Credentials\r\n");
+                                Console.WriteLine("     Plaintext NAA Username         : {0}", username);
+                                Console.WriteLine("     Plaintext NAA Password         : {0}\n", password);
+                            }
                         }
                         catch (Exception e)
                         {
