@@ -131,9 +131,17 @@ namespace SharpSCCM
 
                 var keys = LSADump.GetDPAPIKeys(true);
                 Helpers.GetSystem();
-                var systemFolder = $"{Environment.GetEnvironmentVariable("SystemDrive")}\\Windows\\Sysnative\\Microsoft\\Protect\\";
+                string systemFolder = "";
 
-
+                if (!System.Environment.Is64BitProcess)
+                {
+                    systemFolder = $"{Environment.GetEnvironmentVariable("SystemDrive")}\\Windows\\Sysnative\\Microsoft\\Protect\\";
+                }
+                else
+                {
+                    systemFolder = $"{Environment.GetEnvironmentVariable("SystemDrive")}\\Windows\\System32\\Microsoft\\Protect\\";
+                }
+                
                 if (Directory.Exists(systemFolder))
                 {
                     try
