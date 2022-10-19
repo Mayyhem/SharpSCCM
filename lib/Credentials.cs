@@ -19,12 +19,17 @@ namespace SharpSCCM
             MemoryStream ms = new MemoryStream();
 
             // Path of the CIM repository
-            string path = "C:\\Windows\\System32\\Wbem\\Repository\\OBJECTS.DATA";
-            using (FileStream fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-            using (var sr = new StreamReader(fs, Encoding.Default))
+            string path = $"{Environment.GetEnvironmentVariable("SystemDrive")}\\Windows\\System32\\Wbem\\Repository\\OBJECTS.DATA";
+
+            if (File.Exists(path))
             {
-                fileData = sr.ReadToEnd();
+                using (FileStream fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                using (var sr = new StreamReader(fs, Encoding.Default))
+                {
+                    fileData = sr.ReadToEnd();
+                }
             }
+
 
             Regex regexData = new Regex(@"CCM_NetworkAccessAccount.*<PolicySecret Version=""1""><!\[CDATA\[(.*)\]\]><\/PolicySecret>.*<PolicySecret Version=""1""><!\[CDATA\[(.*)\]\]><\/PolicySecret>", RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.Compiled);
             var matchesData = regexData.Matches(fileData);
