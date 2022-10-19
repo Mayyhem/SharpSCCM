@@ -116,7 +116,6 @@ namespace SharpSCCM
                             if (username.StartsWith("00 00 0E 0E 0E") || password.StartsWith("00 00 0E 0E 0E"))
                             {
                                 Console.WriteLine("\r\n[!] SCCM is configured to use the client's machine account instead of NAA\r\n");
-                                continue;
                             }
                             else
                             {
