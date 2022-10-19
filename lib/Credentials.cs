@@ -19,7 +19,7 @@ namespace SharpSCCM
             MemoryStream ms = new MemoryStream();
 
             // Path of the CIM repository
-            string path = $"{Environment.GetEnvironmentVariable("SystemDrive")}\\Windows\\System32\\Wbem\\Repository\\OBJECTS.DATA";
+            string path = $"{Environment.GetEnvironmentVariable("SystemDrive")}\\Windows\\Sysnative\\Wbem\\Repository\\OBJECTS.DATA";
 
             if (File.Exists(path))
             {
