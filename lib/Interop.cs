@@ -146,6 +146,49 @@ namespace SharpSCCM
             ALG_TYPE_SECURECHANNEL = (6 << 9)
         }
 
+        // For file permissions checks
+        [DllImport("advapi32.dll", SetLastError = true)]
+        static extern uint GetSecurityInfo(
+        IntPtr handle,
+        SE_OBJECT_TYPE ObjectType,
+        SECURITY_INFORMATION SecurityInfo,
+        out IntPtr pSidOwner,
+        out IntPtr pSidGroup,
+        out IntPtr pDacl,
+        out IntPtr pSacl,
+        out IntPtr pSecurityDescriptor);
+
+        enum SE_OBJECT_TYPE
+        {
+            SE_UNKNOWN_OBJECT_TYPE = 0,
+            SE_FILE_OBJECT,
+            SE_SERVICE,
+            SE_PRINTER,
+            SE_REGISTRY_KEY,
+            SE_LMSHARE,
+            SE_KERNEL_OBJECT,
+            SE_WINDOW_OBJECT,
+            SE_DS_OBJECT,
+            SE_DS_OBJECT_ALL,
+            SE_PROVIDER_DEFINED_OBJECT,
+            SE_WMIGUID_OBJECT,
+            SE_REGISTRY_WOW64_32KEY
+        }
+
+        [Flags]
+        enum SECURITY_INFORMATION : uint
+        {
+            OWNER_SECURITY_INFORMATION = 0x00000001,
+            GROUP_SECURITY_INFORMATION = 0x00000002,
+            DACL_SECURITY_INFORMATION = 0x00000004,
+            SACL_SECURITY_INFORMATION = 0x00000008,
+            UNPROTECTED_SACL_SECURITY_INFORMATION = 0x10000000,
+            UNPROTECTED_DACL_SECURITY_INFORMATION = 0x20000000,
+            PROTECTED_SACL_SECURITY_INFORMATION = 0x40000000,
+            PROTECTED_DACL_SECURITY_INFORMATION = 0x80000000
+        }
+
+
         // For unicode detection
         [DllImport("advapi32.dll", CharSet = CharSet.Auto)]
         public static extern bool IsTextUnicode

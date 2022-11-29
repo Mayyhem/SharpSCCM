@@ -5,6 +5,7 @@ using System.CommandLine.Builder;
 using System.CommandLine.NamingConventionBinder;
 using System.CommandLine.Parsing;
 using System.Diagnostics;
+using System.IO;
 using System.Management;
 using System.Reflection;
 
@@ -369,6 +370,15 @@ namespace SharpSCCM
                 var localCommand = new Command("local", "A group of commands to interact with the local workstation/server");
                 rootCommand.Add(localCommand);
 
+                // local all
+                var localAllChecks = new Command("all", "Run all local situational awareness checks");
+                localCommand.Add(localAllChecks);
+                localAllChecks.Handler = CommandHandler.Create(
+                    new Action(() =>
+                    {
+                        ClientFileSystem.AllChecks();
+                    }));
+
                 // local class-instances
                 var localClassInstances = new Command("class-instances", "Get information on local WMI class instances");
                 localCommand.Add(localClassInstances);
@@ -419,16 +429,6 @@ namespace SharpSCCM
                         System.IO.File.WriteAllLines("C:\\Program Files\\Microsoft Configuration Manager\\inboxes\\ccr.box\\test.ccr", lines);
                     });
 
-                // local push-logs
-                var localPushLogs = new Command("push-logs", "Search for evidence of client push installation");
-                localCommand.Add(localPushLogs);
-                localPushLogs.Handler = CommandHandler.Create(
-                    new Action(() =>
-                    {
-                        //To-do
-                        //LocalPushLogs();
-                    }));
-
                 // local grep
                 var localGrep = new Command("grep", "Search a specified file for a specified string");
                 localCommand.Add(localGrep);
@@ -436,7 +436,7 @@ namespace SharpSCCM
                 localGrep.Add(new Argument<string>("string-to-find", "The string to search for"));
                 localGrep.Handler = CommandHandler.Create(
                     (string path, string stringToFind) =>
-                        ClientFileSystem.LocalGrepFile(path, stringToFind)
+                        ClientFileSystem.GrepFile(path, stringToFind)
                     );
 
                 // local naa
@@ -459,6 +459,16 @@ namespace SharpSCCM
                             Console.WriteLine("[!] A method (wmi or disk) is required!");
                         }
                     });
+
+                // local push-logs
+                var localPushLogs = new Command("push-logs", "Search for evidence of client push installation");
+                localCommand.Add(localPushLogs);
+                localPushLogs.Handler = CommandHandler.Create(
+                    new Action(() =>
+                    {
+                        //To-do
+                        //LocalPushLogs();
+                    }));
 
                 // local siteinfo
                 var localSiteInfo = new Command("siteinfo", "Get the primary Management Point and Site Code for the local host");
