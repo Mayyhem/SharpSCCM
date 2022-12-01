@@ -444,7 +444,7 @@ namespace SharpSCCM
                 localCommand.Add(getLocalNetworkAccessAccounts);
                 getLocalNetworkAccessAccounts.Add(new Argument<string>("method", "The method of obtaining the DPAPI blob: WMI or Disk"));
                 getLocalNetworkAccessAccounts.Handler = CommandHandler.Create(
-                    (string method, string masterkey) =>
+                    (string method) =>
                     {
                         if (method == "wmi")
                         {
