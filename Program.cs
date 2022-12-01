@@ -443,22 +443,38 @@ namespace SharpSCCM
                 var getLocalNetworkAccessAccounts = new Command("naa", "Get any network access accounts for the site using WMI (requires admin privileges)");
                 localCommand.Add(getLocalNetworkAccessAccounts);
                 getLocalNetworkAccessAccounts.Add(new Argument<string>("method", "The method of obtaining the DPAPI blob: WMI or Disk"));
+                getLocalNetworkAccessAccounts.Add(new Option<bool>(new[] { "--modify-registry-permissions", "-reg" }, "Modify the permissions on the LSA secrets registry key as current admin user. Default is escalation to system via token duplication."));
                 getLocalNetworkAccessAccounts.Handler = CommandHandler.Create(
-                    (string method) =>
+                    (string method, bool reg) =>
                     {
                         if (method == "wmi")
                         {
-                            Credentials.LocalNetworkAccessAccountsWmi();
+                            if (reg)
+                            {
+                                Credentials.LocalNetworkAccessAccountsWmi(reg);
+                            }
+                            else
+                            {
+                                Credentials.LocalNetworkAccessAccountsWmi();
+                            }
                         }
                         else if (method == "disk")
                         {
-                            Credentials.LocalNetworkAccessAccountsDisk();
+                            if (reg)
+                            {
+                                Credentials.LocalNetworkAccessAccountsDisk(reg);
+                            }
+                            else
+                            {
+                                Credentials.LocalNetworkAccessAccountsDisk();
+                            }
                         }
                         else
                         {
                             Console.WriteLine("[!] A method (wmi or disk) is required!");
                         }
-                    });
+                    }
+                );
 
                 // local siteinfo
                 var localSiteInfo = new Command("siteinfo", "Get the primary Management Point and Site Code for the local host");
