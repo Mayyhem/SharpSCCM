@@ -129,7 +129,7 @@ namespace SharpSCCM
                 // get the system and user DPAPI backup keys, showing the machine DPAPI keys
                 //  { machine , user }
 
-                var keys = LSADump.GetDPAPIKeys(true);
+                var keys = LSADump.GetDPAPIKeys(true, reg);
                 Helpers.GetSystem();
                 string systemFolder = "";
 

