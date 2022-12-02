@@ -104,7 +104,7 @@ namespace SharpSCCM
                 // If we're not system and we don't want to escalate, modify the LSA secrets reg key permissions instead
                 else if ((reg == true) && (alreadySystem == false))
                 {
-                    Console.WriteLine("\r\n\r\n");
+                    Console.WriteLine("\r\n");
                     foreach (string key in LsaRegKeys)
                     {
                         Console.WriteLine("[*] Modifying permissions on registry key: {0}", key);
@@ -159,7 +159,7 @@ namespace SharpSCCM
                     revertedAcl.RemoveAccessRule(newRule);
                     Registry.LocalMachine.OpenSubKey(key, RegistryKeyPermissionCheck.ReadWriteSubTree, RegistryRights.ChangePermissions).SetAccessControl(revertedAcl);
                 }
-                Console.WriteLine("\r\n\r\n");
+                Console.WriteLine("\r\n");
             }
 
             if ((!alreadySystem) && (!reg))
