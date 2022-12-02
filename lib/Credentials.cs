@@ -11,7 +11,7 @@ namespace SharpSCCM
     {
         public static void LocalNetworkAccessAccountsDisk()
         {
-            // Thanks to @guervild on Github for contributing this code to SharpDPAPI
+            // Thanks to @guervild on GitHub for contributing this code to SharpDPAPI
 
             Console.WriteLine($"[*] Retrieving Network Access Account blobs from CIM repository");
 

@@ -119,7 +119,6 @@
     <Compile Include="lib\Cleanup.cs" />
     <Compile Include="lib\ClientWmi.cs" />
     <Compile Include="lib\ClientFileSystem.cs" />
-    <Compile Include="lib\CurrentUserSecurity.cs" />
     <Compile Include="lib\LSADump.cs" />
     <Compile Include="lib\MgmtPointMessaging.cs" />
     <Compile Include="lib\MgmtPointWmi.cs" />

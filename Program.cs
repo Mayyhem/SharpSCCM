@@ -106,9 +106,7 @@ namespace SharpSCCM
                 getCommand.AddGlobalOption(new Option<string>(new[] { "--site-code", "-sc" }, "The three character site code of the Configuration Manager server (e.g., PS1) (default: the site code of the client running SharpSCCM)"));
                 getCommand.AddGlobalOption(new Option<bool>(new[] { "--verbose", "-v" }, "Display all class properties and their values (default: false)"));
                 Option whereOption = new Option<string>(new[] { "--where", "-w" }, "A WHERE condition to narrow the scope of data returned by the query (e.g., \"Name='cave.johnson'\" or \"Name LIKE '%cave%'\")");
-                whereOption.Name = "whereCondition";
-                // Using reflection to alias the "where" option to "whereCondition"
-                typeof(Option).GetMethod("RemoveAlias", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(whereOption, new object[] { whereOption.Name });
+                whereOption.AddAlias("whereCondition");
                 getCommand.AddGlobalOption(whereOption);
 
                 // get application
@@ -149,6 +147,7 @@ namespace SharpSCCM
                 getClassInstances.Handler = CommandHandler.Create(
                     (string server, string siteCode, bool count, string wmiNamespace, string wmiClass, string[] properties, string whereCondition, string orderBy, bool dryRun, bool verbose) =>
                     {
+                        Console.WriteLine($"where: {whereCondition}");
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, wmiNamespace, siteCode);
                         if (properties.Length == 0)
                         {
@@ -323,19 +322,31 @@ namespace SharpSCCM
                 var invokeClientPush = new Command("client-push", "Force the server to authenticate to an arbitrary destination via NTLM (requires automatic client push installation to be enabled and NTLM fallback to not be disabled)");
                 invokeCommand.Add(invokeClientPush);
                 invokeClientPush.Add(new Option<bool>(new[] { "--as-admin", "-a" }, "Connect to the server via WMI rather than HTTP to force authentication (requires Full Administrator access and device record for target)"));
+                invokeClientPush.Add(new Option<bool>(new[] { "--pki", "-p" }, "Use the client's PKI certificate for authentication to the management point"));
                 invokeClientPush.Add(new Option<string>(new[] { "--target", "-t" }, "The NetBIOS name, IP address, or if WebClient is enabled on the site server, the IP address and port (e.g., 192.168.1.1@8080) of the relay/capture server (default: the machine running SharpSCCM)"));
                 invokeClientPush.Handler = CommandHandler.Create(
-                    (string server, string siteCode, bool asAdmin, string target) =>
+                    (string server, string siteCode, bool asAdmin, bool pki, string target) =>
                     {
                         if (server == null || siteCode == null)
                         {
                             (server, siteCode) = ClientWmi.GetCurrentManagementPointAndSiteCode();
                         }
                         if (!asAdmin)
-                        {
-                            MessageCertificateX509 certificate = MgmtPointMessaging.CreateUserCertificate();
-                            SmsClientId clientId = MgmtPointMessaging.RegisterClient(certificate, target, server, siteCode);
-                            MgmtPointMessaging.SendDDR(certificate, target, server, siteCode, clientId);
+                        { 
+                            // If PKI certs are in use, borrow the client's authentication cert to update its hardware inventory
+                            if (pki)
+                            {
+                                MessageCertificateX509 certificate = MgmtPointMessaging.GetMachineSigningCertificate();
+                                SmsClientId clientId = ClientWmi.GetSmsId();
+                                MgmtPointMessaging.SendDDR(certificate, target, server, siteCode, clientId);
+                            }
+                            // Otherwise, create a self-signed certificate and new device record
+                            else
+                            {
+                                MessageCertificateX509 certificate = MgmtPointMessaging.CreateUserCertificate();
+                                SmsClientId clientId = MgmtPointMessaging.RegisterClient(certificate, target, server, siteCode);
+                                MgmtPointMessaging.SendDDR(certificate, target, server, siteCode, clientId);
+                            }
                         }
                         else
                         {

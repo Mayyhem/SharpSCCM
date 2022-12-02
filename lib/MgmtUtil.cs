@@ -138,8 +138,15 @@ namespace SharpSCCM
                 }
                 path = $"\\\\{server}\\{wmiNamespace}";
             }
-            else if (!string.IsNullOrEmpty(server) && !string.IsNullOrEmpty(siteCode))
+            // server is provided
+            else if (!string.IsNullOrEmpty(server))
             {
+                // but sidecode is not provided
+                if (string.IsNullOrEmpty(siteCode))
+                {
+                    (_, siteCode) = ClientWmi.GetCurrentManagementPointAndSiteCode();
+                    Console.WriteLine($"[+] Using provided management point: {server}");
+                }
                 if (string.IsNullOrEmpty(wmiNamespace))
                 {
                     path = $"\\\\{server}\\root\\SMS\\site_{siteCode}";
@@ -150,8 +157,19 @@ namespace SharpSCCM
                 }
             }
             else
+            // server not provided
             {
-                (server, siteCode) = ClientWmi.GetCurrentManagementPointAndSiteCode();
+                // but sitecode is provided
+                if (!string.IsNullOrEmpty(siteCode))
+                { 
+                    (server, _) = ClientWmi.GetCurrentManagementPointAndSiteCode();
+                    Console.WriteLine($"[+] Using provided site code: {siteCode}");
+                }
+                // server and sitecode not provided
+                else
+                {
+                    (server, siteCode) = ClientWmi.GetCurrentManagementPointAndSiteCode();
+                }
                 if (string.IsNullOrEmpty(wmiNamespace))
                 {
                     path = $"\\\\{server}\\root\\SMS\\site_{siteCode}";
@@ -237,6 +255,10 @@ namespace SharpSCCM
                                 int[] nestedValues = (int[])(prop.Value);
                                 string[] nestedValueStrings = nestedValues.Select(x => x.ToString()).ToArray();
                                 Console.WriteLine($"{prop.Name}: {string.Join(", ", nestedValueStrings)}");
+                            }
+                            else if (prop.Value == null)
+                            {
+                                Console.WriteLine($"{prop.Name}: Empty");
                             }
                             else
                             {
