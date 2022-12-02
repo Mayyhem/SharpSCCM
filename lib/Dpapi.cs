@@ -118,7 +118,7 @@ namespace SharpSCCM
 
         }
 
-        public static Dictionary<string, string> TriageSystemMasterKeys(bool show = false)
+        public static Dictionary<string, string> TriageSystemMasterKeys(bool show = false, bool reg = false)
         {
             // retrieve the DPAPI_SYSTEM key and use it to decrypt any SYSTEM DPAPI masterkeys
 

@@ -9,7 +9,7 @@ namespace SharpSCCM
 {
     public class Credentials
     {
-        public static void LocalNetworkAccessAccountsDisk()
+        public static void LocalNetworkAccessAccountsDisk(bool reg = false)
         {
             // Thanks to @guervild on Github for contributing this code to SharpDPAPI
 
@@ -90,7 +90,7 @@ namespace SharpSCCM
             }
         }
 
-        public static void LocalNetworkAccessAccountsWmi()
+        public static void LocalNetworkAccessAccountsWmi(bool reg = false)
         {
             if (Helpers.IsHighIntegrity())
             {
@@ -110,8 +110,21 @@ namespace SharpSCCM
                         int length = (protectedUsernameBytes.Length + 16 - 1) / 16 * 16;
                         Array.Resize(ref protectedUsernameBytes, length);
 
+                        Dictionary<string, string> masterkeys = new Dictionary<string, string>;
+                        if (reg)
+                        {
+                            // Triage system master keys by modifying LSA secret registry key permissions
+                            masterkeys = Dpapi.TriageSystemMasterKeys(false, reg);
+                        }
 
-                        Dictionary<string, string> masterkeys = Dpapi.TriageSystemMasterKeys();
+                        else
+                        {
+                            // Triage system master keys by elevating to system via token duplication
+                            masterkeys = Dpapi.TriageSystemMasterKeys();
+
+                        }
+
+
 
                         Console.WriteLine("\r\n[*] SYSTEM master key cache:\r\n");
                         foreach (KeyValuePair<string, string> kvp in masterkeys)
