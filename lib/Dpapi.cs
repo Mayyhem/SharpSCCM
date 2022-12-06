@@ -130,7 +130,7 @@ namespace SharpSCCM
                 //  { machine , user }
 
                 var keys = LSADump.GetDPAPIKeys(true, reg);
-                Helpers.GetSystem();
+               
                 string systemFolder = "";
 
                 if (!System.Environment.Is64BitProcess)
