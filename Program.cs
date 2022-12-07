@@ -1,4 +1,4 @@
-﻿using Microsoft.ConfigurationManagement.Messaging.Framework;
+using Microsoft.ConfigurationManagement.Messaging.Framework;
 using System;
 using System.CommandLine;
 using System.CommandLine.Builder;

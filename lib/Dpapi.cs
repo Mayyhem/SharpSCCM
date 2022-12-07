@@ -118,7 +118,7 @@ namespace SharpSCCM
 
         }
 
-        public static Dictionary<string, string> TriageSystemMasterKeys(bool show = false)
+        public static Dictionary<string, string> TriageSystemMasterKeys(bool show = false, bool reg = false)
         {
             // retrieve the DPAPI_SYSTEM key and use it to decrypt any SYSTEM DPAPI masterkeys
 
@@ -129,8 +129,8 @@ namespace SharpSCCM
                 // get the system and user DPAPI backup keys, showing the machine DPAPI keys
                 //  { machine , user }
 
-                var keys = LSADump.GetDPAPIKeys(true);
-                Helpers.GetSystem();
+                var keys = LSADump.GetDPAPIKeys(true, reg);
+               
                 string systemFolder = "";
 
                 if (!System.Environment.Is64BitProcess)
