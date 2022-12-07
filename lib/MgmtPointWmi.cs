@@ -126,16 +126,37 @@ namespace SharpSCCM
                     }
                 }
             }
-            searcher = new ManagementObjectSearcher(wmiConnection, new ObjectQuery($"SELECT Values FROM SMS_SCI_SCPropertyList WHERE PropertyListName='Reserved2'"));
+            searcher = new ManagementObjectSearcher(wmiConnection, new ObjectQuery("SELECT Values FROM SMS_SCI_SCPropertyList WHERE PropertyListName='Reserved2'"));
             results = searcher.Get();
             foreach (ManagementObject result in results)
             {
-                foreach (string value in (string[])result["Values"])
+                if (result["Values"] != null)
                 {
-                    Console.WriteLine($"[+] Discovered client push installation account: {value}");
+                    foreach (string value in (string[])result["Values"])
+                    {
+                        Console.WriteLine($"[+] Discovered client push installation account: {value}");
 
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("[+] No client push installation accounts were configured, but the server may still use its machine account");
                 }
             }
+            searcher = new ManagementObjectSearcher(wmiConnection, new ObjectQuery("SELECT * FROM SMS_SCI_SQLTask WHERE ItemName='Clear Undiscovered Clients'"));
+            results = searcher.Get();
+            foreach (ManagementObject result in results)
+            {
+                if (result["Enabled"].ToString() == "True")
+                {
+                    Console.WriteLine($"[+] The client installed flag is automatically cleared on inactive clients after {result["DeleteOlderThan"]} days, resulting in automatic reinstallation");
+                }
+                else
+                {
+                    Console.WriteLine("[+] The client installed flag is not automatically cleared on inactive clients, preventing automatic reinstallation");
+                }
+            }
+
         }
         public static void Exec (ManagementScope scope, string deviceName = null, string collectionName = null, string path = null, string relayServer = null, bool runAsUser = true)
         {
