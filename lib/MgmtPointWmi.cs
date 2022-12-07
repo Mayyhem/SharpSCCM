@@ -147,7 +147,7 @@ namespace SharpSCCM
             results = searcher.Get();
             foreach (ManagementObject result in results)
             {
-                if (result["Enabled"] == "True")
+                if (result["Enabled"].ToString() == "True")
                 {
                     Console.WriteLine($"[+] The client installed flag is automatically cleared on inactive clients after {result["DeleteOlderThan"]} days, resulting in automatic reinstallation");
                 }
