@@ -61,7 +61,7 @@ namespace SharpSCCM
             {
                 Console.WriteLine("An error occurred while querying for WMI data: " + error.Message);
             }
-            catch(Exception error)
+            catch (Exception error)
             {
                 Console.WriteLine($"An unhandled exception of type {error.GetType()} occurred: {error.Message}");
             }

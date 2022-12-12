@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Management;
 
@@ -221,7 +222,19 @@ namespace SharpSCCM
             {
                 initiateClientOpParams["TargetCollectionID"] = collection.GetPropertyValue("CollectionID");
             }
-            clientOperation.InvokeMethod("InitiateClientOperation", initiateClientOpParams, null);
+            try
+            {
+                clientOperation.InvokeMethod("InitiateClientOperation", initiateClientOpParams, null);
+            }
+            catch (ManagementException error)
+            {
+                Console.WriteLine($"[!] An error occurred while attempting to commit the changes: {error.Message}");
+                Console.WriteLine("[!] Does your account have the correct permissions?");
+            }
+            catch (Exception error)
+            {
+                Console.WriteLine($"An unhandled exception of type {error.GetType()} occurred: {error.Message}");
+            }
         }
 
         public static void NewApplication(ManagementScope scope, string name, string path, bool runAsUser = false, bool stealth = false)
@@ -400,7 +413,19 @@ namespace SharpSCCM
                 {
                     Console.WriteLine("[+] Updated application to run in the context of the logged on user");
                 }
-                application.Put();
+                try
+                {
+                    application.Put();
+                }
+                catch (ManagementException error)
+                {
+                    Console.WriteLine($"[!] An error occurred while attempting to commit the changes: {error.Message}");
+                    Console.WriteLine("[!] Does your account have the correct permissions?");
+                }
+                catch (Exception error)
+                {
+                    Console.WriteLine($"An unhandled exception of type {error.GetType()} occurred: {error.Message}");
+                }
                 MgmtUtil.GetClassInstances(scope, "SMS_Application", false, null, $"LocalizedDisplayName='{name}'");
             }
         }
@@ -421,7 +446,19 @@ namespace SharpSCCM
                 collection["CollectionType"] = "1";
                 collection["LimitToCollectionId"] = "SMS00002";
             }
-            collection.Put();
+            try
+            {
+                collection.Put();
+            }
+            catch (ManagementException error)
+            {
+                Console.WriteLine($"[!] An error occurred while attempting to commit the changes: {error.Message}");
+                Console.WriteLine("[!] Does your account have the correct permissions?");
+            }
+            catch (Exception error)
+            {
+                Console.WriteLine($"An unhandled exception of type {error.GetType()} occurred: {error.Message}");
+            }            
             MgmtUtil.GetClassInstances(scope, "SMS_Collection", false, null, $"Name='{collectionName}'");
         }
 
@@ -486,7 +523,19 @@ namespace SharpSCCM
                         deployment["TargetCollectionID"] = collectionObj.GetPropertyValue("CollectionID");
                     }
                 }
-                deployment.Put();
+                try
+                {
+                    deployment.Put();
+                }
+                catch (ManagementException error)
+                {
+                    Console.WriteLine($"[!] An error occurred while attempting to commit the changes: {error.Message}");
+                    Console.WriteLine("[!] Does your account have the correct permissions?");
+                }
+                catch (Exception error)
+                {
+                    Console.WriteLine($"An unhandled exception of type {error.GetType()} occurred: {error.Message}");
+                }
                 MgmtUtil.GetClassInstances(scope, "SMS_ApplicationAssignment", false, null, $"ApplicationName='{application}' AND CollectionName='{collection}'");
             }
         }
