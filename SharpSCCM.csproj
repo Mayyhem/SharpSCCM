@@ -156,6 +156,6 @@
     <Error Condition="!Exists('packages\ILMerge.3.0.41\build\ILMerge.props')" Text="$([System.String]::Format('$(ErrorText)', 'packages\ILMerge.3.0.41\build\ILMerge.props'))" />
   </Target>
   <PropertyGroup>
-    <PostBuildEvent>$(ProjectDir)packages\ILMerge.3.0.41\tools\net452\ILMerge.exe $(TargetPath) $(TargetDir)System.CommandLine.dll $(TargetDir)System.CommandLine.NamingConventionBinder.dll $(TargetDir)System.Memory.dll $(TargetDir)Microsoft.ConfigurationManagement.Messaging.dll $(TargetDir)Microsoft.ConfigurationManagement.Security.Cryptography.dll /out:$(TargetDir)SharpSCCM_merged.exe</PostBuildEvent>
+    <PostBuildEvent>$(ProjectDir)packages\ILMerge.3.0.41\tools\net452\ILMerge.exe $(TargetPath) $(TargetDir)System.CommandLine.dll $(TargetDir)System.CommandLine.NamingConventionBinder.dll $(TargetDir)System.Runtime.CompilerServices.Unsafe.dll $(TargetDir)System.Memory.dll $(TargetDir)Microsoft.ConfigurationManagement.Messaging.dll $(TargetDir)Microsoft.ConfigurationManagement.Security.Cryptography.dll /out:$(TargetDir)SharpSCCM_merged.exe</PostBuildEvent>
   </PropertyGroup>
 </Project>

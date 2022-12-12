@@ -1,13 +1,12 @@
-using Microsoft.ConfigurationManagement.Messaging.Framework;
 using System;
 using System.CommandLine;
 using System.CommandLine.Builder;
 using System.CommandLine.NamingConventionBinder;
 using System.CommandLine.Parsing;
 using System.Diagnostics;
-using System.IO;
 using System.Management;
-using System.Reflection;
+
+using Microsoft.ConfigurationManagement.Messaging.Framework;
 
 namespace SharpSCCM
 {
@@ -256,25 +255,26 @@ namespace SharpSCCM
                 // get naa
                 var getNetworkAccessAccounts = new Command("naa", "Request the machine policy from a management point to obtain network access account credentials");
                 getCommand.Add(getNetworkAccessAccounts);
+                getNetworkAccessAccounts.Add(new Option<bool>(new[] { "-cert", "-c" }, "Use the local client's certificate to authenticate to the management point"));
+
                 getNetworkAccessAccounts.Add(new Option<string>(new[] { "--output-file", "-o" }, "The path where the policy XML will be written to"));
 
                 getNetworkAccessAccounts.Add(new Option<string>(new[] { "--password", "-p" }, "The password for the specified computer account"));
                 getNetworkAccessAccounts.Add(new Option<string>(new[] { "--username", "-u" }, "The name of the computer account to register a new device record for, including the trailing \"$\""));
                 getNetworkAccessAccounts.Handler = CommandHandler.Create(
-                    (string server, string siteCode, string username, string password, string outputFile) =>
+                    (string server, string siteCode, string username, string password, string outputFile, bool cert) =>
                     {
                         if (server == null || siteCode == null)
                         {
                             (server, siteCode) = ClientWmi.GetCurrentManagementPointAndSiteCode();
                         }
-                        
-                        if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
+                        if ((string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password)) && !cert)
                         {
-                            Console.WriteLine("[!] A computer account name (-u) and password (-p) must be specified for this method");
+                            Console.WriteLine("[!] A computer account name (-u) and password (-p) must be specified or the cert (-c) option can be used in a high integrity context");
                         }
                         else
                         {
-                            MgmtPointMessaging.GetNetworkAccessAccounts(server, siteCode, username, password, outputFile);
+                            MgmtPointMessaging.GetNetworkAccessAccounts(server, siteCode, username, password, outputFile, cert);
                         }
                     });
 
@@ -381,15 +381,6 @@ namespace SharpSCCM
                 var localCommand = new Command("local", "A group of commands to interact with the local workstation/server");
                 rootCommand.Add(localCommand);
 
-                // local all
-                var localAllChecks = new Command("all", "Run all local situational awareness checks");
-                localCommand.Add(localAllChecks);
-                localAllChecks.Handler = CommandHandler.Create(
-                    new Action(() =>
-                    {
-                        ClientFileSystem.AllChecks();
-                    }));
-
                 // local class-instances
                 var localClassInstances = new Command("class-instances", "Get information on local WMI class instances");
                 localCommand.Add(localClassInstances);
@@ -417,6 +408,17 @@ namespace SharpSCCM
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection("localhost", wmiNamespace);
                         ManagementObject classInstance = new ManagementClass(wmiConnection, new ManagementPath(wmiClass), new ObjectGetOptions()).CreateInstance();
                         MgmtUtil.PrintClassProperties(classInstance);
+                    });
+
+                // local classes
+                var localClasses = new Command("classes", "Get information on local WMI classes");
+                localCommand.Add(localClasses);
+                localClasses.Add(new Argument<string>("wmiNamespace", "The WMI namespace to query (e.g., \"root\\ccm\")"));
+                localClasses.Handler = CommandHandler.Create(
+                    (string wmiNamespace, bool count, string whereCondition, string orderBy, bool dryRun, bool verbose) =>
+                    {
+                        ManagementScope wmiConnection = MgmtUtil.NewWmiConnection("localhost", wmiNamespace);
+                        MgmtUtil.PrintClasses(wmiConnection);
                     });
 
                 // local clientinfo
@@ -454,16 +456,31 @@ namespace SharpSCCM
                 var getLocalNetworkAccessAccounts = new Command("naa", "Get any network access accounts for the site using WMI (requires admin privileges)");
                 localCommand.Add(getLocalNetworkAccessAccounts);
                 getLocalNetworkAccessAccounts.Add(new Argument<string>("method", "The method of obtaining the DPAPI blob: WMI or Disk"));
+                getLocalNetworkAccessAccounts.Add(new Option<bool>(new[] { "--modify-registry-permissions", "-reg" }, "Modify the permissions on the LSA secrets registry key as current admin user. Default is escalation to system via token duplication."));
                 getLocalNetworkAccessAccounts.Handler = CommandHandler.Create(
-                    (string method, string masterkey) =>
+                    (string method, bool reg) =>
                     {
                         if (method == "wmi")
                         {
-                            Credentials.LocalNetworkAccessAccountsWmi();
+                            if (reg)
+                            {
+                                Credentials.LocalNetworkAccessAccountsWmi(reg);
+                            }
+                            else
+                            {
+                                Credentials.LocalNetworkAccessAccountsWmi();
+                            }
                         }
                         else if (method == "disk")
                         {
-                            Credentials.LocalNetworkAccessAccountsDisk();
+                            if (reg)
+                            {
+                                Credentials.LocalNetworkAccessAccountsDisk(reg);
+                            }
+                            else
+                            {
+                                Credentials.LocalNetworkAccessAccountsDisk();
+                            }
                         }
                         else
                         {
@@ -491,19 +508,19 @@ namespace SharpSCCM
                         MgmtUtil.GetClassInstances(wmiConnection, "SMS_Authority", false, new[] { "CurrentManagementPoint", "Name" });
                     }));
 
-                // local classes
-                var localClasses = new Command("classes", "Get information on local WMI classes");
-                localCommand.Add(localClasses);
-                localClasses.Add(new Argument<string>("wmiNamespace", "The WMI namespace to query (e.g., \"root\\ccm\")"));
-                localClasses.Handler = CommandHandler.Create(
-                    (string wmiNamespace, bool count, string whereCondition, string orderBy, bool dryRun, bool verbose) =>
+                // local triage
+                var localTriage = new Command("all", "Run local situational awareness checks");
+                localCommand.Add(localTriage);
+                localTriage.Handler = CommandHandler.Create(
+                    new Action(() =>
                     {
-                        ManagementScope wmiConnection = MgmtUtil.NewWmiConnection("localhost", wmiNamespace);
-                        MgmtUtil.PrintClasses(wmiConnection);
-                    });
+                        ClientFileSystem.Triage();
+                    }));
 
                 // new
                 var newCommand = new Command("new", "A group of commands that create new objects on the server");
+                newCommand.AddGlobalOption(new Option<string>(new[] { "--server", "-mp" }, "The IP address, FQDN, or NetBIOS name of the Configuration Manager management point server to connect to (default: the current management point of the client running SharpSCCM)"));
+                newCommand.AddGlobalOption(new Option<string>(new[] { "--site-code", "-sc" }, "The three character site code of the Configuration Manager server (e.g., PS1) (default: the site code of the client running SharpSCCM)"));
                 rootCommand.Add(newCommand);
 
                 // new application
@@ -521,7 +538,11 @@ namespace SharpSCCM
                     });
 
                 // new collection
-                var newCollection = new Command("collection", "Create a collection of devices or users");
+                var newCollection = new Command("collection", "Create a collection of devices or users. " +
+                    "Permitted roles:\n" +
+                    "  - Full Administrator\n" +
+                    "  - Operations Administrator\n" +
+                    "  - Infrastructure Administrator");
                 newCommand.Add(newCollection);
                 // newCollection.Add(new Argument<string>("collection-type", "The type of collection to create, 'device' or 'user'").FromAmong(new string[] { "device", "user" }));
                 newCollection.Add(new Argument<string>("collection-type", "The type of collection to create, 'device' or 'user'"));
@@ -627,6 +648,8 @@ namespace SharpSCCM
                 if (debug)
                 {
                     Console.WriteLine(error.StackTrace);
+                    Console.WriteLine();
+                    Console.WriteLine(error.InnerException);
                 }
             }
         }   

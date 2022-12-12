@@ -12,17 +12,6 @@ namespace SharpSCCM
 {
     static class ClientFileSystem
     {
-        public static void AllChecks()
-        {
-            Console.WriteLine("[+] Client cache contents and permissions for the current user:");
-            GetDirectoryContentsAndPermissions(@"C:\Windows\ccmcache", true);
-            Console.WriteLine("\n[+] Searching logs for possible UNC paths:");
-            SearchClientLogs(@"(\\\\([a-z|A-Z|0-9|-|_|\s]{2,15}){1}(\.[a-z|A-Z|0-9|-|_|\s]{1,64}){0,3}){1}(\\[^\\|\/|\:|\*|\?|""|\<|\>|\|;|]{1,64}){1,}(\\){0,}");
-            Console.WriteLine("\n[+] Searching logs for possible URLs:");
-            SearchClientLogs(@"(?<Protocol>\w+):\/\/(?<Domain>[\w@][\w.:@]+)\/?[\w\.?=%&=\-@/$,]*");
-            Console.WriteLine();
-        }
-
         public static bool DoesCurrentUserHaveRights(string path, FileSystemRights fileSystemRights)
         {
             try
@@ -203,6 +192,17 @@ namespace SharpSCCM
             {
                 GrepFileRegex(filePath, regex);
             }
+        }
+
+        public static void Triage()
+        {
+            Console.WriteLine("[+] Client cache contents and permissions for the current user:");
+            GetDirectoryContentsAndPermissions(@"C:\Windows\ccmcache", true);
+            Console.WriteLine("\n[+] Searching logs for possible UNC paths:");
+            SearchClientLogs(@"(\\\\([a-z|A-Z|0-9|-|_|\s]{2,15}){1}(\.[a-z|A-Z|0-9|-|_|\s]{1,64}){0,3}){1}(\\[^\\|\/|\:|\*|\?|""|\<|\>|\|;|]{1,64}){1,}(\\){0,}");
+            Console.WriteLine("\n[+] Searching logs for possible URLs:");
+            SearchClientLogs(@"(?<Protocol>\w+):\/\/(?<Domain>[\w@][\w.:@]+)\/?[\w\.?=%&=\-@/$,]*");
+            Console.WriteLine();
         }
     }
 }
