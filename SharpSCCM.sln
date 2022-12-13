@@ -7,7 +7,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharpSCCM", "SharpSCCM.cspr
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UnitTests", "UnitTests\UnitTests.csproj", "{03652836-898E-4A9F-B781-B7D86E750F60}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "DeobfuscateNAAString", "DeobfuscateNAAString\DeobfuscateNAAString.vcxproj", "{8FAC6B27-207E-496F-BAC6-DCD5F5228B83}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "DeobfuscateSecretString", "DeobfuscateSecretString\DeobfuscateSecretString.vcxproj", "{8FAC6B27-207E-496F-BAC6-DCD5F5228B83}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
