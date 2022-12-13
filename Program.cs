@@ -252,32 +252,6 @@ namespace SharpSCCM
                         MgmtUtil.GetClassInstances(wmiConnection, "SMS_R_System", count, properties, whereCondition, orderBy, dryRun, verbose);
                     });
 
-                // get naa
-                var getNetworkAccessAccounts = new Command("naa", "Request the machine policy from a management point to obtain network access account credentials");
-                getCommand.Add(getNetworkAccessAccounts);
-                getNetworkAccessAccounts.Add(new Option<bool>(new[] { "-cert", "-c" }, "Use the local client's certificate to authenticate to the management point"));
-
-                getNetworkAccessAccounts.Add(new Option<string>(new[] { "--output-file", "-o" }, "The path where the policy XML will be written to"));
-
-                getNetworkAccessAccounts.Add(new Option<string>(new[] { "--password", "-p" }, "The password for the specified computer account"));
-                getNetworkAccessAccounts.Add(new Option<string>(new[] { "--username", "-u" }, "The name of the computer account to register a new device record for, including the trailing \"$\""));
-                getNetworkAccessAccounts.Handler = CommandHandler.Create(
-                    (string server, string siteCode, string username, string password, string outputFile, bool cert) =>
-                    {
-                        if (server == null || siteCode == null)
-                        {
-                            (server, siteCode) = ClientWmi.GetCurrentManagementPointAndSiteCode();
-                        }
-                        if ((string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password)) && !cert)
-                        {
-                            Console.WriteLine("[!] A computer account name (-u) and password (-p) must be specified or the cert (-c) option can be used in a high integrity context");
-                        }
-                        else
-                        {
-                            MgmtPointMessaging.GetNetworkAccessAccounts(server, siteCode, username, password, outputFile, cert);
-                        }
-                    });
-
                 // get primary-user
                 var getPrimaryUser = new Command("primary-user", "Get information on primary users set for devices");
                 getCommand.Add(getPrimaryUser);
@@ -301,6 +275,32 @@ namespace SharpSCCM
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
                         // Don't get lazy props for this function. ResourceName won't populate.
                         MgmtUtil.GetClassInstances(wmiConnection, "SMS_UserMachineRelationship", count, properties, whereCondition, orderBy, dryRun, verbose, false); 
+                    });
+
+                // get secrets
+                var getSecretsFromPolicy = new Command("secrets", "Request the machine policy from a management point to obtain credentials for network access accounts, collection variables, and task sequences");
+                getCommand.Add(getSecretsFromPolicy);
+                getSecretsFromPolicy.Add(new Option<bool>(new[] { "-cert", "-c" }, "Use the local client's certificate to authenticate to the management point"));
+
+                getSecretsFromPolicy.Add(new Option<string>(new[] { "--output-file", "-o" }, "The path where the policy XML will be written to"));
+
+                getSecretsFromPolicy.Add(new Option<string>(new[] { "--password", "-p" }, "The password for the specified computer account"));
+                getSecretsFromPolicy.Add(new Option<string>(new[] { "--username", "-u" }, "The name of the computer account to register a new device record for, including the trailing \"$\""));
+                getSecretsFromPolicy.Handler = CommandHandler.Create(
+                    (string server, string siteCode, string username, string password, string outputFile, bool cert) =>
+                    {
+                        if (server == null || siteCode == null)
+                        {
+                            (server, siteCode) = ClientWmi.GetCurrentManagementPointAndSiteCode();
+                        }
+                        if ((string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password)) && !cert)
+                        {
+                            Console.WriteLine("[!] A computer account name (-u) and password (-p) must be specified or the cert (-c) option can be used in a high integrity context");
+                        }
+                        else
+                        {
+                            MgmtPointMessaging.GetSecretsFromPolicy(server, siteCode, username, password, outputFile, cert);
+                        }
                     });
 
                 // get site-push-settings
@@ -509,7 +509,7 @@ namespace SharpSCCM
                     }));
 
                 // local triage
-                var localTriage = new Command("all", "Run local situational awareness checks");
+                var localTriage = new Command("triage", "Gather information about the site from local log files");
                 localCommand.Add(localTriage);
                 localTriage.Handler = CommandHandler.Create(
                     new Action(() =>

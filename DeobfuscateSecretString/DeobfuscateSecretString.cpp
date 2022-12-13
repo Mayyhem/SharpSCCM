@@ -28,7 +28,7 @@ namespace {
 
     HRESULT HexDecode(LPCWSTR pwszGarbled, LPBYTE* pbGarbled, LPDWORD nGarbledSize) {
         if (CryptStringToBinaryW(pwszGarbled, 0, CRYPT_STRING_HEX, nullptr, nGarbledSize, nullptr, nullptr)) {
-            if ((*pbGarbled = reinterpret_cast<LPBYTE>(LocalAlloc(LHND, *nGarbledSize))) != nullptr) {
+            if ((*pbGarbled = reinterpret_cast<LPBYTE>(LocalAlloc(LMEM_ZEROINIT, *nGarbledSize))) != nullptr) {
                 if (CryptStringToBinaryW(pwszGarbled, 0, CRYPT_STRING_HEX, *pbGarbled, nGarbledSize, nullptr, nullptr)) {
                     return NO_ERROR;
                 }
@@ -98,7 +98,7 @@ int wmain(int argc, wchar_t** argv) {
                 printf("Error: %ws\n", messageBuffer);
                 LocalFree(messageBuffer);
             }
-            //LocalFree(pbGarbled);
+            LocalFree(pbGarbled);
         }
     }
     else {
