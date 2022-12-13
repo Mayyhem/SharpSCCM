@@ -53,7 +53,7 @@ namespace DES {
                         DWORD dwDecryptedLen{ pHeader->nPlainSize };
                         if (CryptDecrypt(hKey, 0, TRUE, 0, pData, &dwDecryptedLen)) {
                             *nPlainSize = dwDecryptedLen;
-                            *pbPlain = reinterpret_cast<LPBYTE>(LocalAlloc(LHND, dwDecryptedLen));
+                            *pbPlain = reinterpret_cast<LPBYTE>(LocalAlloc(LMEM_ZEROINIT, dwDecryptedLen));
                             memcpy(*pbPlain, pData, dwDecryptedLen);
                             ZeroMemory(pData, dwDecryptedLen);
                             succeeded = true;
@@ -90,7 +90,7 @@ int wmain(int argc, wchar_t** argv) {
             DWORD nPlainSize;
             if (Obfuscation::UnobfuscateBuffer(reinterpret_cast<GarbledData*>(pbGarbled), nGarbledSize, &pbPlain, &nPlainSize) == NO_ERROR) {
                 printf("Plaintext: %ws\n", pbPlain);
-                //LocalFree(pbPlain);
+                LocalFree(pbPlain);
             }
             else {
                 LPWSTR messageBuffer = nullptr;
