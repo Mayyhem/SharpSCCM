@@ -130,7 +130,7 @@ namespace SharpSCCM
         {
             string path = "";
             ConnectionOptions connection = new ConnectionOptions();
-            if (server == "localhost")
+            if (server == "127.0.0.1")
             {
                 if (string.IsNullOrEmpty(wmiNamespace))
                 {

