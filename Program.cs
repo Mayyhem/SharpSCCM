@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.CommandLine;
 using System.CommandLine.Builder;
 using System.CommandLine.NamingConventionBinder;
@@ -462,32 +463,72 @@ namespace SharpSCCM
                         //LocalPushLogs();
                     }));
 
+                // local naa
+                var getLocalNetworkAccessAccounts = new Command("naa", "Get network access accounts stored locally in the WMI repository (requires admin privileges)");
+                localCommand.Add(getLocalNetworkAccessAccounts);
+                getLocalNetworkAccessAccounts.Add(new Argument<string>("method", "The method of obtaining the DPAPI-protected blobs: wmi or disk (note that the disk method can retrieve secrets that were changed or deleted"));
+                getLocalNetworkAccessAccounts.Add(new Option<bool>(new[] { "--get-system", "-s" }, "Escalate to SYSTEM via token duplication (default is to modify and revert the permissions on the LSA secrets registry key)"));
+                getLocalNetworkAccessAccounts.Handler = CommandHandler.Create(
+                    (string method, bool getSystem) =>
+                    {
+                        // default to registry permission modification
+                        bool reg = true ? !getSystem : false;
+
+                        if (Helpers.IsHighIntegrity())
+                        {
+                            if (method == "wmi")
+                            {
+                                Credentials.LocalNetworkAccessAccountsWmi(reg);
+                            }
+                            else if (method == "disk")
+                            {
+                                Credentials.LocalSecretsDisk("all", reg);
+                            }
+                            else
+                            {
+                                Console.WriteLine("[!] A method (wmi or disk) is required");
+                            }
+                        }
+                        else
+                        {
+                            Console.WriteLine("[!] SharpSCCM must be run with local administrator privileges to retrieve policy secret blobs\n");
+                        }
+                    });
+
                 // local secrets
                 var getLocalSecrets = new Command("secrets", "Get policy secrets (e.g., network access accounts, task sequences, and collection variables) stored locally in the WMI repository (requires admin privileges)");
                 localCommand.Add(getLocalSecrets);
-                getLocalSecrets.Add(new Argument<string>("method", "The method of obtaining the DPAPI blob: wmi or disk"));
+                getLocalSecrets.Add(new Argument<string>("method", "The method of obtaining the DPAPI-protected blobs: wmi or disk (note that the disk method can retrieve secrets that were changed or deleted"));
                 getLocalSecrets.Add(new Option<bool>(new[] { "--get-system", "-s" }, "Escalate to SYSTEM via token duplication (default is to modify and revert the permissions on the LSA secrets registry key)"));
                 getLocalSecrets.Handler = CommandHandler.Create(
                     (string method, bool getSystem) =>
                     {
                         // default to registry permission modification
                         bool reg = true ? !getSystem : false;
-                        if (method == "wmi")
+
+                        if (Helpers.IsHighIntegrity())
                         {
-                            Credentials.LocalSecretsWmi(reg);
-                        }
-                        else if (method == "disk")
-                        {
-                            Credentials.LocalSecretsDisk(reg);
+                            if (method == "wmi")
+                            {
+                                Credentials.LocalSecretsWmi(reg);
+                            }
+                            else if (method == "disk")
+                            {
+                                Credentials.LocalSecretsDisk("all", reg);
+                            }
+                            else
+                            {
+                                Console.WriteLine("[!] A method (wmi or disk) is required");
+                            }
                         }
                         else
                         {
-                            Console.WriteLine("[!] A method (wmi or disk) is required!");
+                            Console.WriteLine("[!] SharpSCCM must be run with local administrator privileges to retrieve policy secret blobs\n");
                         }
                     });
 
                 // local siteinfo
-                var localSiteInfo = new Command("siteinfo", "Get the primary Management Point and Site Code for the local host");
+                var localSiteInfo = new Command("siteinfo", "Get the primary management point and site code for the local host");
                 localCommand.Add(localSiteInfo);
                 localSiteInfo.Handler = CommandHandler.Create(
                     new Action(() =>

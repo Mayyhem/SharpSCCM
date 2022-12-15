@@ -188,6 +188,11 @@ namespace SharpSCCM
                                 }
                             }
                         }
+                        Console.WriteLine("\r\n[+] SYSTEM master key cache:");
+                        foreach (KeyValuePair<string, string> kvp in mappings)
+                        {
+                            Console.WriteLine("    {0}:{1}", kvp.Key, kvp.Value);
+                        }
                     }
                     catch (Exception ex)
                     {
