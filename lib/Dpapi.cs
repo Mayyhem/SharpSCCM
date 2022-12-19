@@ -109,31 +109,25 @@ namespace SharpSCCM
                     }
                     catch (Exception e)
                     {
-                        Console.WriteLine("    [X] Error retrieving GUID:SHA1 from cache {0} : {1}", guidString, e.Message);
+                        Console.WriteLine("    [!] Error retrieving GUID:SHA1 from cache {0} : {1}", guidString, e.Message);
                     }
                 }
             }
-
             return new byte[0]; //temp
-
         }
 
-        public static Dictionary<string, string> TriageSystemMasterKeys(bool show = false, bool reg = false)
+        public static Dictionary<string, string> TriageSystemMasterKeys(bool reg)
         {
             // retrieve the DPAPI_SYSTEM key and use it to decrypt any SYSTEM DPAPI masterkeys
-
             var mappings = new Dictionary<string, string>();
-
             if (Helpers.IsHighIntegrity())
             {
                 // get the system and user DPAPI backup keys, showing the machine DPAPI keys
                 //  { machine , user }
-
                 var keys = LSADump.GetDPAPIKeys(true, reg);
-               
                 string systemFolder = "";
 
-                if (!System.Environment.Is64BitProcess)
+                if (!Environment.Is64BitProcess)
                 {
                     systemFolder = $"{Environment.GetEnvironmentVariable("SystemDrive")}\\Windows\\Sysnative\\Microsoft\\Protect\\";
                 }
@@ -163,13 +157,6 @@ namespace SharpSCCM
                                 if (!Regex.IsMatch(file,
                                         @".*\\[0-9A-Fa-f]{8}[-][0-9A-Fa-f]{4}[-][0-9A-Fa-f]{4}[-][0-9A-Fa-f]{4}[-][0-9A-Fa-f]{12}"))
                                     continue;
-
-                                var fileName = Path.GetFileName(file);
-                                if (show)
-                                {
-                                    Console.WriteLine("[*] Found SYSTEM system MasterKey : {0}", file);
-                                }
-
                                 var masteyKeyBytes = File.ReadAllBytes(file);
                                 try
                                 {
@@ -179,7 +166,7 @@ namespace SharpSCCM
                                 }
                                 catch (Exception e)
                                 {
-                                    Console.WriteLine("[X] Error triaging {0} : {1}", file, e.Message);
+                                    Console.WriteLine("[!] Error triaging {0} : {1}", file, e.Message);
                                 }
                             }
 
@@ -188,13 +175,6 @@ namespace SharpSCCM
                                 if (!Regex.IsMatch(file,
                                         @".*\\[0-9A-Fa-f]{8}[-][0-9A-Fa-f]{4}[-][0-9A-Fa-f]{4}[-][0-9A-Fa-f]{4}[-][0-9A-Fa-f]{12}"))
                                     continue;
-
-                                var fileName = Path.GetFileName(file);
-                                if (show)
-                                {
-                                    Console.WriteLine("[*] Found SYSTEM user MasterKey : {0}", file);
-                                }
-
                                 var masteyKeyBytes = File.ReadAllBytes(file);
                                 try
                                 {
@@ -204,23 +184,26 @@ namespace SharpSCCM
                                 }
                                 catch (Exception e)
                                 {
-                                    Console.WriteLine("[X] Error triaging {0} : {1}", file, e.Message);
+                                    Console.WriteLine("[!] Error triaging {0} : {1}", file, e.Message);
                                 }
                             }
+                        }
+                        Console.WriteLine("\r\n[+] SYSTEM master key cache:");
+                        foreach (KeyValuePair<string, string> kvp in mappings)
+                        {
+                            Console.WriteLine("    {0}:{1}", kvp.Key, kvp.Value);
                         }
                     }
                     catch (Exception ex)
                     {
 
                     }
-
                 }
             }
             else
             {
-                Console.WriteLine("\r\n[X] Must be elevated to triage SYSTEM masterkeys!\r\n");
+                Console.WriteLine("\r\n[!] Must be elevated to triage SYSTEM masterkeys!\r\n");
             }
-
             return mappings;
         }
 

@@ -82,6 +82,13 @@ namespace SharpSCCM
             }
         }
 
+        public static ManagementObjectCollection GetClassWmiObjects(ManagementScope wmiConnection, string className, string properties = "*")
+        {
+            ManagementObjectSearcher searcher = new ManagementObjectSearcher(wmiConnection, new ObjectQuery($"SELECT {properties} FROM {className}"));
+            ManagementObjectCollection wmiObjects = searcher.Get();
+            return wmiObjects;
+        }
+
         public static string[] GetKeyPropertyNames(ManagementScope wmiConnection, string className)
         {
             using (ManagementClass managementClass = new ManagementClass(wmiConnection, new ManagementPath(className), new ObjectGetOptions()))
@@ -130,7 +137,7 @@ namespace SharpSCCM
         {
             string path = "";
             ConnectionOptions connection = new ConnectionOptions();
-            if (server == "localhost")
+            if (server == "127.0.0.1")
             {
                 if (string.IsNullOrEmpty(wmiNamespace))
                 {

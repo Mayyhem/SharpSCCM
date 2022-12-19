@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.ObjectModel;
 using System.Linq;
 using System.Management;
 
@@ -86,6 +85,10 @@ namespace SharpSCCM
                 {
                     Console.WriteLine("[+] Automatic site-wide client push installation is enabled");
                 }
+                else if (result["PropertyName"].ToString() == "SETTINGS" && result["Value1"].ToString() != "Active")
+                {
+                    Console.WriteLine("[+] Automatic site-wide client push installation is not enabled");
+                }
                 else if (result["PropertyName"].ToString() == "ENABLEKERBEROSCHECK" && result["Value"].ToString() == "3")
                 {
                     Console.WriteLine("[+] Fallback to NTLM is enabled");
@@ -150,7 +153,7 @@ namespace SharpSCCM
             {
                 if (result["Enabled"].ToString() == "True")
                 {
-                    Console.WriteLine($"[+] The client installed flag is automatically cleared on inactive clients after {result["DeleteOlderThan"]} days, resulting in automatic reinstallation");
+                    Console.WriteLine($"[+] The client installed flag is automatically cleared on inactive clients after {result["DeleteOlderThan"]} days, resulting in reinstallation if automatic site-wide client push installation is enabled");
                 }
                 else
                 {

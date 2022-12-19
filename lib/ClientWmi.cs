@@ -11,7 +11,7 @@ namespace SharpSCCM
             string currentManagementPoint = "";
             string siteCode = "";
 
-            ManagementScope wmiConnection = MgmtUtil.NewWmiConnection("localhost");
+            ManagementScope wmiConnection = MgmtUtil.NewWmiConnection("127.0.0.1");
             string query = MgmtUtil.BuildClassInstanceQueryString(wmiConnection, "SMS_Authority", false, new[] { "CurrentManagementPoint", "Name" });
             ManagementObjectCollection classInstances = MgmtUtil.GetClassInstanceCollection(wmiConnection, "SMS_Authority", query);
             foreach (ManagementObject queryObj in classInstances)
@@ -35,7 +35,7 @@ namespace SharpSCCM
 
         public static SmsClientId GetSmsId()
         {
-            ManagementScope wmiConnection = MgmtUtil.NewWmiConnection("localhost");
+            ManagementScope wmiConnection = MgmtUtil.NewWmiConnection("127.0.0.1");
             ManagementObjectSearcher searcher = new ManagementObjectSearcher(wmiConnection, new ObjectQuery("SELECT * FROM CCM_Client"));
             string smsId = null;
             foreach (ManagementObject instance in searcher.Get())
