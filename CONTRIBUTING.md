@@ -119,10 +119,10 @@ Note that this will overwrite the old branch on the server, so make sure you are
 
 Before submitting a feature request, please:
 
-* Check the current road map under the _Projects_ tab
+* Check the current backlog under the _Projects_ tab
 * Check the _Ideas_ section under the _Discussions_ tab
 
-If your idea is already being tracked on the road map or in the ideas discussion, please feel free to comment on it to add your support. Otherwise, please submit your new idea using the _Ideas_ section of the _Discussion_ tab using the [feature request template](https://github.com/Mayyhem/SharpSCCM/blob/main/.github/ISSUE_TEMPLATE/feature_request.md).
+If your idea is already being tracked on the backlog or in the ideas discussion, please feel free to comment on it to add your support. Otherwise, please submit your new idea using the _Ideas_ section of the _Discussion_ tab using the [feature request template](https://github.com/Mayyhem/SharpSCCM/blob/main/.github/ISSUE_TEMPLATE/feature_request.md).
 
 ## Code of Conduct
 
