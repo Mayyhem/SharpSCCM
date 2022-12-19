@@ -51,7 +51,7 @@ The maintainer will respond as soon as possible. Depending on the impact and wor
 ## Development
 
 ### Lab Environment
-Microsoft’s [official lab kits](https://docs.microsoft.com/en-us/microsoft-365/enterprise/modern-desktop-deployment-and-management-lab?view=o365-worldwide) can automatically deploy a fully operational SCCM lab in Hyper-V running ConfigMgr 2103 or 2111. Using them is a great way to get started without taking a lot of time to manually deploy SCCM.
+Microsoft’s [official lab kits](https://docs.microsoft.com/en-us/microsoft-365/enterprise/modern-desktop-deployment-and-management-lab?view=o365-worldwide) can automatically deploy a fully operational SCCM lab in Hyper-V running ConfigMgr. Using them is a great way to get started without taking a lot of time to manually deploy SCCM.
 
 ### GitHub Flow
 SharpSCCM follows [GitHub flow](https://docs.github.com/en/get-started/quickstart/github-flow) to colloborate on development.
@@ -73,7 +73,7 @@ git checkout newfeature
 
 ## Pull Requests
 
-When submitting a pull request, please follow all instructions in the [pull request template](https://github.com/Mayyhem/SharpSCCM/PULL_REQUEST_TEMPLATE.md).
+When submitting a pull request, please follow all instructions in the [pull request template](https://github.com/Mayyhem/SharpSCCM/blob/main/PULL_REQUEST_TEMPLATE.md).
 
 While the prerequisites above must be satisfied prior to having your pull request reviewed, the reviewer(s) may ask you to complete additional design work, tests, or other changes before your pull request can be ultimately accepted.
 
@@ -122,9 +122,8 @@ Before submitting a feature request, please:
 * Check the current road map under the _Projects_ tab
 * Check the _Ideas_ section under the _Discussions_ tab
 
-If your idea is already being tracked on the road map or in the ideas discussion, please feel free to comment on it to add your support. Otherwise, please submit your new idea using the _Ideas_ section of the _Discussion_ tab using the [feature request template](https://github.com/Mayyhem/SharpSCCM/.github/ISSUE_TEMPLATE/feature_request.md). Please refrain from opening an issue to track feature requests while we gather community feedback and interest in the idea.
-
+If your idea is already being tracked on the road map or in the ideas discussion, please feel free to comment on it to add your support. Otherwise, please submit your new idea using the _Ideas_ section of the _Discussion_ tab using the [feature request template](https://github.com/Mayyhem/SharpSCCM/blob/main/.github/ISSUE_TEMPLATE/feature_request.md).
 
 ## Code of Conduct
 
-By participating in this project, you agree to abide by our [Code of Conduct](https://github.com/Mayyhem/SharpSCCM/CODE_OF_CONDUCT.md). We expect all contributors to follow the Code of Conduct and to treat fellow humans with respect. Please report unacceptable behavior to Chris at @_Mayyhem on Twitter or @Mayyhem in the [BloodHoundGang Slack](https://bloodhoundhq.slack.com). 
+By participating in this project, you agree to abide by our [Code of Conduct](https://github.com/Mayyhem/SharpSCCM/blob/main/CODE_OF_CONDUCT.md). We expect all contributors to follow the Code of Conduct and to treat fellow humans with respect. Please report unacceptable behavior to Chris at @_Mayyhem on Twitter or @Mayyhem in the [BloodHoundGang Slack](https://bloodhoundhq.slack.com). 
