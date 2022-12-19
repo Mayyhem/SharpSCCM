@@ -496,7 +496,7 @@ namespace SharpSCCM
                     });
 
                 // local secrets
-                var getLocalSecrets = new Command("secrets", "Get policy secrets (e.g., network access accounts, task sequences, and collection variables) stored locally in the WMI repository (requires admin privileges)");
+                var getLocalSecrets = new Command("secrets","Get policy secrets (e.g., network access accounts, task sequences, and collection variables) stored locally in the WMI repository (requires admin privileges)");
                 localCommand.Add(getLocalSecrets);
                 getLocalSecrets.Add(new Argument<string>("method", "The method of obtaining the DPAPI-protected blobs: wmi or disk (note that the disk method can retrieve secrets that were changed or deleted"));
                 getLocalSecrets.Add(new Option<bool>(new[] { "--get-system", "-s" }, "Escalate to SYSTEM via token duplication (default is to modify and revert the permissions on the LSA secrets registry key)"));

@@ -66,7 +66,7 @@ namespace SharpSCCM
                     {
                         if (matchKeyValuePair.Value.Count > 0)
                         {
-                            Console.WriteLine($"\n\n[+] Decrypting {matchKeyValuePair.Value.Count} {matchKeyValuePair.Key} secrets");
+                            Console.WriteLine($"\n[+] Decrypting {matchKeyValuePair.Value.Count} {matchKeyValuePair.Key} secrets");
 
                             for (int index = 0; index < matchKeyValuePair.Value.Count; index++)
                             {
@@ -79,7 +79,7 @@ namespace SharpSCCM
                                         if (matchKeyValuePair.Value[index].Groups[idxGroup].Name == "CollectionVariableName")
                                         {
                                             string collectionVariableValue = Dpapi.Execute(matchKeyValuePair.Value[index].Groups[idxGroup + 1].Value, masterkeys);
-                                            Console.WriteLine($"\n    CollectionVariableName: {matchKeyValuePair.Value[index].Groups[idxGroup].Value}");
+                                            Console.WriteLine($"\n    CollectionVariableName:  {matchKeyValuePair.Value[index].Groups[idxGroup].Value}");
                                             Console.WriteLine($"    CollectionVariableValue: {collectionVariableValue}");
                                         }
                                         // Add network access usernames and passwords together
@@ -89,9 +89,10 @@ namespace SharpSCCM
                                             string networkAccessPassword = Dpapi.Execute(matchKeyValuePair.Value[index].Groups[idxGroup].Value, masterkeys);
                                             Console.WriteLine($"\n    NetworkAccessUsername: {networkAccessUsername}");
                                             Console.WriteLine($"    NetworkAccessPassword: {networkAccessPassword}");
-
-                                            //secrets.Add(new KeyValuePair<string, string>("\n    " + matchKeyValuePair.Value[index].Groups[idxGroup + 1].Name, secretPlaintext));
-                                            //secrets.Add(new KeyValuePair<string, string>(matchKeyValuePair.Value[index].Groups[idxGroup].Name, secretPlaintext));
+                                            if (networkAccessUsername.StartsWith("00 00 0E 0E 0E") || networkAccessPassword.StartsWith("00 00 0E 0E 0E"))
+                                            {
+                                                Console.WriteLine("    [!] At the point in time this secret was downloaded, SCCM was configured to use the client's machine account instead of NAA");
+                                            }
                                         }
                                         else if (matchKeyValuePair.Value[index].Groups[idxGroup].Name == "CollectionVariableValue" || matchKeyValuePair.Value[index].Groups[idxGroup].Name == "NetworkAccessUsername")
                                         {
@@ -111,9 +112,8 @@ namespace SharpSCCM
                                     }
                                     catch (Exception e)
                                     {
-                                        Console.WriteLine("\n[!] Data was not decrypted");
-                                        Console.WriteLine(e.ToString());
-                                        Console.WriteLine($"[!] Data: {matchKeyValuePair.Value[index].Groups[idxGroup].Value}");
+                                        Console.WriteLine("\n[!] Data was not decrypted\n");
+                                        Console.WriteLine($"    Protected data: {matchKeyValuePair.Value[index].Groups[idxGroup].Value}");
                                     }
                                 }
                             }
@@ -129,11 +129,12 @@ namespace SharpSCCM
             {
                 Console.WriteLine("\n[!] OBJECTS.DATA does not exist or is not readable\n");
             }
+            Console.WriteLine();
         }
 
         public static void DecryptLocalCollectionVariablesWmi(ManagementObjectCollection collectionVariables, Dictionary<string, string> masterkeys)
         {
-            Console.WriteLine("\n[+] Decrypting collection variables\n");
+            Console.WriteLine("[+] Decrypting collection variables\n");
             foreach (ManagementObject collectionVariable in collectionVariables)
             {
                 string collectionVariableName = collectionVariable["Name"].ToString();
@@ -141,20 +142,21 @@ namespace SharpSCCM
                 try
                 {
                     string plaintextCollectionVariableValue = Dpapi.Execute(protectedCollectionVariableValue, masterkeys);
-                    Console.WriteLine("    Collection variable name: {0}", collectionVariableName);
-                    Console.WriteLine("             Plaintext value: {0}", plaintextCollectionVariableValue);
+                    Console.WriteLine("    CollectionVariableName:  {0}", collectionVariableName);
+                    Console.WriteLine("    CollectionVariableValue: {0}", plaintextCollectionVariableValue);
                 }
                 catch (Exception e)
                 {
-                    Console.WriteLine("[!] Data was not decrypted. An error occurred.");
-                    Console.WriteLine(e.ToString());
+                    Console.WriteLine("[!] Data was not decrypted\n");
+                    Console.WriteLine("    CollectionVariableName:  {0}", collectionVariableName);
+                    Console.WriteLine("    Protected CollectionVar: {0}", protectedCollectionVariableValue);
                 }
             }
         }
 
         public static void DecryptLocalNetworkAccessAccountsWmi(ManagementObjectCollection networkAccessAccounts, Dictionary<string, string> masterkeys)
         {
-            Console.WriteLine("\n[+] Decrypting network access account credentials\n");
+            Console.WriteLine("[+] Decrypting network access account credentials\n");
             foreach (ManagementObject account in networkAccessAccounts)
             {
                 string protectedUsername = account["NetworkAccessUsername"].ToString().Split('[')[2].Split(']')[0];
@@ -174,21 +176,23 @@ namespace SharpSCCM
                     }
                     else
                     {
-                        Console.WriteLine("    Plaintext NAA Username: {0}", username);
-                        Console.WriteLine("    Plaintext NAA Password: {0}", password);
+                        Console.WriteLine("    NetworkAccessUsername: {0}", username);
+                        Console.WriteLine("    NetworkAccessPassword: {0}", password);
+                        Console.WriteLine();
                     }
                 }
                 catch (Exception e)
                 {
-                    Console.WriteLine("[!] Data was not decrypted. An error occurred.");
-                    Console.WriteLine(e.ToString());
+                    Console.WriteLine("[!] Data was not decrypted\n");
+                    Console.WriteLine("    Protected NetworkAccessUsername: {0}", protectedUsername);
+                    Console.WriteLine("    Protected NetworkAccessPassword: {0}", protectedPassword);
                 }
             }
         }
 
         public static void DecryptLocalTaskSequencesWmi(ManagementObjectCollection taskSequences, Dictionary<string, string> masterkeys)
         {
-            Console.WriteLine("\n[+] Decrypting task sequences\n");
+            Console.WriteLine("[+] Decrypting task sequences\n");
             foreach (ManagementObject taskSequence in taskSequences)
             {
                 string protectedTaskSequenceValue = taskSequence["TS_Sequence"].ToString().Split('[')[2].Split(']')[0];
@@ -199,8 +203,8 @@ namespace SharpSCCM
                 }
                 catch (Exception e)
                 {
-                    Console.WriteLine("[!] Data was not decrypted. An error occurred.");
-                    Console.WriteLine(e.ToString());
+                    Console.WriteLine("[!] Data was not decrypted\n");
+                    Console.WriteLine("    Protected task sequence: {0}", protectedTaskSequenceValue);
                 }
             }
         }
@@ -250,7 +254,6 @@ namespace SharpSCCM
                 {
                     Console.WriteLine("[+] No network access accounts were found");
                 }
-                Console.WriteLine();
                 if (taskSequences.Count > 0)
                 {
                     DecryptLocalTaskSequencesWmi(taskSequences, masterkeys);
@@ -267,7 +270,7 @@ namespace SharpSCCM
                 {
                     Console.WriteLine("[+] No collection variables were found");
                 }
-                Console.WriteLine("\n");
+                Console.WriteLine();
             }
             else
             {
