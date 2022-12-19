@@ -22,5 +22,6 @@ Please describe the tests that you ran to verify your changes and confirm that n
 ### Bonus Points:
 
 - [ ] I have commented my code, particularly in hard-to-understand areas
+- [ ] I have incremented the build/revision number in https://github.com/Mayyhem/SharpSCCM/blob/main/Properties/AssemblyInfo.cs
 - [ ] I have made corresponding changes to the documentation
 - [ ] I have added unit tests that prove my fix is effective or that my feature works
