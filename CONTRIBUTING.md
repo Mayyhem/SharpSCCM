@@ -58,7 +58,7 @@ SharpSCCM follows [GitHub flow](https://docs.github.com/en/get-started/quickstar
 
 You will need to fork the main repository to work on your changes. Simply navigate to our GitHub page and click the "Fork" button at the top. Once you've forked the repository, you can clone your new repository and start making edits.
 
-In git it is best to isolate each topic or feature into a “topic branch”. While individual commits allow you control over how small individual changes are made to the code, branches are a great way to group a set of commits all related to one feature together, or to isolate different efforts when you might be working on multiple topics at the same time. A topic branch should be limited in scope to a single issue.
+It is best to isolate each topic or feature into a “feature branch”. While individual commits allow you control over how small individual changes are made to the code, branches are a great way to group a set of commits all related to one feature together, or to isolate different efforts when you might be working on multiple topics at the same time. A feature branch should be limited in scope to a single issue.
 
 ```
 # Checkout the main branch - you want your new branch to come from main
@@ -73,20 +73,17 @@ git checkout newfeature
 
 ## Pull Requests
 
-When submitting a pull request, please:
-
-* follow all instructions in the [pull request template](https://github.com/Mayyhem/SharpSCCM/PULL_REQUEST_TEMPLATE.md).
-* follow the [style guide](https://github.com/Mayyhem/SharpSCCM/wiki).
+When submitting a pull request, please follow all instructions in the [pull request template](https://github.com/Mayyhem/SharpSCCM/PULL_REQUEST_TEMPLATE.md).
 
 While the prerequisites above must be satisfied prior to having your pull request reviewed, the reviewer(s) may ask you to complete additional design work, tests, or other changes before your pull request can be ultimately accepted.
 
-When you are ready to generate a pull request, either for preliminary review, or for consideration of merging into the project you must first push your local topic branch back up to GitHub:
+When you are ready to generate a pull request, either for preliminary review, or for consideration of merging into the project you must first push your local feature branch back up to GitHub:
 
 ```
 git push origin newfeature
 ```
 
-Once you've committed and pushed all of your changes to GitHub, go to the page for your fork on GitHub, select your development branch, and click the pull request button. If you need to make any adjustments to your pull request, just push the updates to your branch. Your pull request will automatically track the changes on your development branch and update.
+Once you've committed and pushed all of your changes to GitHub, go to the page for your fork on GitHub, select your feature branch, and click the pull request button. If you need to make any adjustments to your pull request, just push the updates to your branch. Your pull request will automatically track the changes on your development branch and update.
 
 ### Review Process
 The maintainer looks at pull requests on a regular basis, typically within two weeks. After feedback has been given we expect responses within two weeks. After two weeks we may close the pull request if it isn't showing any activity.
@@ -99,7 +96,7 @@ If a maintainer asks you to "rebase" your PR, they're saying that a lot of code 
 To update your forked repository, follow these steps:
 
 ```
-# Fetch upstream master and merge with your repo's master branch
+# Fetch upstream main and merge with your repo's main branch
 git fetch upstream
 git checkout main	
 git merge upstream/main
