@@ -107,9 +107,9 @@ namespace SharpSCCM
 
                         return Crypto.DecryptBlob(dataBytes, finalKeyBytes, algCrypt);
                     }
-                    catch (Exception e)
+                    catch (Exception ex)
                     {
-                        Console.WriteLine("    [!] Error retrieving GUID:SHA1 from cache {0} : {1}", guidString, e.Message);
+                        Console.WriteLine("    [!] Error retrieving GUID:SHA1 from cache {0} : {1}", guidString, ex.Message);
                     }
                 }
             }
@@ -164,9 +164,9 @@ namespace SharpSCCM
                                     var plaintextMasterkey = Dpapi.DecryptMasterKeyWithSha(masteyKeyBytes, keys[0]);
                                     mappings.Add(plaintextMasterkey.Key, plaintextMasterkey.Value);
                                 }
-                                catch (Exception e)
+                                catch (Exception ex)
                                 {
-                                    Console.WriteLine("[!] Error triaging {0} : {1}", file, e.Message);
+                                    Console.WriteLine("[!] Error triaging {0} : {1}", file, ex.Message);
                                 }
                             }
 
@@ -182,9 +182,9 @@ namespace SharpSCCM
                                     var plaintextMasterKey = Dpapi.DecryptMasterKeyWithSha(masteyKeyBytes, keys[1]);
                                     mappings.Add(plaintextMasterKey.Key, plaintextMasterKey.Value);
                                 }
-                                catch (Exception e)
+                                catch (Exception ex)
                                 {
-                                    Console.WriteLine("[!] Error triaging {0} : {1}", file, e.Message);
+                                    Console.WriteLine("[!] Error triaging {0} : {1}", file, ex.Message);
                                 }
                             }
                         }
@@ -194,7 +194,7 @@ namespace SharpSCCM
                             Console.WriteLine("    {0}:{1}", kvp.Key, kvp.Value);
                         }
                     }
-                    catch (Exception ex)
+                    catch (Exception)
                     {
 
                     }

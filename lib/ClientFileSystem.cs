@@ -37,7 +37,7 @@ namespace SharpSCCM
                 // Check if writing is allowed
                 return rules.OfType<FileSystemAccessRule>().Any(r => (groups.Contains(r.IdentityReference) || r.IdentityReference.Value == sidCurrentUser) && r.AccessControlType == AccessControlType.Allow && (r.FileSystemRights & fileSystemRights) == fileSystemRights);
             }
-            catch (UnauthorizedAccessException e)
+            catch (UnauthorizedAccessException)
             {
                 return false;
             }
@@ -88,17 +88,17 @@ namespace SharpSCCM
                     }
                 }
             }
-            catch (FileNotFoundException e)
+            catch (FileNotFoundException ex)
             {
-                Console.WriteLine($"[!] {e.Message}");
+                Console.WriteLine($"[!] {ex.Message}");
             }
-            catch (UnauthorizedAccessException e)
+            catch (UnauthorizedAccessException ex)
             {
-                Console.WriteLine($"[!] {e.Message}");
+                Console.WriteLine($"[!] {ex.Message}");
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
-                Console.WriteLine(e);
+                Console.WriteLine(ex);
             }
         }
 
@@ -133,9 +133,9 @@ namespace SharpSCCM
                     }
                 }
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
-                Console.WriteLine(e.Message);
+                Console.WriteLine(ex.Message);
             }
         }
 
@@ -173,9 +173,9 @@ namespace SharpSCCM
                     }
                 }
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
-                Console.WriteLine(e.Message);
+                Console.WriteLine(ex.Message);
             }
         }
 

@@ -110,7 +110,7 @@ namespace SharpSCCM
                                             matches["other"].RemoveAll(item1 => matchKeyValuePair.Value.Any(item2 => item1.Groups.Cast<Group>().Any(group1 => item2.Groups.Cast<Group>().Any(group2 => group2.Value == group1.Value))));
                                         }
                                     }
-                                    catch (Exception e)
+                                    catch (Exception)
                                     {
                                         Console.WriteLine("\n[!] Data was not decrypted\n");
                                         Console.WriteLine($"    Protected data: {matchKeyValuePair.Value[index].Groups[idxGroup].Value}");
@@ -145,7 +145,7 @@ namespace SharpSCCM
                     Console.WriteLine("    CollectionVariableName:  {0}", collectionVariableName);
                     Console.WriteLine("    CollectionVariableValue: {0}", plaintextCollectionVariableValue);
                 }
-                catch (Exception e)
+                catch (Exception)
                 {
                     Console.WriteLine("[!] Data was not decrypted\n");
                     Console.WriteLine("    CollectionVariableName:  {0}", collectionVariableName);
@@ -181,7 +181,7 @@ namespace SharpSCCM
                         Console.WriteLine();
                     }
                 }
-                catch (Exception e)
+                catch (Exception)
                 {
                     Console.WriteLine("[!] Data was not decrypted\n");
                     Console.WriteLine("    Protected NetworkAccessUsername: {0}", protectedUsername);
@@ -201,7 +201,7 @@ namespace SharpSCCM
                     string plaintextTaskSequenceValue = Dpapi.Execute(protectedTaskSequenceValue, masterkeys);
                     Console.WriteLine("    Plaintext task sequence: {0}", plaintextTaskSequenceValue);
                 }
-                catch (Exception e)
+                catch (Exception)
                 {
                     Console.WriteLine("[!] Data was not decrypted\n");
                     Console.WriteLine("    Protected task sequence: {0}", protectedTaskSequenceValue);

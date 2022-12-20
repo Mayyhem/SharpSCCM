@@ -104,9 +104,9 @@ namespace SharpSCCM
                     }
                 }
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
-                Console.WriteLine("[X] Error parsing masterkey file '{0}' : {1}", masterkey, e.Message);
+                Console.WriteLine("[X] Error parsing masterkey file '{0}' : {1}", masterkey, ex.Message);
             }
 
             return masterkeys;
@@ -154,9 +154,9 @@ namespace SharpSCCM
                         }
                     }
                 }
-                catch (Exception e)
+                catch (Exception ex)
                 {
-                    Console.WriteLine("[X] Error parsing masterkey file '{0}' : {1}", filePath, e.Message);
+                    Console.WriteLine("[X] Error parsing masterkey file '{0}' : {1}", filePath, ex.Message);
                 }
             }
             else
