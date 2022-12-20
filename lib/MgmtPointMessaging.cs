@@ -68,7 +68,7 @@ namespace SharpSCCM
                 string decryptedPolicyBody = Encoding.ASCII.GetString(pkcs7EnvelopedCms.ContentInfo.Content).Replace("\0", string.Empty);
                 return decryptedPolicyBody;
             }
-            catch (Exception e)
+            catch (Exception)
             {
                 Console.WriteLine("[!] Could not decrypt the secret policy");
                 return null;

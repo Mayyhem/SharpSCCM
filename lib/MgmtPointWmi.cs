@@ -229,14 +229,14 @@ namespace SharpSCCM
             {
                 clientOperation.InvokeMethod("InitiateClientOperation", initiateClientOpParams, null);
             }
-            catch (ManagementException error)
+            catch (ManagementException ex)
             {
-                Console.WriteLine($"[!] An error occurred while attempting to commit the changes: {error.Message}");
+                Console.WriteLine($"[!] An error occurred while attempting to commit the changes: {ex.Message}");
                 Console.WriteLine("[!] Does your account have the correct permissions?");
             }
-            catch (Exception error)
+            catch (Exception ex)
             {
-                Console.WriteLine($"An unhandled exception of type {error.GetType()} occurred: {error.Message}");
+                Console.WriteLine($"An unhandled exception of type {ex.GetType()} occurred: {ex.Message}");
             }
         }
 
@@ -420,14 +420,14 @@ namespace SharpSCCM
                 {
                     application.Put();
                 }
-                catch (ManagementException error)
+                catch (ManagementException ex)
                 {
-                    Console.WriteLine($"[!] An error occurred while attempting to commit the changes: {error.Message}");
+                    Console.WriteLine($"[!] An error occurred while attempting to commit the changes: {ex.Message}");
                     Console.WriteLine("[!] Does your account have the correct permissions?");
                 }
-                catch (Exception error)
+                catch (Exception ex)
                 {
-                    Console.WriteLine($"An unhandled exception of type {error.GetType()} occurred: {error.Message}");
+                    Console.WriteLine($"An unhandled exception of type {ex.GetType()} occurred: {ex.Message}");
                 }
                 MgmtUtil.GetClassInstances(scope, "SMS_Application", false, null, $"LocalizedDisplayName='{name}'");
             }
@@ -453,14 +453,14 @@ namespace SharpSCCM
             {
                 collection.Put();
             }
-            catch (ManagementException error)
+            catch (ManagementException ex)
             {
-                Console.WriteLine($"[!] An error occurred while attempting to commit the changes: {error.Message}");
+                Console.WriteLine($"[!] An error occurred while attempting to commit the changes: {ex.Message}");
                 Console.WriteLine("[!] Does your account have the correct permissions?");
             }
-            catch (Exception error)
+            catch (Exception ex)
             {
-                Console.WriteLine($"An unhandled exception of type {error.GetType()} occurred: {error.Message}");
+                Console.WriteLine($"An unhandled exception of type {ex.GetType()} occurred: {ex.Message}");
             }            
             MgmtUtil.GetClassInstances(scope, "SMS_Collection", false, null, $"Name='{collectionName}'");
         }
@@ -530,14 +530,14 @@ namespace SharpSCCM
                 {
                     deployment.Put();
                 }
-                catch (ManagementException error)
+                catch (ManagementException ex)
                 {
-                    Console.WriteLine($"[!] An error occurred while attempting to commit the changes: {error.Message}");
+                    Console.WriteLine($"[!] An error occurred while attempting to commit the changes: {ex.Message}");
                     Console.WriteLine("[!] Does your account have the correct permissions?");
                 }
-                catch (Exception error)
+                catch (Exception ex)
                 {
-                    Console.WriteLine($"An unhandled exception of type {error.GetType()} occurred: {error.Message}");
+                    Console.WriteLine($"An unhandled exception of type {ex.GetType()} occurred: {ex.Message}");
                 }
                 MgmtUtil.GetClassInstances(scope, "SMS_ApplicationAssignment", false, null, $"ApplicationName='{application}' AND CollectionName='{collection}'");
             }

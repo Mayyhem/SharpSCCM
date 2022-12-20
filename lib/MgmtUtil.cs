@@ -49,23 +49,27 @@ namespace SharpSCCM
         public static ManagementObjectCollection GetClassInstanceCollection(ManagementScope scope, string wmiClass, string query)
         {
             ManagementObjectCollection classInstances = null;
+            Console.WriteLine($"[+] Executing WQL query: {query}");
+            ObjectQuery objQuery = new ObjectQuery(query);
+            ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, objQuery);
+            classInstances = searcher.Get();
+
             try
             {
-                Console.WriteLine($"[+] Executing WQL query: {query}");
-                ObjectQuery objQuery = new ObjectQuery(query);
-                ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, objQuery);
-                classInstances = searcher.Get();
-                
+                if (classInstances.Count > 0)
+                {
+                    return classInstances;
+                }
+                else
+                {
+                    Console.WriteLine($"[+] No instances of {wmiClass} were found");
+                }
             }
-            catch (ManagementException error)
+            catch (ManagementException ex)
             {
-                Console.WriteLine("An error occurred while querying for WMI data: " + error.Message);
+                Console.WriteLine($"[!] An error occurred while querying for WMI data: {ex.Message}");
             }
-            catch (Exception error)
-            {
-                Console.WriteLine($"An unhandled exception of type {error.GetType()} occurred: {error.Message}");
-            }
-            return classInstances;
+            return null;
         }
 
         public static void GetClassInstances(ManagementScope scope, string wmiClass, bool count = false, string[] properties = null, string whereCondition = null, string orderByColumn = null, bool dryRun = false, bool verbose = false, bool getLazyProps = true)
@@ -91,17 +95,25 @@ namespace SharpSCCM
 
         public static string[] GetKeyPropertyNames(ManagementScope wmiConnection, string className)
         {
-            using (ManagementClass managementClass = new ManagementClass(wmiConnection, new ManagementPath(className), new ObjectGetOptions()))
+            try
             {
-                return managementClass.Properties
-                    .Cast<PropertyData>()
-                    .Where(
-                        property => property.Qualifiers
-                            .Cast<QualifierData>()
-                            .Any(qualifier => string.Equals(qualifier.Name, "Key", StringComparison.OrdinalIgnoreCase))
-                    )
-                    .Select(property => property.Name)
-                    .ToArray();
+                using (ManagementClass managementClass = new ManagementClass(wmiConnection, new ManagementPath(className), new ObjectGetOptions()))
+                {
+                    return managementClass.Properties
+                        .Cast<PropertyData>()
+                        .Where(
+                            property => property.Qualifiers
+                                .Cast<QualifierData>()
+                                .Any(qualifier => string.Equals(qualifier.Name, "Key", StringComparison.OrdinalIgnoreCase))
+                        )
+                        .Select(property => property.Name)
+                        .ToArray();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[!] An exception occurred getting properties for {className}: {ex.Message}");
+                return new string[0];
             }
         }
 
@@ -123,13 +135,13 @@ namespace SharpSCCM
                     Console.WriteLine("-----------------------------------");
                 }
             }
-            catch (ManagementException error)
+            catch (ManagementException ex)
             {
-                Console.WriteLine("An error occurred while querying for WMI data: " + error.Message);
+                Console.WriteLine("An error occurred while querying for WMI data: " + ex.Message);
             }
-            catch (Exception error)
+            catch (Exception ex)
             {
-                Console.WriteLine($"An unhandled exception of type {error.GetType()} occurred: {error.Message}");
+                Console.WriteLine($"An unhandled exception of type {ex.GetType()} occurred: {ex.Message}");
             }
         }
 
@@ -188,22 +200,22 @@ namespace SharpSCCM
                 
             }
             ManagementScope wmiConnection = new ManagementScope(path, connection);
+            Console.WriteLine($"[+] Connecting to {wmiConnection.Path}");
             try
             {
-                Console.WriteLine($"[+] Connecting to {wmiConnection.Path}");
                 wmiConnection.Connect();
             }
-            catch (UnauthorizedAccessException error)
+            catch (UnauthorizedAccessException ex)
             {
-                Console.WriteLine("[!] Access to WMI was not authorized (user name or password might be incorrect): " + error.Message);
+                Console.WriteLine("[!] Access to WMI was not authorized (user name or password might be incorrect): " + ex.Message);
             }
-            catch (ManagementException error)
+            catch (ManagementException ex)
             {
-                Console.WriteLine("[!] Access to WMI was not authorized (user name or password might be incorrect): " + error.Message);
+                Console.WriteLine("[!] Access to WMI was not authorized (user name or password might be incorrect): " + ex.Message);
             }
-            catch (Exception error)
+            catch (Exception ex)
             {
-                Console.WriteLine($"An unhandled exception of type {error.GetType()} occurred: {error.Message}");
+                Console.WriteLine($"An unhandled exception of type {ex.GetType()} occurred: {ex.Message}");
             }
             return wmiConnection;
         }
@@ -227,66 +239,69 @@ namespace SharpSCCM
 
         public static void PrintClassInstances(ManagementScope scope, string wmiClass, string query, ManagementObjectCollection classInstanceCollection, bool count = false, string[] properties = null, bool verbose = false, bool getLazyProps = true)
         {
-            Console.WriteLine("-----------------------------------");
-            Console.WriteLine(wmiClass);
-            Console.WriteLine("-----------------------------------");
-            foreach (ManagementObject queryObj in classInstanceCollection)
+            if (classInstanceCollection != null)
             {
-                // Get lazy properties unless we're just counting instances or we explicitly don't want lazy props
-                if (!count && getLazyProps)
+                Console.WriteLine("-----------------------------------");
+                Console.WriteLine(wmiClass);
+                Console.WriteLine("-----------------------------------");
+                foreach (ManagementObject queryObj in classInstanceCollection)
                 {
-                    try
+                    // Get lazy properties unless we're just counting instances or we explicitly don't want lazy props
+                    if (!count && getLazyProps)
                     {
-                        queryObj.Get();
-                    }
-                    catch (Exception error)
-                    {
-                        Console.WriteLine($"An unhandled exception of type {error.GetType().ToString()} occurred: {error.Message}");
-                    }
-                }
-                foreach (PropertyData prop in queryObj.Properties)
-                {
-                    // Print default properties if none specified, named properties if specified, or all properties if verbose
-                    if (properties == null || properties.Length == 0 || properties.Contains(prop.Name) || count || verbose)
-                    {
-                        if (prop.IsArray)
+                        try
                         {
-                            // Test to see if we can display property values as strings, otherwise bail. Byte[] (e.g., Device.ObjectGUID) breaks things, Object[] (e.g., Collection.CollectionRules, Collection.RefreshSchedule) breaks things
-                            if (prop.Value is String[])
+                            queryObj.Get();
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"An unhandled exception of type {ex.GetType().ToString()} occurred: {ex.Message}");
+                        }
+                    }
+                    foreach (PropertyData prop in queryObj.Properties)
+                    {
+                        // Print default properties if none specified, named properties if specified, or all properties if verbose
+                        if (properties == null || properties.Length == 0 || properties.Contains(prop.Name) || count || verbose)
+                        {
+                            if (prop.IsArray)
                             {
-                                String[] nestedValues = (String[])(prop.Value);
-                                Console.WriteLine($"{prop.Name}: {string.Join(", ", nestedValues)}");
-                            }
-                            else if (prop.Value is int[])
-                            {
-                                int[] nestedValues = (int[])(prop.Value);
-                                string[] nestedValueStrings = nestedValues.Select(x => x.ToString()).ToArray();
-                                Console.WriteLine($"{prop.Name}: {string.Join(", ", nestedValueStrings)}");
-                            }
-                            else if (prop.Value == null)
-                            {
-                                Console.WriteLine($"{prop.Name}: Empty");
-                            }
-                            else
-                            {
-                                string canConvertToString = prop.Value as string;
-                                if (canConvertToString != null)
+                                // Test to see if we can display property values as strings, otherwise bail. Byte[] (e.g., Device.ObjectGUID) breaks things, Object[] (e.g., Collection.CollectionRules, Collection.RefreshSchedule) breaks things
+                                if (prop.Value is String[])
                                 {
-                                    Console.WriteLine($"{prop.Name}: {canConvertToString}");
+                                    String[] nestedValues = (String[])(prop.Value);
+                                    Console.WriteLine($"{prop.Name}: {string.Join(", ", nestedValues)}");
+                                }
+                                else if (prop.Value is int[])
+                                {
+                                    int[] nestedValues = (int[])(prop.Value);
+                                    string[] nestedValueStrings = nestedValues.Select(x => x.ToString()).ToArray();
+                                    Console.WriteLine($"{prop.Name}: {string.Join(", ", nestedValueStrings)}");
+                                }
+                                else if (prop.Value == null)
+                                {
+                                    Console.WriteLine($"{prop.Name}: Empty");
                                 }
                                 else
                                 {
-                                    Console.WriteLine($"{prop.Name}: Can't display {prop.Type.ToString()} as a String");
+                                    string canConvertToString = prop.Value as string;
+                                    if (canConvertToString != null)
+                                    {
+                                        Console.WriteLine($"{prop.Name}: {canConvertToString}");
+                                    }
+                                    else
+                                    {
+                                        Console.WriteLine($"{prop.Name}: Can't display {prop.Type.ToString()} as a String");
+                                    }
                                 }
                             }
-                        }
-                        else
-                        {
-                            Console.WriteLine("{0}: {1}", prop.Name, prop.Value);
+                            else
+                            {
+                                Console.WriteLine("{0}: {1}", prop.Name, prop.Value);
+                            }
                         }
                     }
+                    Console.WriteLine("-----------------------------------");
                 }
-                Console.WriteLine("-----------------------------------");
             }
         }
 

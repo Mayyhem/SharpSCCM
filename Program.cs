@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.CommandLine;
 using System.CommandLine.Builder;
 using System.CommandLine.NamingConventionBinder;
@@ -105,9 +104,7 @@ namespace SharpSCCM
                 getCommand.AddGlobalOption(new Option<string>(new[] { "--server", "-mp" }, "The IP address, FQDN, or NetBIOS name of the Configuration Manager management point server to connect to (default: the current management point of the client running SharpSCCM)"));
                 getCommand.AddGlobalOption(new Option<string>(new[] { "--site-code", "-sc" }, "The three character site code of the Configuration Manager server (e.g., PS1) (default: the site code of the client running SharpSCCM)"));
                 getCommand.AddGlobalOption(new Option<bool>(new[] { "--verbose", "-v" }, "Display all class properties and their values (default: false)"));
-                Option whereOption = new Option<string>(new[] { "--where", "-w" }, "A WHERE condition to narrow the scope of data returned by the query (e.g., \"Name='cave.johnson'\" or \"Name LIKE '%cave%'\")");
-                whereOption.AddAlias("whereCondition");
-                getCommand.AddGlobalOption(whereOption);
+                getCommand.AddGlobalOption(new Option<string>(new[] { "--where-condition", "-w" }, "A WHERE condition to narrow the scope of data returned by the query (e.g., \"Name='cave.johnson'\" or \"Name LIKE '%cave%'\")"));
 
                 // get application
                 var getApplication = new Command("application", "Get information on applications");
@@ -147,7 +144,6 @@ namespace SharpSCCM
                 getClassInstances.Handler = CommandHandler.Create(
                     (string server, string siteCode, bool count, string wmiNamespace, string wmiClass, string[] properties, string whereCondition, string orderBy, bool dryRun, bool verbose) =>
                     {
-                        Console.WriteLine($"where: {whereCondition}");
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, wmiNamespace, siteCode);
                         if (properties.Length == 0)
                         {
@@ -380,6 +376,10 @@ namespace SharpSCCM
 
                 // local
                 var localCommand = new Command("local", "A group of commands to interact with the local workstation/server");
+                localCommand.AddGlobalOption(new Option<bool>(new[] { "--dry-run", "-d" }, "Display the resulting WQL query but do not connect to the specified server and execute it"));
+                localCommand.AddGlobalOption(new Option<string[]>(new[] { "--properties", "-p" }, "A space-separated list of properties to query (e.g., \"IsActive UniqueUserName\"") { Arity = ArgumentArity.OneOrMore });
+                localCommand.AddGlobalOption(new Option<bool>(new[] { "--verbose", "-v" }, "Display all class properties and their values (default: false)"));
+                localCommand.AddGlobalOption(new Option<string>(new[] { "--where-condition", "-w" }, "A WHERE condition to narrow the scope of data returned by the query (e.g., \"Name='cave.johnson'\" or \"Name LIKE '%cave%'\")"));
                 rootCommand.Add(localCommand);
 
                 // local class-instances
@@ -671,14 +671,14 @@ namespace SharpSCCM
                     Trace.Close();
                 }
             }
-            catch (Exception error)
+            catch (Exception ex)
             {
-                Console.WriteLine($"[!] An unhandled exception of type {error.GetType()} occurred: {error.Message}");
+                Console.WriteLine($"[!] An unhandled exception of type {ex.GetType()} occurred: {ex.Message}");
                 if (debug)
                 {
-                    Console.WriteLine(error.StackTrace);
+                    Console.WriteLine(ex.StackTrace);
                     Console.WriteLine();
-                    Console.WriteLine(error.InnerException);
+                    Console.WriteLine(ex.InnerException);
                 }
             }
         }   
