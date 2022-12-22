@@ -42,6 +42,8 @@ namespace SharpSCCM
             certRequest.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(new OidCollection { new Oid("1.3.6.1.4.1.311.101.2"), new Oid("1.3.6.1.4.1.311.101") }, true));
             X509Certificate2 certificate2 = certRequest.CreateSelfSigned(DateTimeOffset.Now, DateTimeOffset.Now.AddYears(1));
             certificate2.FriendlyName = $"{subjectName}";
+            var mycert = certificate2.Export(X509ContentType.Pfx, string.Empty);
+            Console.WriteLine($"Cert saved to store:\n\n{Helpers.ByteArrayToString(mycert)}\n");
             X509Certificate2 exportedCert = new X509Certificate2(certificate2.Export(X509ContentType.Pfx, string.Empty), string.Empty, X509KeyStorageFlags.PersistKeySet | X509KeyStorageFlags.Exportable);
             Console.WriteLine($"[+] Created \"{subjectName}\" certificate in memory for device registration and signing/encrypting subsequent messages");
             if (store)
@@ -50,10 +52,10 @@ namespace SharpSCCM
                 x509Store.Open(OpenFlags.MaxAllowed);
                 x509Store.Add(exportedCert);
                 Console.WriteLine($"[+] Wrote \"{subjectName}\" certificate to {x509Store.Name} store for {x509Store.Location}");
-                File.WriteAllBytes("C:\\Users\\LabAdmin\\Desktop\\myCert.pfx", exportedCert.GetRawCertData());
+                //File.WriteAllBytes("C:\\Users\\LabAdmin\\Desktop\\myCert.pfx", exportedCert.GetRawCertData());
             }
             MessageCertificateX509Volatile certificate = new MessageCertificateX509Volatile(exportedCert);
-            Console.WriteLine($"\n    {exportedCert.GetRawCertDataString()}\n");
+            Console.WriteLine($"Exported cert:\n\n    {exportedCert.GetRawCertDataString()}\n");
             return certificate;   
         }
 
@@ -118,7 +120,7 @@ namespace SharpSCCM
                 //X509Certificate certFromFile = X509Certificate2.CreateFromCertFile("C:\\Users\\LabAdmin\\Desktop\\myCert.pfx");
                 //X509Certificate2 importedCertificate = new X509Certificate2(certFromFile);
                 //importedCertificate.Import(Helpers.StringToByteArray(encodedCertificate), string.Empty, X509KeyStorageFlags.PersistKeySet | X509KeyStorageFlags.Exportable);
-
+                /*
                 X509Store store = new X509Store(StoreName.My, StoreLocation.CurrentUser);
                 store.Open(OpenFlags.ReadOnly);
                 X509Certificate2Collection certificates = store.Certificates.Find(
@@ -134,9 +136,30 @@ namespace SharpSCCM
                         break;
                     }
                 }
+                Console.WriteLine($"Cert from store:\n\n    {importedCertificate.GetRawCertDataString()}\n");
+                */
+                
+                X509Certificate2 importedCertificate2 = new X509Certificate2(Helpers.StringToByteArray(encodedCertificate), string.Empty, X509KeyStorageFlags.PersistKeySet | X509KeyStorageFlags.Exportable);
+                var x509Store = new X509Store("My", StoreLocation.CurrentUser);
+                x509Store.Open(OpenFlags.MaxAllowed);
+                x509Store.Add(importedCertificate2);
+
+                X509Certificate2Collection certificates = x509Store.Certificates.Find(X509FindType.FindByIssuerName, "ConfigMgr Client Messaging", false);
+
+                // Get the first certificate with a private key
+                X509Certificate2 importedCertificate = null;
+                foreach (X509Certificate2 c in certificates)
+                {
+                    if (c.HasPrivateKey)
+                    {
+                        importedCertificate = c;
+                        break;
+                    }
+                }
 
                 signingCertificate = new MessageCertificateX509Volatile(importedCertificate);
                 encryptionCertificate = signingCertificate;
+
                 clientId = new SmsClientId(providedClientId);
                 Console.WriteLine($"[+] Using provided certificate and SMS client ID: {providedClientId}");
             }
@@ -222,7 +245,7 @@ namespace SharpSCCM
                 }
             }
             // Delete the created certificate from the current user store
-            if (!string.IsNullOrEmpty(registerClient))
+            if (!string.IsNullOrEmpty(encodedCertificate) || !string.IsNullOrEmpty(registerClient))
             {
                 DeleteCertificate(signingCertificate);
             }
