@@ -277,26 +277,42 @@ namespace SharpSCCM
                 // get secrets
                 var getSecretsFromPolicy = new Command("secrets", "Request the machine policy from a management point to obtain credentials for network access accounts, collection variables, and task sequences");
                 getCommand.Add(getSecretsFromPolicy);
-                getSecretsFromPolicy.Add(new Option<bool>(new[] { "-cert", "-c" }, "Use the local client's certificate to authenticate to the management point"));
-
+                getSecretsFromPolicy.Add(new Option<string>(new[] { "--certificate", "-x" }, "The encoded X509 certificate blob to use that corresponds to a previously registered device"));
+                getSecretsFromPolicy.Add(new Option<string>(new[] { "--client-id", "-g" }, "The SMS client GUID to use that corresponds to a previously registered device and certificate"));
                 getSecretsFromPolicy.Add(new Option<string>(new[] { "--output-file", "-o" }, "The path where the policy XML will be written to"));
-
                 getSecretsFromPolicy.Add(new Option<string>(new[] { "--password", "-p" }, "The password for the specified computer account"));
-                getSecretsFromPolicy.Add(new Option<string>(new[] { "--username", "-u" }, "The name of the computer account to register a new device record for, including the trailing \"$\""));
+                getSecretsFromPolicy.Add(new Option<string>(new[] { "--register-client", "-r" }, "The name of the device to register as a new client (required when user is not a local administrator)"));
+                getSecretsFromPolicy.Add(new Option<string>(new[] { "--username", "-u" }, "The name of the computer account to register the new device record with, including the trailing \"$\""));
                 getSecretsFromPolicy.Handler = CommandHandler.Create(
-                    (string server, string siteCode, string username, string password, string outputFile, bool cert) =>
+                    (string server, string siteCode, string certificate, string clientId, string username, string password, string registerClient, string outputFile) =>
                     {
                         if (server == null || siteCode == null)
                         {
                             (server, siteCode) = ClientWmi.GetCurrentManagementPointAndSiteCode();
                         }
-                        if ((string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password)) && !cert)
+                        if (!string.IsNullOrEmpty(certificate) && !string.IsNullOrEmpty(clientId))
                         {
-                            Console.WriteLine("[!] A computer account name (-u) and password (-p) must be specified or the cert (-c) option can be used in a high integrity context");
+                            MgmtPointMessaging.GetSecretsFromPolicy(server, siteCode, certificate, clientId, null, null, null, outputFile);
+                        }
+                        else if (!string.IsNullOrEmpty(certificate) && string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(certificate) && !string.IsNullOrEmpty(clientId))
+                        {
+                            Console.WriteLine("[!] Both a certificate (-x) and SMS client GUID (-c) for a previously registered client must be specified when using this option");
+                        }
+                        else if (!string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(password) && !string.IsNullOrEmpty(registerClient))
+                        {
+                            MgmtPointMessaging.GetSecretsFromPolicy(server, siteCode, null, null, username, password, registerClient, outputFile);
+                        }
+                        else if (!string.IsNullOrEmpty(registerClient) && (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password)))
+                        {
+                            Console.WriteLine("[!] Both a computer account name (-u) and computer account password (-p) must be specified when using the register client (-r) option");
+                        }
+                        else if (Helpers.IsHighIntegrity())
+                        {
+                            MgmtPointMessaging.GetSecretsFromPolicy(server, siteCode, certificate, clientId, username, password, registerClient, outputFile);
                         }
                         else
                         {
-                            MgmtPointMessaging.GetSecretsFromPolicy(server, siteCode, username, password, outputFile, cert);
+                            Console.WriteLine("[!] A client name to register (-r), computer account name (-u), and computer account password (-p) must be specified when the user is not a local administrator");
                         }
                     });
 
@@ -307,6 +323,19 @@ namespace SharpSCCM
                     (string server, string siteCode) =>
                     {
                         MgmtPointWmi.GetSitePushSettings(server, siteCode);
+                    });
+
+                // get software
+                var getSoftware = new Command("software", "Query a management point for distribution point content locations");
+                getCommand.Add(getSoftware);
+                getSoftware.Handler = CommandHandler.Create(
+                    (string server, string siteCode) =>
+                    {
+                        if (server == null || siteCode == null)
+                        {
+                            (server, siteCode) = ClientWmi.GetCurrentManagementPointAndSiteCode();
+                        }
+                        MgmtPointMessaging.SendContentLocationRequest(server, siteCode, "CHQ00004", 2);
                     });
 
                 // invoke
@@ -333,7 +362,7 @@ namespace SharpSCCM
                             // If PKI certs are in use, borrow the client's authentication cert to update its hardware inventory
                             if (pki)
                             {
-                                MessageCertificateX509 certificate = MgmtPointMessaging.GetMachineSigningCertificate();
+                                MessageCertificateX509 certificate = MgmtPointMessaging.LocalSmsSigningCertificate();
                                 SmsClientId clientId = ClientWmi.GetSmsId();
                                 MgmtPointMessaging.SendDDR(certificate, target, server, siteCode, clientId);
                             }

