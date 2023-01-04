@@ -6,6 +6,7 @@ using System.CommandLine.Parsing;
 using System.Diagnostics;
 using System.Management;
 
+// Configuration Manager SDK
 using Microsoft.ConfigurationManagement.Messaging.Framework;
 
 namespace SharpSCCM
@@ -246,7 +247,10 @@ namespace SharpSCCM
                             properties = new[] { "Active", "ADSiteName", "Client", "DistinguishedName", "FullDomainName", "HardwareID", "IPAddresses", "IPSubnets", "IPv6Addresses", "IPv6Prefixes", "IsVirtualMachine", "LastLogonTimestamp", "LastLogonUserDomain", "LastLogonUserName", "MACAddresses", "Name", "NetbiosName", "Obsolete", "OperatingSystemNameandVersion", "PrimaryGroupID", "ResourceDomainORWorkgroup", "ResourceNames", "SID", "SMSInstalledSites", "SMSUniqueIdentifier", "SNMPCommunityName", "SystemContainerName", "SystemGroupName", "SystemOUName" };
                         }
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
-                        MgmtUtil.GetClassInstances(wmiConnection, "SMS_R_System", count, properties, whereCondition, orderBy, dryRun, verbose);
+                        if (wmiConnection != null)
+                        {
+                            MgmtUtil.GetClassInstances(wmiConnection, "SMS_R_System", count, properties, whereCondition, orderBy, dryRun, verbose);
+                        }
                     });
 
                 // get primary-user
@@ -271,7 +275,10 @@ namespace SharpSCCM
                         }
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
                         // Don't get lazy props for this function. ResourceName won't populate.
-                        MgmtUtil.GetClassInstances(wmiConnection, "SMS_UserMachineRelationship", count, properties, whereCondition, orderBy, dryRun, verbose, false); 
+                        if (wmiConnection != null)
+                        {
+                            MgmtUtil.GetClassInstances(wmiConnection, "SMS_UserMachineRelationship", count, properties, whereCondition, orderBy, dryRun, verbose, false);
+                        }
                     });
 
                 // get secrets
@@ -290,29 +297,32 @@ namespace SharpSCCM
                         {
                             (server, siteCode) = ClientWmi.GetCurrentManagementPointAndSiteCode();
                         }
-                        if (!string.IsNullOrEmpty(certificate) && !string.IsNullOrEmpty(clientId))
+                        if (!string.IsNullOrEmpty(server) && !string.IsNullOrEmpty(siteCode))
                         {
-                            MgmtPointMessaging.GetSecretsFromPolicy(server, siteCode, certificate, clientId, null, null, null, outputFile);
-                        }
-                        else if (!string.IsNullOrEmpty(certificate) && string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(certificate) && !string.IsNullOrEmpty(clientId))
-                        {
-                            Console.WriteLine("[!] Both a certificate (-x) and SMS client GUID (-c) for a previously registered client must be specified when using this option");
-                        }
-                        else if (!string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(password) && !string.IsNullOrEmpty(registerClient))
-                        {
-                            MgmtPointMessaging.GetSecretsFromPolicy(server, siteCode, null, null, username, password, registerClient, outputFile);
-                        }
-                        else if (!string.IsNullOrEmpty(registerClient) && (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password)))
-                        {
-                            Console.WriteLine("[!] Both a computer account name (-u) and computer account password (-p) must be specified when using the register client (-r) option");
-                        }
-                        else if (Helpers.IsHighIntegrity())
-                        {
-                            MgmtPointMessaging.GetSecretsFromPolicy(server, siteCode, certificate, clientId, username, password, registerClient, outputFile);
-                        }
-                        else
-                        {
-                            Console.WriteLine("[!] A client name to register (-r), computer account name (-u), and computer account password (-p) must be specified when the user is not a local administrator");
+                            if (!string.IsNullOrEmpty(certificate) && !string.IsNullOrEmpty(clientId))
+                            {
+                                MgmtPointMessaging.GetSecretsFromPolicy(server, siteCode, certificate, clientId, null, null, null, outputFile);
+                            }
+                            else if (!string.IsNullOrEmpty(certificate) && string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(certificate) && !string.IsNullOrEmpty(clientId))
+                            {
+                                Console.WriteLine("[!] Both a certificate (-x) and SMS client GUID (-c) for a previously registered client must be specified when using this option");
+                            }
+                            else if (!string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(password) && !string.IsNullOrEmpty(registerClient))
+                            {
+                                MgmtPointMessaging.GetSecretsFromPolicy(server, siteCode, null, null, username, password, registerClient, outputFile);
+                            }
+                            else if (!string.IsNullOrEmpty(registerClient) && (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password)))
+                            {
+                                Console.WriteLine("[!] Both a computer account name (-u) and computer account password (-p) must be specified when using the register client (-r) option");
+                            }
+                            else if (Helpers.IsHighIntegrity())
+                            {
+                                MgmtPointMessaging.GetSecretsFromPolicy(server, siteCode, certificate, clientId, username, password, registerClient, outputFile);
+                            }
+                            else
+                            {
+                                Console.WriteLine("[!] A client name to register (-r), computer account name (-u), and computer account password (-p) must be specified when the user is not a local administrator");
+                            }
                         }
                     });
 
@@ -337,6 +347,15 @@ namespace SharpSCCM
                         }
                         MgmtPointMessaging.SendContentLocationRequest(server, siteCode, "CHQ00004", 2);
                     });
+
+                // get user-sid
+                var getUserSid = new Command("user-sid", "Get the hex SID for the current user");
+                getCommand.Add(getUserSid);
+                getUserSid.Handler = CommandHandler.Create(
+                    new Action(() =>
+                    {
+                        Helpers.GetCurrentUserHexSid();
+                    }));
 
                 // invoke
                 var invokeCommand = new Command("invoke", "A group of commands that execute actions on the server");
@@ -596,7 +615,7 @@ namespace SharpSCCM
                     });
 
                 // new collection
-                var newCollection = new Command("collection", "Create a collection of devices or users. " +
+                var newCollection = new Command("collection", "Create a collection of devices or users" +
                     "Permitted roles:\n" +
                     "  - Full Administrator\n" +
                     "  - Operations Administrator\n" +
@@ -610,6 +629,29 @@ namespace SharpSCCM
                     {
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
                         MgmtPointWmi.NewCollection(wmiConnection, collectionType, collectionName);
+                    });
+
+                // new device
+                var newDevice = new Command("device", "Create a new device record and obtain a reusable certificate for subsequent requests");
+                newCommand.Add(newDevice);
+                newDevice.Add(new Option<string>(new[] { "--name", "-n" }, "The NetBIOS name, IP address, or IP address and port (e.g., 192.168.1.1@8080) of the new device") { IsRequired = true });
+                newDevice.Add(new Option<string>(new[] { "--password", "-p" }, "The password for the specified computer account (required to get secrets)"));
+                newDevice.Add(new Option<string>(new[] { "--username", "-u" }, "The name of the computer account to register the new device record with, including the trailing \"$\" (required to get secrets)"));
+                newDevice.Handler = CommandHandler.Create(
+                    (string server, string siteCode, string name, string username, string password) =>
+                    {
+                        if (server == null || siteCode == null)
+                        {
+                            (server, siteCode) = ClientWmi.GetCurrentManagementPointAndSiteCode();
+                        }
+                        if ((!string.IsNullOrEmpty(username) && string.IsNullOrEmpty(password)) || (!string.IsNullOrEmpty(password) && string.IsNullOrEmpty(username)))
+                        {
+                            Console.WriteLine("[!] Both a computer account name (-u) and computer account password (-p) must be specified when using either option");
+                        }
+                        else
+                        {
+                            (MessageCertificateX509 signingCertificate, MessageCertificateX509 encryptionCertificate, SmsClientId clientId) = MgmtPointMessaging.GetCertsAndClientId(server, siteCode, null, null, username, password, name);
+                        }
                     });
 
                 // new deployment

@@ -11,25 +11,36 @@ namespace SharpSCCM
             string currentManagementPoint = "";
             string siteCode = "";
 
+            Console.WriteLine("[+] Querying the local WMI repository for the current management point and site code");
             ManagementScope wmiConnection = MgmtUtil.NewWmiConnection("127.0.0.1");
-            string query = MgmtUtil.BuildClassInstanceQueryString(wmiConnection, "SMS_Authority", false, new[] { "CurrentManagementPoint", "Name" });
-            ManagementObjectCollection classInstances = MgmtUtil.GetClassInstanceCollection(wmiConnection, "SMS_Authority", query);
-            foreach (ManagementObject queryObj in classInstances)
+            if (wmiConnection.IsConnected)
             {
-                foreach (PropertyData prop in queryObj.Properties)
+                string query = MgmtUtil.BuildClassInstanceQueryString(wmiConnection, "SMS_Authority", false, new[] { "CurrentManagementPoint", "Name" });
+                ManagementObjectCollection classInstances = MgmtUtil.GetClassInstanceCollection(wmiConnection, "SMS_Authority", query);
+                if (classInstances != null)
                 {
-                    if (prop.Name == "CurrentManagementPoint")
+                    foreach (ManagementObject queryObj in classInstances)
                     {
-                        currentManagementPoint = prop.Value.ToString();
+                        foreach (PropertyData prop in queryObj.Properties)
+                        {
+                            if (prop.Name == "CurrentManagementPoint")
+                            {
+                                currentManagementPoint = prop.Value.ToString();
+                            }
+                            else if (prop.Name == "Name")
+                            {
+                                siteCode = prop.Value.ToString().Substring(4, 3);
+                            }
+                        }
                     }
-                    else if (prop.Name == "Name")
-                    {
-                        siteCode = prop.Value.ToString().Substring(4, 3);
-                    }
+                    Console.WriteLine($"[+] Current management point: {currentManagementPoint}");
+                    Console.WriteLine($"[+] Site code: {siteCode}");
+                }
+                else
+                {
+                    Console.WriteLine("[!] Could not query SMS_Authority for the current management point and site code");
                 }
             }
-            Console.WriteLine($"[+] Current management point: {currentManagementPoint}");
-            Console.WriteLine($"[+] Site code: {siteCode}");
             return (currentManagementPoint, siteCode);
         }
 

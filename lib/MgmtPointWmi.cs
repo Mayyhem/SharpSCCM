@@ -231,7 +231,7 @@ namespace SharpSCCM
             }
             catch (ManagementException ex)
             {
-                Console.WriteLine($"[!] An error occurred while attempting to commit the changes: {ex.Message}");
+                Console.WriteLine($"[!] An exception occurred while attempting to commit the changes: {ex.Message}");
                 Console.WriteLine("[!] Does your account have the correct permissions?");
             }
             catch (Exception ex)
@@ -422,7 +422,7 @@ namespace SharpSCCM
                 }
                 catch (ManagementException ex)
                 {
-                    Console.WriteLine($"[!] An error occurred while attempting to commit the changes: {ex.Message}");
+                    Console.WriteLine($"[!] An exception occurred while attempting to commit the changes: {ex.Message}");
                     Console.WriteLine("[!] Does your account have the correct permissions?");
                 }
                 catch (Exception ex)
@@ -455,7 +455,7 @@ namespace SharpSCCM
             }
             catch (ManagementException ex)
             {
-                Console.WriteLine($"[!] An error occurred while attempting to commit the changes: {ex.Message}");
+                Console.WriteLine($"[!] An exception occurred while attempting to commit the changes: {ex.Message}");
                 Console.WriteLine("[!] Does your account have the correct permissions?");
             }
             catch (Exception ex)
@@ -532,7 +532,7 @@ namespace SharpSCCM
                 }
                 catch (ManagementException ex)
                 {
-                    Console.WriteLine($"[!] An error occurred while attempting to commit the changes: {ex.Message}");
+                    Console.WriteLine($"[!] An exception occurred while attempting to commit the changes: {ex.Message}");
                     Console.WriteLine("[!] Does your account have the correct permissions?");
                 }
                 catch (Exception ex)

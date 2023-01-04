@@ -1,6 +1,5 @@
 ﻿using System;
 using System.IO;
-using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
@@ -191,10 +190,17 @@ namespace SharpSCCM
                 Console.WriteLine($"[+] Wrote secret policies to {outputPath}");
             }
 
-            Console.WriteLine($"[+] Encrypted secrets:\n\n{outputCreds.TrimEnd()}\n");
-
-            // Thanks to Evan McBroom for reversing and writing this decryption routine! https://gist.github.com/EvanMcBroom/525d84b86f99c7a4eeb4e3495cffcbf0
-            Console.WriteLine("[+] Done! Encrypted hex strings can be decrypted offline using the \"DeobfuscateSecretString.exe <string>\" command");
+            if (!string.IsNullOrEmpty(outputCreds))
+            {
+                Console.WriteLine($"[+] Encrypted secrets:\n\n{outputCreds.TrimEnd()}\n");
+                // Thanks to Evan McBroom for reversing and writing this decryption routine! https://gist.github.com/EvanMcBroom/525d84b86f99c7a4eeb4e3495cffcbf0
+                Console.WriteLine("[+] Done! Encrypted hex strings can be decrypted offline using the \"DeobfuscateSecretString.exe <string>\" command");
+            }
+            else
+            {
+                Console.WriteLine($"[+] No secret policies were found, which could result from using an unapproved device for policy retrieval\n" +
+                    "[+] Try creating a new approved device by specifying a computer account (-u) and password (-p)");
+            }
         }
 
         public static MessageCertificateX509 LocalSmsEncryptionCertificate()
