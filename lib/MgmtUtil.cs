@@ -18,8 +18,15 @@ namespace SharpSCCM
             else
             {
                 string[] keyPropertyNames = GetKeyPropertyNames(scope, wmiClass);
-                properties = keyPropertyNames.Union(properties).ToArray();
-                propString = string.Join(",", properties);
+                if (keyPropertyNames.Length > 0)
+                {
+                    properties = keyPropertyNames.Union(properties).ToArray();
+                    propString = string.Join(",", properties);
+                }
+                else
+                {
+                    return null;
+                }
             }
 
             string whereClause = "";
@@ -52,37 +59,39 @@ namespace SharpSCCM
             Console.WriteLine($"[+] Executing WQL query: {query}");
             ObjectQuery objQuery = new ObjectQuery(query);
             ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, objQuery);
-            classInstances = searcher.Get();
-
             try
             {
+                classInstances = searcher.Get();
                 if (classInstances.Count > 0)
                 {
                     return classInstances;
                 }
                 else
                 {
-                    Console.WriteLine($"[+] No instances of {wmiClass} were found");
+                    Console.WriteLine($"[+] No instances of {wmiClass} meeting the specified criteria were found, or you do not have permission to query them");
                 }
             }
             catch (ManagementException ex)
             {
-                Console.WriteLine($"[!] An error occurred while querying for WMI data: {ex.Message}");
+                Console.WriteLine($"[!] An exception occurred while querying for WMI data: {ex.Message}");
             }
             return null;
         }
 
-        public static void GetClassInstances(ManagementScope scope, string wmiClass, bool count = false, string[] properties = null, string whereCondition = null, string orderByColumn = null, bool dryRun = false, bool verbose = false, bool getLazyProps = true)
+        public static void GetClassInstances(ManagementScope wmiConnection, string wmiClass, bool count = false, string[] properties = null, string whereCondition = null, string orderByColumn = null, bool dryRun = false, bool verbose = false, bool getLazyProps = true)
         {
-            string query = BuildClassInstanceQueryString(scope, wmiClass, count, properties, whereCondition, orderByColumn, verbose);
-            if (dryRun)
+            if (wmiConnection.IsConnected)
             {
-                Console.WriteLine($"[+] WQL query: {query}");
-            }
-            else
-            {
-                ManagementObjectCollection classInstanceCollection = GetClassInstanceCollection(scope, wmiClass, query);
-                PrintClassInstances(scope, wmiClass, query, classInstanceCollection, count, properties, verbose, getLazyProps);
+                string query = BuildClassInstanceQueryString(wmiConnection, wmiClass, count, properties, whereCondition, orderByColumn, verbose);
+                if (dryRun)
+                {
+                    Console.WriteLine($"[+] WQL query: {query}");
+                }
+                else
+                {
+                    ManagementObjectCollection classInstanceCollection = GetClassInstanceCollection(wmiConnection, wmiClass, query);
+                    PrintClassInstances(wmiConnection, wmiClass, query, classInstanceCollection, count, properties, verbose, getLazyProps);
+                }
             }
         }
 
@@ -137,7 +146,7 @@ namespace SharpSCCM
             }
             catch (ManagementException ex)
             {
-                Console.WriteLine("An error occurred while querying for WMI data: " + ex.Message);
+                Console.WriteLine("An exception occurred while querying for WMI data: " + ex.Message);
             }
             catch (Exception ex)
             {
@@ -149,11 +158,12 @@ namespace SharpSCCM
         {
             string path = "";
             ConnectionOptions connection = new ConnectionOptions();
+            // local connection
             if (server == "127.0.0.1")
             {
                 if (string.IsNullOrEmpty(wmiNamespace))
                 {
-                    wmiNamespace = "root\\ccm";
+                    wmiNamespace = "root\\CCM";
                 }
                 path = $"\\\\{server}\\{wmiNamespace}";
             }
@@ -164,15 +174,23 @@ namespace SharpSCCM
                 if (string.IsNullOrEmpty(siteCode))
                 {
                     (_, siteCode) = ClientWmi.GetCurrentManagementPointAndSiteCode();
-                    Console.WriteLine($"[+] Using provided management point: {server}");
+                    // siteCode should now be populated
+                    if (!string.IsNullOrEmpty(siteCode))
+                    {
+                        Console.WriteLine($"[+] Using provided management point: {server}");
+                    }
                 }
-                if (string.IsNullOrEmpty(wmiNamespace))
+                // server and sitecode should now be populated unless there are errors querying the local WMI repository
+                if (!string.IsNullOrEmpty(server) && !string.IsNullOrEmpty(siteCode))
                 {
-                    path = $"\\\\{server}\\root\\SMS\\site_{siteCode}";
-                }
-                else
-                {
-                    path = $"\\\\{server}\\{wmiNamespace}";
+                    if (string.IsNullOrEmpty(wmiNamespace))
+                    {
+                        path = $"\\\\{server}\\root\\SMS\\site_{siteCode}";
+                    }
+                    else
+                    {
+                        path = $"\\\\{server}\\{wmiNamespace}";
+                    }
                 }
             }
             else
@@ -182,36 +200,54 @@ namespace SharpSCCM
                 if (!string.IsNullOrEmpty(siteCode))
                 { 
                     (server, _) = ClientWmi.GetCurrentManagementPointAndSiteCode();
-                    Console.WriteLine($"[+] Using provided site code: {siteCode}");
+                    // server should now be populated
+                    if (!string.IsNullOrEmpty(server))
+                    {
+                        Console.WriteLine($"[+] Using provided site code: {siteCode}");
+                    }
                 }
                 // server and sitecode not provided
                 else
                 {
                     (server, siteCode) = ClientWmi.GetCurrentManagementPointAndSiteCode();
                 }
-                if (string.IsNullOrEmpty(wmiNamespace))
+                // server and sitecode should now be populated unless there are errors querying the local WMI repository
+                if (!string.IsNullOrEmpty(server) && !string.IsNullOrEmpty(siteCode))
                 {
-                    path = $"\\\\{server}\\root\\SMS\\site_{siteCode}";
+                    if (string.IsNullOrEmpty(wmiNamespace))
+                    {
+                        path = $"\\\\{server}\\root\\SMS\\site_{siteCode}";
+                    }
+                    else
+                    {
+                        path = $"\\\\{server}\\{wmiNamespace}";
+                    }
                 }
-                else
-                {
-                    path = $"\\\\{server}\\{wmiNamespace}";
-                }
-                
             }
-            ManagementScope wmiConnection = new ManagementScope(path, connection);
-            Console.WriteLine($"[+] Connecting to {wmiConnection.Path}");
+            ManagementScope wmiConnection = null;
             try
             {
-                wmiConnection.Connect();
+                if (!string.IsNullOrEmpty(path))
+                {
+                    wmiConnection = new ManagementScope(path, connection);
+                    Console.WriteLine($"[+] Connecting to {wmiConnection.Path}");
+                    wmiConnection.Connect();
+                }
             }
             catch (UnauthorizedAccessException ex)
             {
-                Console.WriteLine("[!] Access to WMI was not authorized (user name or password might be incorrect): " + ex.Message);
+                Console.WriteLine($"[!] Access to the WMI provider was not authorized: {ex.Message.Trim()}");
             }
             catch (ManagementException ex)
             {
-                Console.WriteLine("[!] Access to WMI was not authorized (user name or password might be incorrect): " + ex.Message);
+                Console.WriteLine($"[!] Could not connect to {path}: " + ex.Message);
+                if (path == "\\\\127.0.0.1\\root\\CCM" && ex.Message == "Invalid namespace ")
+                {
+                    Console.WriteLine(
+                        "[!] The SCCM client may not be installed on this machine\n" +
+                        "[!] Try specifying a management point (-mp) and site code (-sc)"
+                        );
+                }
             }
             catch (Exception ex)
             {

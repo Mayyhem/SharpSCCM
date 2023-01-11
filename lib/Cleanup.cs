@@ -46,7 +46,7 @@ namespace SharpSCCM
             }
             else
             {
-                Console.WriteLine($"[+] Found {collections.Count} collections named {collections}");
+                Console.WriteLine($"[+] Found {collections.Count} collections named {collection}");
             }
         }
 

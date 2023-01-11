@@ -181,6 +181,25 @@ namespace SharpSCCM
             return principal.IsInRole(WindowsBuiltInRole.Administrator);
         }
 
+        public static string GetCurrentUserHexSid()
+        {
+            WindowsIdentity currentUser = WindowsIdentity.GetCurrent();
+            SecurityIdentifier userSid = currentUser.User;
+            Console.WriteLine($"[+] Current user: {currentUser.Name}");
+            Console.WriteLine($"[+] Active Directory SID for current user: {userSid.Value}");
+
+            byte[] binarySid = new byte[userSid.BinaryLength];
+            userSid.GetBinaryForm(binarySid, 0);
+
+            string hexSid = "";
+            foreach (byte b in binarySid)
+            {
+                hexSid += (b.ToString("X2"));
+            }
+            Console.Write($"[+] Active Directory SID (hex): 0x{hexSid}");
+            return hexSid;
+        }
+
         public static bool GetSystem()
         {
             // helper to elevate to SYSTEM via token impersonation
