@@ -196,7 +196,7 @@ namespace SharpSCCM
             {
                 hexSid += (b.ToString("X2"));
             }
-            Console.Write($"[+] Active Directory SID (hex): 0x{hexSid}");
+            Console.Write($"[+] Active Directory SID (hex): 0x{hexSid}\n");
             return hexSid;
         }
 
