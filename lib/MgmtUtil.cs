@@ -68,7 +68,7 @@ namespace SharpSCCM
                 }
                 else
                 {
-                    Console.WriteLine($"[+] No instances of {wmiClass} were found, or you do not have the necessary permissions to query them (e.g., Full Administrator)");
+                    Console.WriteLine($"[+] No instances of {wmiClass} meeting the specified criteria were found, or you do not have permission to query them");
                 }
             }
             catch (ManagementException ex)
@@ -163,7 +163,7 @@ namespace SharpSCCM
             {
                 if (string.IsNullOrEmpty(wmiNamespace))
                 {
-                    wmiNamespace = "root\\ccm";
+                    wmiNamespace = "root\\CCM";
                 }
                 path = $"\\\\{server}\\{wmiNamespace}";
             }
@@ -236,12 +236,12 @@ namespace SharpSCCM
             }
             catch (UnauthorizedAccessException ex)
             {
-                Console.WriteLine("[!] Access to WMI was not authorized (user name or password might be incorrect): " + ex.Message.Trim());
+                Console.WriteLine($"[!] Access to the WMI provider was not authorized: {ex.Message.Trim()}");
             }
             catch (ManagementException ex)
             {
                 Console.WriteLine($"[!] Could not connect to {path}: " + ex.Message);
-                if (path == "\\\\127.0.0.1\\root\\ccm" && ex.Message == "Invalid namespace ")
+                if (path == "\\\\127.0.0.1\\root\\CCM" && ex.Message == "Invalid namespace ")
                 {
                     Console.WriteLine(
                         "[!] The SCCM client may not be installed on this machine\n" +

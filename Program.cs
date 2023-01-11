@@ -1,10 +1,12 @@
 using System;
+using System.Collections;
 using System.CommandLine;
 using System.CommandLine.Builder;
 using System.CommandLine.NamingConventionBinder;
 using System.CommandLine.Parsing;
 using System.Diagnostics;
 using System.Management;
+using System.Web;
 
 // Configuration Manager SDK
 using Microsoft.ConfigurationManagement.Messaging.Framework;
@@ -15,6 +17,7 @@ namespace SharpSCCM
     {
         static void Main(string[] args)
         {
+            // Debug options
             bool debug = false;
             ConsoleTraceListener consoleTracer = new ConsoleTraceListener();
             if (args.Contains(new[] { "--debug" }))
@@ -23,6 +26,12 @@ namespace SharpSCCM
                 MessagingTrace.TraceSwitch.Level = TraceLevel.Verbose;
                 Trace.Listeners.Add(consoleTracer);
             }
+
+            // Execution timer
+            var timer = new Stopwatch();
+            timer.Start();
+
+            // Command line options
             try
             {
                 Console.WriteLine();
@@ -54,7 +63,10 @@ namespace SharpSCCM
                     (string server, string siteCode, string deviceName, string collectionName) =>
                     {
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
-                        MgmtPointWmi.AddDeviceToCollection(wmiConnection, deviceName, collectionName);
+                        if (wmiConnection != null && wmiConnection.IsConnected)
+                        {
+                            MgmtPointWmi.AddDeviceToCollection(wmiConnection, deviceName, collectionName);
+                        }
                     });
 
                 // add user-to-admins
@@ -77,11 +89,17 @@ namespace SharpSCCM
                     (string server, string siteCode, string userName, string collectionName) =>
                     {
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
-                        MgmtPointWmi.AddUserToCollection(wmiConnection, userName, collectionName);
+                        if (wmiConnection != null && wmiConnection.IsConnected)
+                        {
+                            MgmtPointWmi.AddUserToCollection(wmiConnection, userName, collectionName);
+                        }
                     });
 
                 // exec command
-                var execCommand = new Command("exec", "Execute an application from a specified UNC path or request NTLM authentication from a client device or collection of client devices (requires Full Administrator or Application Administrator access)");
+                var execCommand = new Command("exec", "Execute an application from a specified UNC path or request NTLM authentication from a client device or collection of client devices\n" +
+                    "Permitted roles:\n" +
+                    "  - Full Administrator" + 
+                    "  - Application Administrator");
                 rootCommand.Add(execCommand);
                 execCommand.Add(new Option<string>(new[] { "--device", "-d" }, "The ResourceName of the device you would like to execute an application on or receive NTLM authentication from"));
                 execCommand.Add(new Option<string>(new[] { "--collection", "-c" }, "The Name of the device collection you would like to execute an application on or receive NTLM authentication from"));
@@ -91,8 +109,29 @@ namespace SharpSCCM
                 execCommand.Handler = CommandHandler.Create(
                     (string server, string siteCode, string device, string collection, string path, string relayServer, bool runAsSystem) =>
                     {
-                        ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
-                        MgmtPointWmi.Exec(wmiConnection, device, collection, path, relayServer, !runAsSystem);
+                        if ((String.IsNullOrEmpty(device) && String.IsNullOrEmpty(collection)) || (!String.IsNullOrEmpty(device) && !String.IsNullOrEmpty(collection)))
+                        {
+                            Console.WriteLine("[!] You must specify either a device or existing collection.");
+                        }
+                        else if (!String.IsNullOrEmpty(relayServer) && !String.IsNullOrEmpty(path) || (String.IsNullOrEmpty(relayServer) && String.IsNullOrEmpty(path)))
+                        {
+                            Console.WriteLine("[!] Please specify either a path or a relay server, but not both.");
+                        }
+                        else
+                        {
+                            if (!String.IsNullOrEmpty(device))
+                            {
+                                ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
+                                if (wmiConnection != null && wmiConnection.IsConnected)
+                                {
+                                    MgmtPointWmi.Exec(wmiConnection, device, collection, path, relayServer, !runAsSystem);
+                                }
+                            }
+                            else
+                            {
+                                Console.WriteLine("[!] Deploying an application to a collection has not yet been implemented. Try deploying to a single system instead.");
+                            }
+                        }
                     });
 
                 // get 
@@ -123,7 +162,10 @@ namespace SharpSCCM
                             properties = new[] { "CI_ID", "CI_UniqueID", "CreatedBy", "DateCreated", "ExecutionContext", "DateLastModified", "IsDeployed", "IsEnabled", "IsHidden", "LastModifiedBy", "LocalizedDisplayName", "NumberOfDevicesWithApp", "NumberOfDevicesWithFailure", "NumberOfUsersWithApp", "NumberOfUsersWithFailure", "SourceSite" };
                         }
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
-                        MgmtUtil.GetClassInstances(wmiConnection, "SMS_Application", count, properties, whereCondition, orderBy, dryRun, verbose);
+                        if (wmiConnection != null && wmiConnection.IsConnected)
+                        {
+                            MgmtUtil.GetClassInstances(wmiConnection, "SMS_Application", count, properties, whereCondition, orderBy, dryRun, verbose);
+                        }
                     });
 
                 // get classes
@@ -134,7 +176,10 @@ namespace SharpSCCM
                     (string server, string siteCode, string wmiNamespace, bool count, string whereCondition, string orderBy, bool dryRun, bool verbose) =>
                     {
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, wmiNamespace, siteCode);
-                        MgmtUtil.PrintClasses(wmiConnection);
+                        if (wmiConnection != null && wmiConnection.IsConnected)
+                        {
+                            MgmtUtil.PrintClasses(wmiConnection);
+                        }
                     });
 
                 // get class-instances
@@ -150,7 +195,10 @@ namespace SharpSCCM
                         {
                             verbose = true;
                         }
-                        MgmtUtil.GetClassInstances(wmiConnection, wmiClass, count, properties, whereCondition, orderBy, dryRun, verbose);
+                        if (wmiConnection != null && wmiConnection.IsConnected)
+                        {
+                            MgmtUtil.GetClassInstances(wmiConnection, wmiClass, count, properties, whereCondition, orderBy, dryRun, verbose);
+                        }
                     });
 
                 // get class-properties
@@ -162,8 +210,11 @@ namespace SharpSCCM
                     (string server, string siteCode, string wmiNamespace, string wmiClass) =>
                     {
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, wmiNamespace, siteCode);
-                        ManagementObject classInstance = new ManagementClass(wmiConnection, new ManagementPath(wmiClass), new ObjectGetOptions()).CreateInstance();
-                        MgmtUtil.PrintClassProperties(classInstance);
+                        if (wmiConnection != null && wmiConnection.IsConnected)
+                        {
+                            ManagementObject classInstance = new ManagementClass(wmiConnection, new ManagementPath(wmiClass), new ObjectGetOptions()).CreateInstance();
+                            MgmtUtil.PrintClassProperties(classInstance);
+                        }
                     });
 
                 // get collection
@@ -182,7 +233,10 @@ namespace SharpSCCM
                             properties = new[] { "CollectionID", "CollectionType", "IsBuiltIn", "LastMemberChangeTime", "LastRefreshTime", "LimitToCollectionName", "MemberClassName", "MemberCount", "Name" };
                         }
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
-                        MgmtUtil.GetClassInstances(wmiConnection, "SMS_Collection", count, properties, whereCondition, orderBy, dryRun, verbose);
+                        if (wmiConnection != null && wmiConnection.IsConnected)
+                        {
+                            MgmtUtil.GetClassInstances(wmiConnection, "SMS_Collection", count, properties, whereCondition, orderBy, dryRun, verbose);
+                        }
                     });
 
                 // get collection-member
@@ -203,7 +257,10 @@ namespace SharpSCCM
                         else
                         {
                             ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
-                            MgmtPointWmi.GetCollectionMember(wmiConnection, name, count, properties, orderBy, dryRun, verbose);
+                            if (wmiConnection != null && wmiConnection.IsConnected)
+                            {
+                                MgmtPointWmi.GetCollectionMember(wmiConnection, name, count, properties, orderBy, dryRun, verbose);
+                            }
                         }
                     });
 
@@ -223,7 +280,10 @@ namespace SharpSCCM
                             properties = new[] { "ApplicationName", "AssignedCI_UniqueID", "AssignedCIs", "AssignmentName", "CollectionName", "Enabled", "EnforcementDeadline", "LastModificationTime", "LastModifiedBy", "NotifyUser", "SourceSite", "TargetCollectionID", "UserUIExperience" };
                         }
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
-                        MgmtUtil.GetClassInstances(wmiConnection, "SMS_ApplicationAssignment", count, properties, whereCondition, orderBy, dryRun, verbose);
+                        if (wmiConnection != null && wmiConnection.IsConnected)
+                        {
+                            MgmtUtil.GetClassInstances(wmiConnection, "SMS_ApplicationAssignment", count, properties, whereCondition, orderBy, dryRun, verbose);
+                        }
                     });
 
                 // get device
@@ -247,7 +307,7 @@ namespace SharpSCCM
                             properties = new[] { "Active", "ADSiteName", "Client", "DistinguishedName", "FullDomainName", "HardwareID", "IPAddresses", "IPSubnets", "IPv6Addresses", "IPv6Prefixes", "IsVirtualMachine", "LastLogonTimestamp", "LastLogonUserDomain", "LastLogonUserName", "MACAddresses", "Name", "NetbiosName", "Obsolete", "OperatingSystemNameandVersion", "PrimaryGroupID", "ResourceDomainORWorkgroup", "ResourceNames", "SID", "SMSInstalledSites", "SMSUniqueIdentifier", "SNMPCommunityName", "SystemContainerName", "SystemGroupName", "SystemOUName" };
                         }
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
-                        if (wmiConnection != null)
+                        if (wmiConnection != null && wmiConnection.IsConnected)
                         {
                             MgmtUtil.GetClassInstances(wmiConnection, "SMS_R_System", count, properties, whereCondition, orderBy, dryRun, verbose);
                         }
@@ -275,7 +335,7 @@ namespace SharpSCCM
                         }
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
                         // Don't get lazy props for this function. ResourceName won't populate.
-                        if (wmiConnection != null)
+                        if (wmiConnection != null && wmiConnection.IsConnected)
                         {
                             MgmtUtil.GetClassInstances(wmiConnection, "SMS_UserMachineRelationship", count, properties, whereCondition, orderBy, dryRun, verbose, false);
                         }
@@ -332,7 +392,11 @@ namespace SharpSCCM
                 getSitePushSettings.Handler = CommandHandler.Create(
                     (string server, string siteCode) =>
                     {
-                        MgmtPointWmi.GetSitePushSettings(server, siteCode);
+                        ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
+                        if (wmiConnection != null && wmiConnection.IsConnected)
+                        {
+                            MgmtPointWmi.GetSitePushSettings(wmiConnection);
+                        }
                     });
 
                 // get software
@@ -345,7 +409,11 @@ namespace SharpSCCM
                         {
                             (server, siteCode) = ClientWmi.GetCurrentManagementPointAndSiteCode();
                         }
-                        MgmtPointMessaging.SendContentLocationRequest(server, siteCode, "CHQ00004", 2);
+                        if (!string.IsNullOrEmpty(server) && !string.IsNullOrEmpty(siteCode))
+                        {
+                            // work in progress
+                            MgmtPointMessaging.SendContentLocationRequest(server, siteCode, "CHQ00004", 2);
+                        }
                     });
 
                 // get user-sid
@@ -367,35 +435,49 @@ namespace SharpSCCM
                 var invokeClientPush = new Command("client-push", "Force the server to authenticate to an arbitrary destination via NTLM (requires automatic client push installation to be enabled and NTLM fallback to not be disabled)");
                 invokeCommand.Add(invokeClientPush);
                 invokeClientPush.Add(new Option<bool>(new[] { "--as-admin", "-a" }, "Connect to the server via WMI rather than HTTP to force authentication (requires Full Administrator access and device record for target)"));
-                invokeClientPush.Add(new Option<bool>(new[] { "--pki", "-p" }, "Use the client's PKI certificate for authentication to the management point"));
+                invokeClientPush.Add(new Option<string>(new[] { "--certificate", "-x" }, "The encoded X509 certificate blob to use that corresponds to a previously registered device"));
+                invokeClientPush.Add(new Option<string>(new[] { "--client-id", "-g" }, "The SMS client GUID to use that corresponds to a previously registered device and certificate"));
                 invokeClientPush.Add(new Option<string>(new[] { "--target", "-t" }, "The NetBIOS name, IP address, or if WebClient is enabled on the site server, the IP address and port (e.g., 192.168.1.1@8080) of the relay/capture server (default: the machine running SharpSCCM)"));
                 invokeClientPush.Handler = CommandHandler.Create(
-                    (string server, string siteCode, bool asAdmin, bool pki, string target) =>
+                    (string server, string siteCode, bool asAdmin, string certificate, string clientId, string target) =>
                     {
                         if (server == null || siteCode == null)
                         {
                             (server, siteCode) = ClientWmi.GetCurrentManagementPointAndSiteCode();
                         }
-                        if (!asAdmin)
-                        { 
-                            // If PKI certs are in use, borrow the client's authentication cert to update its hardware inventory
-                            if (pki)
+                        if (!string.IsNullOrEmpty(server) && !string.IsNullOrEmpty(siteCode))
+                        {
+                            if (!asAdmin)
                             {
-                                MessageCertificateX509 certificate = MgmtPointMessaging.LocalSmsSigningCertificate();
-                                SmsClientId clientId = ClientWmi.GetSmsId();
-                                MgmtPointMessaging.SendDDR(certificate, target, server, siteCode, clientId);
+                                // Use certificate of existing device if provided
+                                if (!string.IsNullOrEmpty(certificate) && !string.IsNullOrEmpty(clientId))
+                                {
+                                    (MessageCertificateX509 signingCertificate, _, SmsClientId smsClientId) = MgmtPointMessaging.GetCertsAndClientId(server, siteCode, certificate, clientId);
+                                    MgmtPointMessaging.SendDDR(signingCertificate, target, server, siteCode, smsClientId);
+                                }
+                                else if (!string.IsNullOrEmpty(certificate) && string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(certificate) && !string.IsNullOrEmpty(clientId))
+                                {
+                                    Console.WriteLine("[!] Both a certificate (-x) and SMS client GUID (-c) for a previously registered client must be specified when using this option");
+                                }
+                                // Otherwise, create a self-signed certificate and new device record
+                                else
+                                {
+                                    MessageCertificateX509 signingCertificate = MgmtPointMessaging.CreateUserCertificate();
+                                    SmsClientId smsClientId = MgmtPointMessaging.RegisterClient(signingCertificate, target, server, siteCode);
+                                    MgmtPointMessaging.SendDDR(signingCertificate, target, server, siteCode, smsClientId);
+                                }
                             }
-                            // Otherwise, create a self-signed certificate and new device record
                             else
                             {
-                                MessageCertificateX509 certificate = MgmtPointMessaging.CreateUserCertificate();
-                                SmsClientId clientId = MgmtPointMessaging.RegisterClient(certificate, target, server, siteCode);
-                                MgmtPointMessaging.SendDDR(certificate, target, server, siteCode, clientId);
+                                if (target != null)
+                                {
+                                    MgmtPointWmi.GenerateCCR(target, server, siteCode);
+                                }
+                                else
+                                {
+                                    Console.WriteLine("[!] A target (-t) must be specified when using this option");
+                                }
                             }
-                        }
-                        else
-                        {
-                            MgmtPointWmi.GenerateCCR(target, server, siteCode);
                         }
                     });
 
@@ -403,12 +485,15 @@ namespace SharpSCCM
                 var invokeQuery = new Command("query", "Execute a given WQL query");
                 invokeCommand.Add(invokeQuery);
                 invokeQuery.Add(new Argument<string>("query", "The WQL query to execute"));
-                invokeQuery.Add(new Option<string>(new[] { "--wmi-namespace", "-ns" }, "The WMI namespace to query (e.g., \"root\\CCM\") (default: \"root\\SMS\\site_<site-code>\")"));
+                invokeQuery.Add(new Option<string>(new[] { "--wmi-namespace", "-ns" }, "The WMI namespace to query (default: \"root\\SMS\\site_<site-code>\")"));
                 invokeQuery.Handler = CommandHandler.Create(
                     (string server, string wmiNamespace, string siteCode, string query) =>
                     {
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, wmiNamespace, siteCode);
-                        MgmtUtil.InvokeQuery(wmiConnection, query);
+                        if (wmiConnection != null && wmiConnection.IsConnected)
+                        {
+                            MgmtUtil.InvokeQuery(wmiConnection, query);
+                        }
                     });
 
                 // invoke update
@@ -419,7 +504,10 @@ namespace SharpSCCM
                     (string server, string siteCode, string collection) =>
                     {
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
-                        MgmtPointWmi.InvokeUpdate(wmiConnection, collection);
+                        if (wmiConnection != null && wmiConnection.IsConnected)
+                        {
+                            MgmtPointWmi.InvokeUpdate(wmiConnection, collection);
+                        }
                     });
 
                 // local
@@ -429,6 +517,21 @@ namespace SharpSCCM
                 localCommand.AddGlobalOption(new Option<bool>(new[] { "--verbose", "-v" }, "Display all class properties and their values (default: false)"));
                 localCommand.AddGlobalOption(new Option<string>(new[] { "--where-condition", "-w" }, "A WHERE condition to narrow the scope of data returned by the query (e.g., \"Name='cave.johnson'\" or \"Name LIKE '%cave%'\")"));
                 rootCommand.Add(localCommand);
+
+                // local classes
+                var localClasses = new Command("classes", "Get information on local WMI classes");
+                localCommand.Add(localClasses);
+                localClasses.Add(new Option<string>(new[] { "--wmi-namespace", "-ns" }, "The WMI namespace to query (default: \"root\\CCM\")"));
+                localClasses.Handler = CommandHandler.Create(
+                    (string wmiNamespace, bool count, string whereCondition, string orderBy, bool dryRun, bool verbose) =>
+                    {
+                        wmiNamespace = wmiNamespace ?? @"root\CCM";
+                        ManagementScope wmiConnection = MgmtUtil.NewWmiConnection("127.0.0.1", wmiNamespace);
+                        if (wmiConnection != null && wmiConnection.IsConnected)
+                        {
+                            MgmtUtil.PrintClasses(wmiConnection);
+                        }
+                    });
 
                 // local class-instances
                 var localClassInstances = new Command("class-instances", "Get information on local WMI class instances");
@@ -443,7 +546,10 @@ namespace SharpSCCM
                         {
                             verbose = true;
                         }
-                        MgmtUtil.GetClassInstances(wmiConnection, wmiClass, count, properties, whereCondition, orderBy, dryRun, verbose);
+                        if (wmiConnection != null && wmiConnection.IsConnected)
+                        {
+                            MgmtUtil.GetClassInstances(wmiConnection, wmiClass, count, properties, whereCondition, orderBy, dryRun, verbose);
+                        }
                     });
 
                 // local class-properties
@@ -455,19 +561,11 @@ namespace SharpSCCM
                     (string wmiNamespace, string wmiClass) =>
                     {
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection("127.0.0.1", wmiNamespace);
-                        ManagementObject classInstance = new ManagementClass(wmiConnection, new ManagementPath(wmiClass), new ObjectGetOptions()).CreateInstance();
-                        MgmtUtil.PrintClassProperties(classInstance);
-                    });
-
-                // local classes
-                var localClasses = new Command("classes", "Get information on local WMI classes");
-                localCommand.Add(localClasses);
-                localClasses.Add(new Argument<string>("wmiNamespace", "The WMI namespace to query (e.g., \"root\\ccm\")"));
-                localClasses.Handler = CommandHandler.Create(
-                    (string wmiNamespace, bool count, string whereCondition, string orderBy, bool dryRun, bool verbose) =>
-                    {
-                        ManagementScope wmiConnection = MgmtUtil.NewWmiConnection("127.0.0.1", wmiNamespace);
-                        MgmtUtil.PrintClasses(wmiConnection);
+                        if (wmiConnection != null && wmiConnection.IsConnected)
+                        {
+                            ManagementObject classInstance = new ManagementClass(wmiConnection, new ManagementPath(wmiClass), new ObjectGetOptions()).CreateInstance();
+                            MgmtUtil.PrintClassProperties(classInstance);
+                        }
                     });
 
                 // local clientinfo
@@ -477,7 +575,10 @@ namespace SharpSCCM
                     new Action(() =>
                     {
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection("127.0.0.1");
-                        MgmtUtil.GetClassInstances(wmiConnection, "CCM_InstalledComponent", false, new[] { "Version" }, "Name='SmsClient'");
+                        if (wmiConnection != null && wmiConnection.IsConnected)
+                        {
+                            MgmtUtil.GetClassInstances(wmiConnection, "CCM_InstalledComponent", false, new[] { "Version" }, "Name='SmsClient'");
+                        }
                     }));
 
                 // local create-ccr
@@ -582,7 +683,10 @@ namespace SharpSCCM
                     new Action(() =>
                     {
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection("127.0.0.1");
-                        MgmtUtil.GetClassInstances(wmiConnection, "SMS_Authority", false, new[] { "CurrentManagementPoint", "Name" });
+                        if (wmiConnection != null && wmiConnection.IsConnected)
+                        {
+                            MgmtUtil.GetClassInstances(wmiConnection, "SMS_Authority", false, new[] { "CurrentManagementPoint", "Name" });
+                        }
                     }));
 
                 // local triage
@@ -611,46 +715,28 @@ namespace SharpSCCM
                     (string server, string siteCode, string name, string path, bool runAsUser, bool stealth) =>
                     {
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
-                        MgmtPointWmi.NewApplication(wmiConnection, name, path, runAsUser, stealth);
+                        if (wmiConnection != null && wmiConnection.IsConnected)
+                        {
+                            MgmtPointWmi.NewApplication(wmiConnection, name, path, runAsUser, stealth);
+                        }
                     });
 
                 // new collection
-                var newCollection = new Command("collection", "Create a collection of devices or users" +
+                var newCollection = new Command("collection", "Create a collection of devices or users\n" +
                     "Permitted roles:\n" +
                     "  - Full Administrator\n" +
                     "  - Operations Administrator\n" +
                     "  - Infrastructure Administrator");
                 newCommand.Add(newCollection);
-                // newCollection.Add(new Argument<string>("collection-type", "The type of collection to create, 'device' or 'user'").FromAmong(new string[] { "device", "user" }));
-                newCollection.Add(new Argument<string>("collection-type", "The type of collection to create, 'device' or 'user'"));
+                newCollection.Add(new Argument<string>("collection-type", "The type of collection to create, 'device' or 'user'").FromAmong(new string[] { "device", "user" }));
                 newCollection.Add(new Argument<string>("collection-name", "The name you would like your collection to be called"));
                 newCollection.Handler = CommandHandler.Create(
                     (string server, string siteCode, string collectionType, string collectionName) =>
                     {
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
-                        MgmtPointWmi.NewCollection(wmiConnection, collectionType, collectionName);
-                    });
-
-                // new device
-                var newDevice = new Command("device", "Create a new device record and obtain a reusable certificate for subsequent requests");
-                newCommand.Add(newDevice);
-                newDevice.Add(new Option<string>(new[] { "--name", "-n" }, "The NetBIOS name, IP address, or IP address and port (e.g., 192.168.1.1@8080) of the new device") { IsRequired = true });
-                newDevice.Add(new Option<string>(new[] { "--password", "-p" }, "The password for the specified computer account (required to get secrets)"));
-                newDevice.Add(new Option<string>(new[] { "--username", "-u" }, "The name of the computer account to register the new device record with, including the trailing \"$\" (required to get secrets)"));
-                newDevice.Handler = CommandHandler.Create(
-                    (string server, string siteCode, string name, string username, string password) =>
-                    {
-                        if (server == null || siteCode == null)
+                        if (wmiConnection != null && wmiConnection.IsConnected)
                         {
-                            (server, siteCode) = ClientWmi.GetCurrentManagementPointAndSiteCode();
-                        }
-                        if ((!string.IsNullOrEmpty(username) && string.IsNullOrEmpty(password)) || (!string.IsNullOrEmpty(password) && string.IsNullOrEmpty(username)))
-                        {
-                            Console.WriteLine("[!] Both a computer account name (-u) and computer account password (-p) must be specified when using either option");
-                        }
-                        else
-                        {
-                            (MessageCertificateX509 signingCertificate, MessageCertificateX509 encryptionCertificate, SmsClientId clientId) = MgmtPointMessaging.GetCertsAndClientId(server, siteCode, null, null, username, password, name);
+                            MgmtPointWmi.NewCollection(wmiConnection, collectionType, collectionName);
                         }
                     });
 
@@ -663,11 +749,42 @@ namespace SharpSCCM
                     (string server, string siteCode, string name, string application, string collection) =>
                     {
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
-                        MgmtPointWmi.NewDeployment(wmiConnection, application, collection);
+                        if (wmiConnection != null && wmiConnection.IsConnected)
+                        {
+                            MgmtPointWmi.NewDeployment(wmiConnection, application, collection);
+                        }
+                    });
+
+                // new device
+                var newDevice = new Command("device", "Create a new device record and obtain a reusable certificate for subsequent requests (experimental)");
+                newCommand.Add(newDevice);
+                newDevice.Add(new Option<string>(new[] { "--name", "-n" }, "The NetBIOS name, IP address, or IP address and port (e.g., 192.168.1.1@8080) of the new device") { IsRequired = true });
+                newDevice.Add(new Option<string>(new[] { "--password", "-p" }, "The password for the specified computer account (required to get secrets)"));
+                newDevice.Add(new Option<string>(new[] { "--username", "-u" }, "The name of the computer account to register the new device record with, including the trailing \"$\" (required to get secrets)"));
+                newDevice.Handler = CommandHandler.Create(
+                    (string server, string siteCode, string name, string username, string password) =>
+                    {
+                        if (server == null || siteCode == null)
+                        {
+                            (server, siteCode) = ClientWmi.GetCurrentManagementPointAndSiteCode();
+                        }
+                        if (!string.IsNullOrEmpty(server) && !string.IsNullOrEmpty(siteCode))
+                        {
+                            if ((!string.IsNullOrEmpty(username) && string.IsNullOrEmpty(password)) || (!string.IsNullOrEmpty(password) && string.IsNullOrEmpty(username)))
+                            {
+                                Console.WriteLine("[!] Both a computer account name (-u) and computer account password (-p) must be specified when using either option");
+                            }
+                            else
+                            {
+                                MgmtPointMessaging.GetCertsAndClientId(server, siteCode, null, null, username, password, name);
+                            }
+                        }
                     });
 
                 // remove
                 var removeCommand = new Command("remove", "A group of commands that deletes objects from the server");
+                removeCommand.AddGlobalOption(new Option<string>(new[] { "--server", "-mp" }, "The IP address, FQDN, or NetBIOS name of the Configuration Manager management point server to connect to (default: the current management point of the client running SharpSCCM)"));
+                removeCommand.AddGlobalOption(new Option<string>(new[] { "--site-code", "-sc" }, "The three character site code of the Configuration Manager server (e.g., PS1) (default: the site code of the client running SharpSCCM)"));
                 rootCommand.Add(removeCommand);
 
                 // remove application
@@ -678,7 +795,10 @@ namespace SharpSCCM
                     (string server, string siteCode, string name) =>
                     {
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
-                        Cleanup.RemoveApplication(wmiConnection, name);
+                        if (wmiConnection != null && wmiConnection.IsConnected)
+                        {
+                            Cleanup.RemoveApplication(wmiConnection, name);
+                        }
                     });
 
                 // remove collection
@@ -689,7 +809,10 @@ namespace SharpSCCM
                     (string server, string siteCode, string name) =>
                     {
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
-                        Cleanup.RemoveCollection(wmiConnection, name);
+                        if (wmiConnection != null && wmiConnection.IsConnected)
+                        {
+                            Cleanup.RemoveCollection(wmiConnection, name);
+                        }
                     });
 
                 // remove deployment
@@ -701,7 +824,10 @@ namespace SharpSCCM
                     (string server, string siteCode, string application, string collection) =>
                     {
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
-                        Cleanup.RemoveDeployment(wmiConnection, application, collection);
+                        if (wmiConnection != null && wmiConnection.IsConnected)
+                        {
+                            Cleanup.RemoveDeployment(wmiConnection, application, collection);
+                        }
                     });
 
                 // remove device
@@ -712,7 +838,10 @@ namespace SharpSCCM
                     (string server, string siteCode, string guid) =>
                     {
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
-                        Cleanup.RemoveDevice(wmiConnection, guid);
+                        if (wmiConnection != null && wmiConnection.IsConnected)
+                        {
+                            Cleanup.RemoveDevice(wmiConnection, guid);
+                        }
                     });
 
                 // Execute
@@ -730,17 +859,22 @@ namespace SharpSCCM
                    .Build();
                 commandLine.Invoke(args);
 
+                // Delay completion when debugging
                 if (Debugger.IsAttached)
                     Console.ReadLine();
-                
+
+                // Flush any pending trace messages, remove the console trace listener from the collection, and close the console trace listener.
                 if (debug)
                 {
-                    // Flush any pending trace messages, remove the console trace listener from the collection, and close the console trace listener.
                     Trace.Flush();
                     Trace.Listeners.Remove(consoleTracer);
                     consoleTracer.Close();
                     Trace.Close();
                 }
+
+                // Stop timer and complete execution
+                timer.Stop();
+                Console.WriteLine($"[+] Completed execution in {timer.Elapsed}");
             }
             catch (Exception ex)
             {

