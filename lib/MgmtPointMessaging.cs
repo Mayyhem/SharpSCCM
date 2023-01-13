@@ -62,7 +62,6 @@ namespace SharpSCCM
             RecipientInfo encryptedKey = pkcs7EnvelopedCms.RecipientInfos[0];
             try
             {
-                //pkcs7EnvelopedCms.Decrypt(encryptedKey);
                 pkcs7EnvelopedCms.Decrypt(encryptedKey, new X509Certificate2Collection(encryptionCertificate.X509Certificate));
                 Console.WriteLine($"[+] Successfully decoded and decrypted secret policy");
                 string decryptedPolicyBody = Encoding.ASCII.GetString(pkcs7EnvelopedCms.ContentInfo.Content).Replace("\0", string.Empty);

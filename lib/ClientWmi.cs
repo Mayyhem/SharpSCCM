@@ -16,7 +16,7 @@ namespace SharpSCCM
             if (wmiConnection.IsConnected)
             {
                 string query = MgmtUtil.BuildClassInstanceQueryString(wmiConnection, "SMS_Authority", false, new[] { "CurrentManagementPoint", "Name" });
-                ManagementObjectCollection classInstances = MgmtUtil.GetClassInstanceCollection(wmiConnection, "SMS_Authority", query);
+                ManagementObjectCollection classInstances = MgmtUtil.GetClassInstances(wmiConnection, "SMS_Authority", query);
                 if (classInstances != null)
                 {
                     foreach (ManagementObject queryObj in classInstances)

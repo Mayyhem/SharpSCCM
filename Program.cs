@@ -1,12 +1,10 @@
 using System;
-using System.Collections;
 using System.CommandLine;
 using System.CommandLine.Builder;
 using System.CommandLine.NamingConventionBinder;
 using System.CommandLine.Parsing;
 using System.Diagnostics;
 using System.Management;
-using System.Web;
 
 // Configuration Manager SDK
 using Microsoft.ConfigurationManagement.Messaging.Framework;
@@ -48,58 +46,13 @@ namespace SharpSCCM
                 // Subcommands
                 //
 
-                // add
-                var addCommand = new Command("add", "A group of commands that add objects to other objects (e.g., add device to collection)");
-                addCommand.AddGlobalOption(new Option<string>(new[] { "--server", "-mp" }, "The IP address, FQDN, or NetBIOS name of the Configuration Manager management point server to connect to (default: the current management point of the client running SharpSCCM)"));
-                addCommand.AddGlobalOption(new Option<string>(new[] { "--site-code", "-sc" }, "The three character site code of the Configuration Manager server (e.g., PS1) (default: the site code of the client running SharpSCCM)"));
-                rootCommand.Add(addCommand);
-
-                // add device-to-collection
-                var addDeviceToCollection = new Command("device-to-collection", "Add a device to a collection for application deployment");
-                addCommand.Add(addDeviceToCollection);
-                addDeviceToCollection.Add(new Argument<string>("device-name", "The name of the device you would like to add to the specified collection"));
-                addDeviceToCollection.Add(new Argument<string>("collection-name", "The name of the collection you would like to add the specified device to"));
-                addDeviceToCollection.Handler = CommandHandler.Create(
-                    (string server, string siteCode, string deviceName, string collectionName) =>
-                    {
-                        ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
-                        if (wmiConnection != null && wmiConnection.IsConnected)
-                        {
-                            MgmtPointWmi.AddDeviceToCollection(wmiConnection, deviceName, collectionName);
-                        }
-                    });
-
-                // add user-to-admins
-                //var addUserToAdmins = new Command("user-to-admins", "Add a user to the RBAC_Admins table to obtain Full Administrator access to ConfigMgr console and WMI objects (requires local Administrator privileges on the server running the site database)");
-                //addCommand.Add(addUserToAdmins);
-                //addUserToAdmins.Add(new Argument<string>("user-name", "The domain and user name you would like to grant Full Administrator privilege to (e.g., DOMAIN-SHORTNAME\\USERNAME)"));
-                //addUserToAdmins.Handler = CommandHandler.Create(
-                //    (string server, string siteCode, string userName) =>
-                //    {
-                //        var connection = Database.Connect(server, siteCode);
-                //        Database.Query(connection, "SELECT * FROM RBAC_Admins");
-                //    });
-
-                // add user-to-collection
-                var addUserToCollection = new Command("user-to-collection", "Add a user to a collection for application deployment");
-                addCommand.Add(addUserToCollection);
-                addUserToCollection.Add(new Argument<string>("user-name", "The domain and user name you would like to add to the specified collection (e.g., DOMAIN-SHORTNAME\\USERNAME)"));
-                addUserToCollection.Add(new Argument<string>("collection-name", "The name of the collection you would like to add the specified user to"));
-                addUserToCollection.Handler = CommandHandler.Create(
-                    (string server, string siteCode, string userName, string collectionName) =>
-                    {
-                        ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
-                        if (wmiConnection != null && wmiConnection.IsConnected)
-                        {
-                            MgmtPointWmi.AddUserToCollection(wmiConnection, userName, collectionName);
-                        }
-                    });
-
                 // exec command
                 var execCommand = new Command("exec", "Execute an application from a specified UNC path or request NTLM authentication from a client device or collection of client devices\n" +
-                    "Permitted roles:\n" +
-                    "  - Full Administrator" + 
-                    "  - Application Administrator");
+                    "    Permitted security roles:\n" +
+                    "      - Full Administrator\n" +
+                    "      - Application Administrator\n" +
+                    "    Examples:\n" +
+                    "      - https://posts.specterops.io/relaying-ntlm-authentication-from-sccm-clients-7dccb8f92867");
                 rootCommand.Add(execCommand);
                 execCommand.Add(new Option<string>(new[] { "--device", "-d" }, "The ResourceName of the device you would like to execute an application on or receive NTLM authentication from"));
                 execCommand.Add(new Option<string>(new[] { "--collection", "-c" }, "The Name of the device collection you would like to execute an application on or receive NTLM authentication from"));
@@ -135,21 +88,29 @@ namespace SharpSCCM
                     });
 
                 // get 
-                var getCommand = new Command("get", "A group of commands that query certain objects and display their contents");
+                var getCommand = new Command("get", "A group of commands that fetch objects from a management point via WMI or HTTP(S)");
                 rootCommand.Add(getCommand);
-                getCommand.AddGlobalOption(new Option<bool>(new[] { "--count", "-c" }, "Returns the number of rows that match the specified criteria"));
-                getCommand.AddGlobalOption(new Option<bool>(new[] { "--dry-run", "-d" }, "Display the resulting WQL query but do not connect to the specified server and execute it"));
-                getCommand.AddGlobalOption(new Option<string>(new[] { "--order-by", "-o" }, "An ORDER BY clause to set the order of data returned by the query (e.g., \"ResourceID DESC\") (default: ascending (ASC) order)"));
-                getCommand.AddGlobalOption(new Option<string[]>(new[] { "--properties", "-p" }, "A space-separated list of properties to query (e.g., \"IsActive UniqueUserName\"") { Arity = ArgumentArity.OneOrMore });
-                getCommand.AddGlobalOption(new Option<string>(new[] { "--server", "-mp" }, "The IP address, FQDN, or NetBIOS name of the Configuration Manager management point server to connect to (default: the current management point of the client running SharpSCCM)"));
-                getCommand.AddGlobalOption(new Option<string>(new[] { "--site-code", "-sc" }, "The three character site code of the Configuration Manager server (e.g., PS1) (default: the site code of the client running SharpSCCM)"));
-                getCommand.AddGlobalOption(new Option<bool>(new[] { "--verbose", "-v" }, "Display all class properties and their values (default: false)"));
-                getCommand.AddGlobalOption(new Option<string>(new[] { "--where-condition", "-w" }, "A WHERE condition to narrow the scope of data returned by the query (e.g., \"Name='cave.johnson'\" or \"Name LIKE '%cave%'\")"));
+                getCommand.AddGlobalOption(new Option<string>(new[] { "--server", "-mp" }, "The IP address, FQDN, or NetBIOS name of the management point to connect to (default: the current management point of the client running SharpSCCM)"));
+                getCommand.AddGlobalOption(new Option<string>(new[] { "--site-code", "-sc" }, "The three character site code (e.g., PS1) (default: the site code of the client running SharpSCCM)"));
 
                 // get application
-                var getApplication = new Command("application", "Get information on applications");
+                var getApplication = new Command("application", "Get information on applications from a management point via WMI\n" +
+                    "    Permitted security roles:\n" +
+                    "      - Full Administrator\n" +
+                    "      - Application Administrator\n" +
+                    "      - Application Author\n" +
+                    "      - Application Deployment Manager\n" +
+                    "      - Operating System Deployment Manager\n" +
+                    "      - Operations Administrator\n" +
+                    "      - Read-only Analyst");
                 getCommand.Add(getApplication);
+                getApplication.Add(new Option<bool>(new[] { "--count", "-c" }, "Returns the number of rows that match the specified criteria"));
+                getApplication.Add(new Option<bool>(new[] { "--dry-run", "-d" }, "Display the resulting WQL query but do not connect to the specified server and execute it"));
                 getApplication.Add(new Option<string>(new[] { "--name", "-n" }, "A string to search for in application names (returns all applications where the name contains the provided string"));
+                getApplication.Add(new Option<string>(new[] { "--order-by", "-o" }, "An ORDER BY clause to set the order of data returned by the query (e.g., \"ResourceID DESC\") (default: ascending (ASC) order)"));
+                getApplication.Add(new Option<string[]>(new[] { "--properties", "-p" }, "Specify this option for each property to query (e.g., \"-p CI_ID -p LocalizedDisplayName\"") { Arity = ArgumentArity.OneOrMore });
+                getApplication.Add(new Option<bool>(new[] { "--verbose", "-v" }, "Display all class properties and their values"));
+                getApplication.Add(new Option<string>(new[] { "--where-condition", "-w" }, "A WHERE condition to narrow the scope of data returned by the query (e.g., \"LocalizedDisplayName='app0'\" or \"LocalizedDisplayName LIKE '%app%'\")"));
                 getApplication.Handler = CommandHandler.Create(
                     (string server, string siteCode, bool count, bool dryRun, string orderBy, string[] properties, string whereCondition, bool verbose, string name) =>
                     {
@@ -164,16 +125,18 @@ namespace SharpSCCM
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
                         if (wmiConnection != null && wmiConnection.IsConnected)
                         {
-                            MgmtUtil.GetClassInstances(wmiConnection, "SMS_Application", count, properties, whereCondition, orderBy, dryRun, verbose);
+                            MgmtUtil.GetClassInstances(wmiConnection, "SMS_Application", null, count, properties, whereCondition, orderBy, dryRun, verbose, printOutput: true);
                         }
                     });
 
                 // get classes
-                var getClasses = new Command("classes", "Get information on remote WMI classes");
+                var getClasses = new Command("classes", "Get information on WMI classes from a management point\n" +
+                    "    Permitted security roles:\n" +
+                    "      - Any (SMS Admins local group)");
                 getCommand.Add(getClasses);
-                getClasses.Add(new Option<string>(new[] { "--wmi-namespace", "-ns" }, "The WMI namespace to query (e.g., \"root\\CCM\")"));
+                getClasses.Add(new Option<string>(new[] { "--wmi-namespace", "-ns" }, "The WMI namespace to query (default: \"root\\SMS\\site_<site-code>\")"));
                 getClasses.Handler = CommandHandler.Create(
-                    (string server, string siteCode, string wmiNamespace, bool count, string whereCondition, string orderBy, bool dryRun, bool verbose) =>
+                    (string server, string siteCode, string wmiNamespace) =>
                     {
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, wmiNamespace, siteCode);
                         if (wmiConnection != null && wmiConnection.IsConnected)
@@ -183,10 +146,18 @@ namespace SharpSCCM
                     });
 
                 // get class-instances
-                var getClassInstances = new Command("class-instances", "Get information on WMI class instances");
+                var getClassInstances = new Command("class-instances", "Get information on WMI class instances from a management point\n" +
+                    "    Permitted security roles:\n" +
+                    "      - ACLs are applied at the object class and instance level");
                 getCommand.Add(getClassInstances);
                 getClassInstances.Add(new Argument<string>("wmiClass", "The WMI class to query (e.g., \"SMS_R_System\")"));
-                getClassInstances.Add(new Option<string>(new[] { "--wmi-namespace", "-ns" }, "The WMI namespace to query (e.g., \"root\\CCM\") (default: \"root\\SMS\\site_<site-code>\")"));
+                getClassInstances.Add(new Option<bool>(new[] { "--count", "-c" }, "Returns the number of rows that match the specified criteria"));
+                getClassInstances.Add(new Option<bool>(new[] { "--dry-run", "-d" }, "Display the resulting WQL query but do not connect to the specified server and execute it"));
+                getClassInstances.Add(new Option<string>(new[] { "--order-by", "-o" }, "An ORDER BY clause to set the order of data returned by the query (e.g., \"Name DESC\") (default: ascending (ASC) order)"));
+                getClassInstances.Add(new Option<string[]>(new[] { "--properties", "-p" }, "Specify this option for each property to query (e.g., \"-p Name -p LastLogonUserName\"") { Arity = ArgumentArity.OneOrMore });
+                getClassInstances.Add(new Option<bool>(new[] { "--verbose", "-v" }, "Display all class properties and their values"));
+                getClassInstances.Add(new Option<string>(new[] { "--where-condition", "-w" }, "A WHERE condition to narrow the scope of data returned by the query (e.g., \"LastLogonUserName='cave.johnson'\" or \"LastLogonUserName LIKE '%cave%'\")"));
+                getClassInstances.Add(new Option<string>(new[] { "--wmi-namespace", "-ns" }, "The WMI namespace to query (default: \"root\\SMS\\site_<site-code>\")"));
                 getClassInstances.Handler = CommandHandler.Create(
                     (string server, string siteCode, bool count, string wmiNamespace, string wmiClass, string[] properties, string whereCondition, string orderBy, bool dryRun, bool verbose) =>
                     {
@@ -197,15 +168,17 @@ namespace SharpSCCM
                         }
                         if (wmiConnection != null && wmiConnection.IsConnected)
                         {
-                            MgmtUtil.GetClassInstances(wmiConnection, wmiClass, count, properties, whereCondition, orderBy, dryRun, verbose);
+                            MgmtUtil.GetClassInstances(wmiConnection, wmiClass, null, count, properties, whereCondition, orderBy, dryRun, verbose, printOutput: true);
                         }
                     });
 
                 // get class-properties
-                var getClassProperties = new Command("class-properties", "Get all properties of a specified WMI class");
+                var getClassProperties = new Command("class-properties", "Get all properties of a specified WMI class from a management point\n" +
+                    "    Permitted security roles:\n" +
+                    "      - Any (SMS Admins local group)");
                 getCommand.Add(getClassProperties);
                 getClassProperties.Add(new Argument<string>("wmiClass", "The WMI class to query (e.g., \"SMS_R_System\")"));
-                getClassProperties.Add(new Option<string>(new[] { "--wmi-namespace", "-ns" }, "The WMI namespace to query (e.g., \"root\\CCM\") (default: \"root\\SMS\\site_<site-code>\")"));
+                getClassProperties.Add(new Option<string>(new[] { "--wmi-namespace", "-ns" }, "The WMI namespace to query (default: \"root\\SMS\\site_<site-code>\")"));
                 getClassProperties.Handler = CommandHandler.Create(
                     (string server, string siteCode, string wmiNamespace, string wmiClass) =>
                     {
@@ -218,9 +191,17 @@ namespace SharpSCCM
                     });
 
                 // get collection
-                var getCollection = new Command("collection", "Get information on collections");
+                var getCollection = new Command("collection", "Get information on collections from a management point via WMI\n" +
+                    "    Permitted security roles:\n" +
+                    "      - Any (SMS Admins local group)");
                 getCommand.Add(getCollection);
+                getCollection.Add(new Option<bool>(new[] { "--count", "-c" }, "Returns the number of rows that match the specified criteria"));
+                getCollection.Add(new Option<bool>(new[] { "--dry-run", "-d" }, "Display the resulting WQL query but do not connect to the specified server and execute it"));
                 getCollection.Add(new Option<string>(new[] { "--name", "-n" }, "A string to search for in collection names (returns all devices where the device name contains the provided string"));
+                getCollection.Add(new Option<string>(new[] { "--order-by", "-o" }, "An ORDER BY clause to set the order of data returned by the query (e.g., \"Name DESC\") (default: ascending (ASC) order)"));
+                getCollection.Add(new Option<string[]>(new[] { "--properties", "-p" }, "Specify this option for each property to query (e.g., \"-p Name -p MemberCount\"") { Arity = ArgumentArity.OneOrMore });
+                getCollection.Add(new Option<bool>(new[] { "--verbose", "-v" }, "Display all class properties and their values"));
+                getCollection.Add(new Option<string>(new[] { "--where-condition", "-w" }, "A WHERE condition to narrow the scope of data returned by the query (e.g., \"Name='collection0'\" or \"Name LIKE '%collection%'\")"));
                 getCollection.Handler = CommandHandler.Create(
                     (string server, string siteCode, bool count, bool dryRun, string orderBy, string[] properties, string whereCondition, bool verbose, string name) =>
                     {
@@ -235,39 +216,53 @@ namespace SharpSCCM
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
                         if (wmiConnection != null && wmiConnection.IsConnected)
                         {
-                            MgmtUtil.GetClassInstances(wmiConnection, "SMS_Collection", count, properties, whereCondition, orderBy, dryRun, verbose);
+                            MgmtUtil.GetClassInstances(wmiConnection, "SMS_Collection", null, count, properties, whereCondition, orderBy, dryRun, verbose, printOutput: true);
                         }
                     });
 
                 // get collection-member
-                var getCollectionMember = new Command("collection-member", "Get the members of a specified collection");
+                var getCollectionMember = new Command("collection-member", "Get the members of a specified collection from a management point via WMI\n" +
+                    "    Permitted security roles:\n" +
+                    "      - Any (SMS Admins local group)");
                 getCommand.Add(getCollectionMember);
-                getCollectionMember.Add(new Argument<string>("name", "A string to search for in collection names (returns all members of collections with names containing the provided string"));
+                getCollectionMember.Add(new Argument<string>("name", "The name of the collection"));
+                getCollectionMember.Add(new Option<bool>(new[] { "--dry-run", "-d" }, "Display the resulting WQL query but do not connect to the specified server and execute it"));
+                getCollectionMember.Add(new Option<string[]>(new[] { "--properties", "-p" }, "Specify this option for each property to query (e.g., \"-p Name -p IsActive\"") { Arity = ArgumentArity.OneOrMore });
+                getCollectionMember.Add(new Option<bool>(new[] { "--verbose", "-v" }, "Display all class properties and their values"));
+                getCollectionMember.Add(new Option<string>(new[] { "--where-condition", "-w" }, "A WHERE condition to narrow the scope of data returned by the query (e.g., \"IsActive='True'\" or \"Name LIKE '%cave-johnson%'\")"));
+                // COUNT and ORDER BY don't seem to work when querying SMS_CollectionMember_a
                 getCollectionMember.Handler = CommandHandler.Create(
-                    (string server, string siteCode, bool count, string[] properties, string whereCondition, string orderBy, bool dryRun, bool verbose, string name) =>
+                    (string server, string siteCode, string[] properties, string whereCondition, bool dryRun, bool verbose, string name) =>
                     {
                         if (properties.Length == 0 && !verbose)
                         {
-                            properties = new[] { "Collection", "CollectionID", "Domain", "IsActive", "IsAssigned", "IsClient", "Name", "SiteCode" };
+                            properties = new[] { "Collection", "CollectionID", "Domain", "IsActive", "IsApproved", "IsAssigned", "IsClient", "Name", "ResourceID", "SiteCode" };
                         }
-                        if (count || !string.IsNullOrEmpty(orderBy))
+                        ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
+                        if (wmiConnection != null && wmiConnection.IsConnected)
                         {
-                            Console.WriteLine("[!] Error: COUNT and ORDER BY don't seem to work when querying SMS_CollectionMember_a");
-                        }
-                        else
-                        {
-                            ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
-                            if (wmiConnection != null && wmiConnection.IsConnected)
-                            {
-                                MgmtPointWmi.GetCollectionMember(wmiConnection, name, count, properties, orderBy, dryRun, verbose);
-                            }
+                            MgmtPointWmi.GetCollectionMember(wmiConnection, name, properties, dryRun, verbose);
                         }
                     });
 
                 // get deployment
-                var getDeployment = new Command("deployment", "Get information on deployments");
+                var getDeployment = new Command("deployment", "Get information on deployments from a management point via WMI\n" +
+                    "    Permitted security roles:\n" +
+                    "      - Full Administrator\n" +
+                    "      - Application Administrator\n" +
+                    "      - Application Author\n" +
+                    "      - Application Deployment Manager\n" +
+                    "      - Operating System Deployment Manager\n" +
+                    "      - Operations Administrator\n" +
+                    "      - Read-only Analyst");
                 getCommand.Add(getDeployment);
+                getDeployment.Add(new Option<bool>(new[] { "--count", "-c" }, "Returns the number of rows that match the specified criteria"));
+                getDeployment.Add(new Option<bool>(new[] { "--dry-run", "-d" }, "Display the resulting WQL query but do not connect to the specified server and execute it"));
                 getDeployment.Add(new Option<string>(new[] { "--name", "-n" }, "A string to search for in deployment names (returns all deployments where the name contains the provided string"));
+                getDeployment.Add(new Option<string>(new[] { "--order-by", "-o" }, "An ORDER BY clause to set the order of data returned by the query (e.g., \"Name DESC\") (default: ascending (ASC) order)"));
+                getDeployment.Add(new Option<string[]>(new[] { "--properties", "-p" }, "Specify this option for each property to query (e.g., \"-p Name -p MemberCount\"") { Arity = ArgumentArity.OneOrMore });
+                getDeployment.Add(new Option<bool>(new[] { "--verbose", "-v" }, "Display all class properties and their values"));
+                getDeployment.Add(new Option<string>(new[] { "--where-condition", "-w" }, "A WHERE condition to narrow the scope of data returned by the query (e.g., \"Name='collection0'\" or \"Name LIKE '%collection%'\")"));
                 getDeployment.Handler = CommandHandler.Create(
                     (string server, string siteCode, bool count, string[] properties, string whereCondition, string orderBy, bool dryRun, bool verbose, string name) =>
                     {
@@ -282,15 +277,23 @@ namespace SharpSCCM
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
                         if (wmiConnection != null && wmiConnection.IsConnected)
                         {
-                            MgmtUtil.GetClassInstances(wmiConnection, "SMS_ApplicationAssignment", count, properties, whereCondition, orderBy, dryRun, verbose);
+                            MgmtUtil.GetClassInstances(wmiConnection, "SMS_ApplicationAssignment", null, count, properties, whereCondition, orderBy, dryRun, verbose, printOutput: true);
                         }
                     });
 
                 // get device
-                var getDevice = new Command("device", "Get information on devices");
+                var getDevice = new Command("device", "Get information on devices from a management point via WMI\n" +
+                    "    Permitted security roles:\n" +
+                    "      - Any (SMS Admins local group)");
                 getCommand.Add(getDevice);
+                getDevice.Add(new Option<bool>(new[] { "--count", "-c" }, "Returns the number of rows that match the specified criteria"));
+                getDevice.Add(new Option<bool>(new[] { "--dry-run", "-d" }, "Display the resulting WQL query but do not connect to the specified server and execute it"));
                 getDevice.Add(new Option<string>(new[] { "--last-user", "-u" }, "Get information on devices where a specific user was the last to log in (matches exact string provided) (note: output reflects the last user logon at the point in time the last heartbeat DDR and hardware inventory was sent to the management point and may not be accurate)"));
                 getDevice.Add(new Option<string>(new[] { "--name", "-n" }, "A string to search for in device names (returns all devices where the device name contains the provided string)"));
+                getDevice.Add(new Option<string>(new[] { "--order-by", "-o" }, "An ORDER BY clause to set the order of data returned by the query (e.g., \"Name DESC\") (default: ascending (ASC) order)"));
+                getDevice.Add(new Option<string[]>(new[] { "--properties", "-p" }, "Specify this option for each property to query (e.g., \"-p Name -p LastLogonUserName\"") { Arity = ArgumentArity.OneOrMore });
+                getDevice.Add(new Option<bool>(new[] { "--verbose", "-v" }, "Display all class properties and their values"));
+                getDevice.Add(new Option<string>(new[] { "--where-condition", "-w" }, "A WHERE condition to narrow the scope of data returned by the query (e.g., \"LastLogonUserName='cave.johnson'\" or \"LastLogonUserName LIKE '%cave%'\")"));
                 getDevice.Handler = CommandHandler.Create(
                     (string server, string siteCode, bool count, bool dryRun, string orderBy, string[] properties, string whereCondition, bool verbose, string lastUser, string name) =>
                     {
@@ -304,20 +307,32 @@ namespace SharpSCCM
                         }
                         if (properties.Length == 0 && !verbose)
                         {
-                            properties = new[] { "Active", "ADSiteName", "Client", "DistinguishedName", "FullDomainName", "HardwareID", "IPAddresses", "IPSubnets", "IPv6Addresses", "IPv6Prefixes", "IsVirtualMachine", "LastLogonTimestamp", "LastLogonUserDomain", "LastLogonUserName", "MACAddresses", "Name", "NetbiosName", "Obsolete", "OperatingSystemNameandVersion", "PrimaryGroupID", "ResourceDomainORWorkgroup", "ResourceNames", "SID", "SMSInstalledSites", "SMSUniqueIdentifier", "SNMPCommunityName", "SystemContainerName", "SystemGroupName", "SystemOUName" };
+                            properties = new[] { "Active", "ADSiteName", "Client", "DistinguishedName", "FullDomainName", "HardwareID", "IPAddresses", "IPSubnets", "IPv6Addresses", "IPv6Prefixes", "IsVirtualMachine", "LastLogonTimestamp", "LastLogonUserDomain", "LastLogonUserName", "MACAddresses", "Name", "NetbiosName", "Obsolete", "OperatingSystemNameandVersion", "PrimaryGroupID", "ResourceDomainORWorkgroup", "ResourceID", "ResourceNames", "SID", "SMSInstalledSites", "SMSUniqueIdentifier", "SNMPCommunityName", "SystemContainerName", "SystemGroupName", "SystemOUName" };
                         }
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
                         if (wmiConnection != null && wmiConnection.IsConnected)
                         {
-                            MgmtUtil.GetClassInstances(wmiConnection, "SMS_R_System", count, properties, whereCondition, orderBy, dryRun, verbose);
+                            MgmtUtil.GetClassInstances(wmiConnection, "SMS_R_System", null, count, properties, whereCondition, orderBy, dryRun, verbose, printOutput: true);
                         }
                     });
 
                 // get primary-user
-                var getPrimaryUser = new Command("primary-user", "Get information on primary users set for devices");
+                var getPrimaryUser = new Command("primary-user", "Get information on primary users set for devices from a management point via WMI\n" +
+                    "    Permitted security roles:\n" +
+                    "      - Full Administrator\n" +
+                    "      - Application Administrator\n" +
+                    "      - Application Deployment Manager\n" +
+                    "      - Operations Administrator\n" +
+                    "      - Read-only Analyst");
                 getCommand.Add(getPrimaryUser);
-                getPrimaryUser.Add(new Option<string>(new[] { "--device", "-d" }, "A specific device to search for (returns the device matching the exact string provided)"));
+                getPrimaryUser.Add(new Option<bool>(new[] { "--count", "-c" }, "Returns the number of rows that match the specified criteria"));
+                getPrimaryUser.Add(option: new Option<string>(new[] { "--device-name", "-n" }, "A specific device to search for (returns the device matching the exact string provided)"));
+                getPrimaryUser.Add(new Option<bool>(new[] { "--dry-run", "-d" }, "Display the resulting WQL query but do not connect to the specified server and execute it"));
+                getPrimaryUser.Add(new Option<string>(new[] { "--order-by", "-o" }, "An ORDER BY clause to set the order of data returned by the query (e.g., \"ResourceID DESC\") (default: ascending (ASC) order)"));
+                getPrimaryUser.Add(new Option<string[]>(new[] { "--properties", "-p" }, "Specify this option for each property to query (e.g., \"-p ResourceName -p UniqueUserName\"") { Arity = ArgumentArity.OneOrMore });
                 getPrimaryUser.Add(new Option<string>(new[] { "--user", "-u" }, "A specific user to search for (returns all devices where the primary user name contains the provided string)"));
+                getPrimaryUser.Add(new Option<bool>(new[] { "--verbose", "-v" }, "Display all class properties and their values"));
+                getPrimaryUser.Add(new Option<string>(new[] { "--where-condition", "-w" }, "A WHERE condition to narrow the scope of data returned by the query (e.g., \"UniqueUserName='APERTURE\\cave.johnson'\" or \"UniqueUserName LIKE '%cave.johnson%'\")"));
                 getPrimaryUser.Handler = CommandHandler.Create(
                     (string server, string siteCode, bool count, string[] properties, string whereCondition, string orderBy, bool dryRun, bool verbose, string device, string user) =>
                     {
@@ -334,15 +349,21 @@ namespace SharpSCCM
                             verbose = true;
                         }
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
-                        // Don't get lazy props for this function. ResourceName won't populate.
                         if (wmiConnection != null && wmiConnection.IsConnected)
                         {
-                            MgmtUtil.GetClassInstances(wmiConnection, "SMS_UserMachineRelationship", count, properties, whereCondition, orderBy, dryRun, verbose, false);
+                            // Don't get lazy props for this function. ResourceName won't populate.
+                            MgmtUtil.GetClassInstances(wmiConnection, "SMS_UserMachineRelationship", null, count, properties, whereCondition, orderBy, dryRun, verbose, false, true);
                         }
                     });
 
                 // get secrets
-                var getSecretsFromPolicy = new Command("secrets", "Request the machine policy from a management point to obtain credentials for network access accounts, collection variables, and task sequences");
+                var getSecretsFromPolicy = new Command("secrets", "Request the machine policy from a management point via HTTP to obtain credentials for network access accounts, collection variables, and task sequences\n" +
+                    "    Requirements:\n" +
+                    "      - Domain computer account credentials\n" +
+                    "        OR\n" +
+                    "      - Local Administrators group membership on a client");
+                // get naa alias for backward compatibility
+                getSecretsFromPolicy.AddAlias("naa");
                 getCommand.Add(getSecretsFromPolicy);
                 getSecretsFromPolicy.Add(new Option<string>(new[] { "--certificate", "-x" }, "The encoded X509 certificate blob to use that corresponds to a previously registered device"));
                 getSecretsFromPolicy.Add(new Option<string>(new[] { "--client-id", "-g" }, "The SMS client GUID to use that corresponds to a previously registered device and certificate"));
@@ -387,7 +408,9 @@ namespace SharpSCCM
                     });
 
                 // get site-push-settings
-                var getSitePushSettings = new Command("site-push-settings", "Query the specified management point for automatic client push installation settings (requires Full Administrator access)");
+                var getSitePushSettings = new Command("site-push-settings", "Get automatic client push installation settings from a management point via WMI\n" +
+                    "    Permitted security roles:\n" +
+                    "      - Any (SMS Admins local group)");
                 getCommand.Add(getSitePushSettings);
                 getSitePushSettings.Handler = CommandHandler.Create(
                     (string server, string siteCode) =>
@@ -416,23 +439,21 @@ namespace SharpSCCM
                         }
                     });
 
-                // get user-sid
-                var getUserSid = new Command("user-sid", "Get the hex SID for the current user");
-                getCommand.Add(getUserSid);
-                getUserSid.Handler = CommandHandler.Create(
-                    new Action(() =>
-                    {
-                        Helpers.GetCurrentUserHexSid();
-                    }));
-
                 // invoke
                 var invokeCommand = new Command("invoke", "A group of commands that execute actions on the server");
-                invokeCommand.AddGlobalOption(new Option<string>(new[] { "--server", "-mp" }, "The IP address, FQDN, or NetBIOS name of the Configuration Manager management point server to connect to (default: the current management point of the client running SharpSCCM)"));
-                invokeCommand.AddGlobalOption(new Option<string>(new[] { "--site-code", "-sc" }, "The three character site code of the Configuration Manager server (e.g., PS1) (default: the site code of the client running SharpSCCM)"));
+                invokeCommand.AddGlobalOption(new Option<string>(new[] { "--server", "-mp" }, "The IP address, FQDN, or NetBIOS name of the management point to connect to (default: the current management point of the client running SharpSCCM)"));
+                invokeCommand.AddGlobalOption(new Option<string>(new[] { "--site-code", "-sc" }, "The three character site code (e.g., PS1) (default: the site code of the client running SharpSCCM)"));
                 rootCommand.Add(invokeCommand);
 
                 // invoke client-push
-                var invokeClientPush = new Command("client-push", "Force the server to authenticate to an arbitrary destination via NTLM (requires automatic client push installation to be enabled and NTLM fallback to not be disabled)");
+                var invokeClientPush = new Command("client-push", "Force the primary site server to authenticate to an arbitrary destination via NTLM using each configured account and its domain computer account\n" +
+                    "    Requirements:\n" +
+                    "      - Automatic site assignment and site-wide client push installation are enabled\n" +
+                    "      - Fallback to NTLM authentication is not explicitly disabled (default)\n" +
+                    "      - PKI certificates are not required for client authentication (default)\n" +
+                    "    Examples:\n" +
+                    "      - https://posts.specterops.io/coercing-ntlm-authentication-from-sccm-e6e23ea8260a\n" +
+                    "      - https://posts.specterops.io/sccm-site-takeover-via-automatic-client-push-installation-f567ec80d5b1");
                 invokeCommand.Add(invokeClientPush);
                 invokeClientPush.Add(new Option<bool>(new[] { "--as-admin", "-a" }, "Connect to the server via WMI rather than HTTP to force authentication (requires Full Administrator access and device record for target)"));
                 invokeClientPush.Add(new Option<string>(new[] { "--certificate", "-x" }, "The encoded X509 certificate blob to use that corresponds to a previously registered device"));
@@ -482,7 +503,9 @@ namespace SharpSCCM
                     });
 
                 // invoke query
-                var invokeQuery = new Command("query", "Execute a given WQL query");
+                var invokeQuery = new Command("query", "Execute a given WQL query on a management point or client\n" +
+                    "    Permitted security roles:\n" +
+                    "      - ACLs are applied at the object class and instance level");
                 invokeCommand.Add(invokeQuery);
                 invokeQuery.Add(new Argument<string>("query", "The WQL query to execute"));
                 invokeQuery.Add(new Option<string>(new[] { "--wmi-namespace", "-ns" }, "The WMI namespace to query (default: \"root\\SMS\\site_<site-code>\")"));
@@ -492,12 +515,15 @@ namespace SharpSCCM
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, wmiNamespace, siteCode);
                         if (wmiConnection != null && wmiConnection.IsConnected)
                         {
-                            MgmtUtil.InvokeQuery(wmiConnection, query);
+                            MgmtUtil.GetClassInstances(wmiConnection, null, query, printOutput: true);
                         }
                     });
 
                 // invoke update
-                var invokeUpdate = new Command("update", "Force all members of a specified collection to check for updates and execute any new applications that are available");
+                var invokeUpdate = new Command("update", "Force all members of a specified collection to check for updates and execute any new applications that are available\n" +
+                    "    Permitted security roles:\n" +
+                    "      - Full Administrator\n" +
+                    "      - Operations Administrator");
                 invokeCommand.Add(invokeUpdate);
                 invokeUpdate.Add(new Argument<string>("collection", "The name of the collection to force to update"));
                 invokeUpdate.Handler = CommandHandler.Create(
@@ -512,10 +538,6 @@ namespace SharpSCCM
 
                 // local
                 var localCommand = new Command("local", "A group of commands to interact with the local workstation/server");
-                localCommand.AddGlobalOption(new Option<bool>(new[] { "--dry-run", "-d" }, "Display the resulting WQL query but do not connect to the specified server and execute it"));
-                localCommand.AddGlobalOption(new Option<string[]>(new[] { "--properties", "-p" }, "A space-separated list of properties to query (e.g., \"IsActive UniqueUserName\"") { Arity = ArgumentArity.OneOrMore });
-                localCommand.AddGlobalOption(new Option<bool>(new[] { "--verbose", "-v" }, "Display all class properties and their values (default: false)"));
-                localCommand.AddGlobalOption(new Option<string>(new[] { "--where-condition", "-w" }, "A WHERE condition to narrow the scope of data returned by the query (e.g., \"Name='cave.johnson'\" or \"Name LIKE '%cave%'\")"));
                 rootCommand.Add(localCommand);
 
                 // local classes
@@ -537,7 +559,12 @@ namespace SharpSCCM
                 var localClassInstances = new Command("class-instances", "Get information on local WMI class instances");
                 localCommand.Add(localClassInstances);
                 localClassInstances.Add(new Argument<string>("wmiClass", "The WMI class to query (e.g., \"SMS_Authority\")"));
-                localClassInstances.Add(new Option<string>(new[] { "--wmi-namespace", "-ns" }, "The WMI namespace to query (e.g., \"root\\cimv2\") (default: \"root\\CCM\")"));
+                localClassInstances.Add(new Option<bool>(new[] { "--dry-run", "-d" }, "Display the resulting WQL query but do not connect to the specified server and execute it"));
+                localClassInstances.Add(new Option<string[]>(new[] { "--properties", "-p" }, "Specify this option for each property to query (e.g., \"-p ResourceName -p UniqueUserName\"") { Arity = ArgumentArity.OneOrMore });
+                localClassInstances.Add(new Option<bool>(new[] { "--verbose", "-v" }, "Display all class properties and their values"));
+                localClassInstances.Add(new Option<string>(new[] { "--where-condition", "-w" }, "A WHERE condition to narrow the scope of data returned by the query (e.g., \"UniqueUserName='APERTURE\\cave.johnson'\" or \"UniqueUserName LIKE '%cave.johnson%'\")"));
+                localClassInstances.Add(new Option<string>(new[] { "--wmi-namespace", "-ns" }, "The WMI namespace to query (default: \"root\\CCM\")"));
+                // COUNT and ORDER BY don't seem to work when querying the local WMI repository
                 localClassInstances.Handler = CommandHandler.Create(
                     (bool count, string wmiNamespace, string wmiClass, string[] properties, string whereCondition, string orderBy, bool dryRun, bool verbose) =>
                     {
@@ -548,15 +575,17 @@ namespace SharpSCCM
                         }
                         if (wmiConnection != null && wmiConnection.IsConnected)
                         {
-                            MgmtUtil.GetClassInstances(wmiConnection, wmiClass, count, properties, whereCondition, orderBy, dryRun, verbose);
+                            // Only get lazy properties if querying the ConfigMgr client WMI namespace ("root\CCM")
+                            bool getLazyProps = string.IsNullOrEmpty(wmiNamespace) ? true : false;
+                            MgmtUtil.GetClassInstances(wmiConnection, wmiClass, null, count, properties, whereCondition, orderBy, dryRun, verbose, getLazyProps, true);
                         }
                     });
 
                 // local class-properties
-                var localClassProperties = new Command("class-properties", "Get all properties of a specified WMI class");
+                var localClassProperties = new Command("class-properties", "Get all properties of a specified local WMI class");
                 localCommand.Add(localClassProperties);
-                localClassProperties.Add(new Argument<string>("wmiClass", "The WMI class to query (e.g., \"SMS_R_System\")"));
-                localClassProperties.Add(new Option<string>(new[] { "--wmi-namespace", "-ns" }, "The WMI namespace to query (e.g., \"root\\cimv2\") (default: \"root\\CCM\")"));
+                localClassProperties.Add(new Argument<string>("wmiClass", "The WMI class to query (e.g., \"SMS_Authority\")"));
+                localClassProperties.Add(new Option<string>(new[] { "--wmi-namespace", "-ns" }, "The WMI namespace to query (default: \"root\\CCM\")"));
                 localClassProperties.Handler = CommandHandler.Create(
                     (string wmiNamespace, string wmiClass) =>
                     {
@@ -568,8 +597,8 @@ namespace SharpSCCM
                         }
                     });
 
-                // local clientinfo
-                var getLocalClientInfo = new Command("clientinfo", "Get the client software version for the local host");
+                // local client-info
+                var getLocalClientInfo = new Command("client-info", "Get the client software version for the local host via WMI");
                 localCommand.Add(getLocalClientInfo);
                 getLocalClientInfo.Handler = CommandHandler.Create(
                     new Action(() =>
@@ -577,12 +606,15 @@ namespace SharpSCCM
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection("127.0.0.1");
                         if (wmiConnection != null && wmiConnection.IsConnected)
                         {
-                            MgmtUtil.GetClassInstances(wmiConnection, "CCM_InstalledComponent", false, new[] { "Version" }, "Name='SmsClient'");
+                            MgmtUtil.GetClassInstances(wmiConnection, "CCM_InstalledComponent", null, false, new[] { "Version" }, "Name='SmsClient'", printOutput: true);
                         }
                     }));
 
                 // local create-ccr
-                var localCreateCCR = new Command("create-ccr", "Untested function to create a CCR that initiates client push installation to a specified target (requires local Administrator privileges on a management point, only works on ConfigMgr 2003 and 2007)");
+                var localCreateCCR = new Command("create-ccr", "Untested function to create a CCR that initiates client push installation to a specified target\n" +
+                    "    Requirements:\n" +
+                    "     - Local Administrators group membership on a management point\n" +
+                    "     - ConfigMgr 2003 or 2007");
                 localCommand.Add(localCreateCCR);
                 localCreateCCR.Add(new Argument<string>("target", "The NetBIOS name, IP address, or if WebClient is enabled on the site server, the IP address and port (e.g., 192.168.1.1@8080) of the relay/capture server"));
                 localCreateCCR.Handler = CommandHandler.Create(
@@ -612,40 +644,12 @@ namespace SharpSCCM
                         //LocalPushLogs();
                     }));
 
-                // local naa
-                var getLocalNetworkAccessAccounts = new Command("naa", "Get network access accounts stored locally in the WMI repository (requires admin privileges)");
-                localCommand.Add(getLocalNetworkAccessAccounts);
-                getLocalNetworkAccessAccounts.Add(new Argument<string>("method", "The method of obtaining the DPAPI-protected blobs: wmi or disk (note that the disk method can retrieve secrets that were changed or deleted"));
-                getLocalNetworkAccessAccounts.Add(new Option<bool>(new[] { "--get-system", "-s" }, "Escalate to SYSTEM via token duplication (default is to modify and revert the permissions on the LSA secrets registry key)"));
-                getLocalNetworkAccessAccounts.Handler = CommandHandler.Create(
-                    (string method, bool getSystem) =>
-                    {
-                        // default to registry permission modification
-                        bool reg = true ? !getSystem : false;
-
-                        if (Helpers.IsHighIntegrity())
-                        {
-                            if (method == "wmi")
-                            {
-                                Credentials.LocalNetworkAccessAccountsWmi(reg);
-                            }
-                            else if (method == "disk")
-                            {
-                                Credentials.LocalSecretsDisk(reg);
-                            }
-                            else
-                            {
-                                Console.WriteLine("[!] A method (wmi or disk) is required");
-                            }
-                        }
-                        else
-                        {
-                            Console.WriteLine("[!] SharpSCCM must be run with local administrator privileges to retrieve policy secret blobs\n");
-                        }
-                    });
-
                 // local secrets
-                var getLocalSecrets = new Command("secrets","Get policy secrets (e.g., network access accounts, task sequences, and collection variables) stored locally in the WMI repository (requires admin privileges)");
+                var getLocalSecrets = new Command("secrets","Get policy secrets (e.g., network access accounts, task sequences, and collection variables) stored locally in the WMI repository\n" +
+                    "    Requirements:\n" +
+                    "     - Local Administrators group membership on a client");
+                // local naa alias for backward compatibility
+                getLocalSecrets.AddAlias("naa");
                 localCommand.Add(getLocalSecrets);
                 getLocalSecrets.Add(new Argument<string>("method", "The method of obtaining the DPAPI-protected blobs: wmi or disk (note that the disk method can retrieve secrets that were changed or deleted"));
                 getLocalSecrets.Add(new Option<bool>(new[] { "--get-system", "-s" }, "Escalate to SYSTEM via token duplication (default is to modify and revert the permissions on the LSA secrets registry key)"));
@@ -672,12 +676,12 @@ namespace SharpSCCM
                         }
                         else
                         {
-                            Console.WriteLine("[!] SharpSCCM must be run with local administrator privileges to retrieve policy secret blobs\n");
+                            Console.WriteLine("[!] SharpSCCM must be run with local administrator privileges to retrieve policy secret blobs");
                         }
                     });
 
-                // local siteinfo
-                var localSiteInfo = new Command("siteinfo", "Get the primary management point and site code for the local host");
+                // local site-info
+                var localSiteInfo = new Command("site-info", "Get the current management point and site code for the local host via WMI");
                 localCommand.Add(localSiteInfo);
                 localSiteInfo.Handler = CommandHandler.Create(
                     new Action(() =>
@@ -685,7 +689,7 @@ namespace SharpSCCM
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection("127.0.0.1");
                         if (wmiConnection != null && wmiConnection.IsConnected)
                         {
-                            MgmtUtil.GetClassInstances(wmiConnection, "SMS_Authority", false, new[] { "CurrentManagementPoint", "Name" });
+                            MgmtUtil.GetClassInstances(wmiConnection, "SMS_Authority", null, false, new[] { "CurrentManagementPoint", "Name" }, printOutput: true);
                         }
                     }));
 
@@ -698,14 +702,39 @@ namespace SharpSCCM
                         ClientFileSystem.Triage();
                     }));
 
+                // local user-sid
+                var localUserSid = new Command("user-sid", "Get the hex SID for the current user");
+                localCommand.Add(localUserSid);
+                localUserSid.Handler = CommandHandler.Create(
+                    new Action(() =>
+                    {
+                        Helpers.GetCurrentUserHexSid();
+                    }));
+
                 // new
-                var newCommand = new Command("new", "A group of commands that create new objects on the server");
-                newCommand.AddGlobalOption(new Option<string>(new[] { "--server", "-mp" }, "The IP address, FQDN, or NetBIOS name of the Configuration Manager management point server to connect to (default: the current management point of the client running SharpSCCM)"));
-                newCommand.AddGlobalOption(new Option<string>(new[] { "--site-code", "-sc" }, "The three character site code of the Configuration Manager server (e.g., PS1) (default: the site code of the client running SharpSCCM)"));
+                var newCommand = new Command("new", "A group of commands that create new objects by contacting a management point via WMI or HTTP(S)");
+                newCommand.AddGlobalOption(new Option<string>(new[] { "--server", "-mp" }, "The IP address, FQDN, or NetBIOS name of the management point to connect to (default: the current management point of the client running SharpSCCM)"));
+                newCommand.AddGlobalOption(new Option<string>(new[] { "--site-code", "-sc" }, "The three character site code (e.g., PS1) (default: the site code of the client running SharpSCCM)"));
                 rootCommand.Add(newCommand);
 
+                // new admin
+                //var newAdmin = new Command("admin", "Add a user to the RBAC_Admins table to obtain Full Administrator access to ConfigMgr console and WMI objects (requires local administrator privileges on the server running the site database)");
+                //newCommand.Add(newAdmin);
+                //newAdmin.Add(new Argument<string>("user-name", "The domain and user name you would like to grant Full Administrator privilege to (e.g., DOMAIN-SHORTNAME\\USERNAME)"));
+                //newAdmin.Handler = CommandHandler.Create(
+                //    (string server, string siteCode, string userName) =>
+                //    {
+                //        var connection = Database.Connect(server, siteCode);
+                //        Database.Query(connection, "SELECT * FROM RBAC_Admins");
+                //    });
+
                 // new application
-                var newApplication = new Command("application", "Create an application");
+                var newApplication = new Command("application", "Create an application by contacting a management point via WMI\n" +
+                    "    Permitted security roles:\n" +
+                    "      - Full Administrator\n" +
+                    "      - Application Administrator\n" +
+                    "      - Application Author\n" +
+                    "      - Operations Administrator");
                 newCommand.Add(newApplication);
                 newApplication.Add(new Argument<string>("name", "The name you would like your application to be called"));
                 newApplication.Add(new Argument<string>("path", "The local or UNC path of the binary/script the application will execute (e.g., \"C:\\Windows\\System32\\calc.exe\", \"\\\\site-server.domain.com\\Sources$\\my.exe"));
@@ -722,13 +751,15 @@ namespace SharpSCCM
                     });
 
                 // new collection
-                var newCollection = new Command("collection", "Create a collection of devices or users\n" +
-                    "Permitted roles:\n" +
-                    "  - Full Administrator\n" +
-                    "  - Operations Administrator\n" +
-                    "  - Infrastructure Administrator");
+                var newCollection = new Command("collection", "Create a collection of devices or users by contacting a management point via WMI\n" +
+                    "    Permitted security roles:\n" +
+                    "      - Full Administrator\n" +
+                    "      - Application Administrator\n" +
+                    "      - Infrastructure Administrator\n" +
+                    "      - Operations Administrator\n" +
+                    "      - Security Administrator");
                 newCommand.Add(newCollection);
-                newCollection.Add(new Argument<string>("collection-type", "The type of collection to create, 'device' or 'user'").FromAmong(new string[] { "device", "user" }));
+                newCollection.Add(new Argument<string>("collection-type", "The type of collection to create (device or user)").FromAmong(new string[] { "device", "user" }));
                 newCollection.Add(new Argument<string>("collection-name", "The name you would like your collection to be called"));
                 newCollection.Handler = CommandHandler.Create(
                     (string server, string siteCode, string collectionType, string collectionName) =>
@@ -740,8 +771,53 @@ namespace SharpSCCM
                         }
                     });
 
+                // new collection-member
+                var newCollectionMember = new Command("collection-member", "Add a device to a collection for application deployment by contacting a management point via WMI\n " +
+                    "    Permitted security roles:\n" +
+                    "      - Full Administrator\n" +
+                    "      - Application Administrator\n" +
+                    "      - Infrastructure Administrator\n" +
+                    "      - Operations Administrator\n" +
+                    "      - Security Administrator\n");
+                newCommand.Add(newCollectionMember);
+                newCollectionMember.Add(new Option<string>(new[] { "--collection", "-c" }, "The name of the collection you would like to add the specified device or user to") { IsRequired = true });
+                newCollectionMember.Add(new Option<string>(new[] { "--collection-type", "-t" }, "The type of the collection (device or user)").FromAmong(new string[] { "device", "user" }));
+                newCollectionMember.Add(new Option<string>(new[] { "--device", "-d" }, "The Name of the device you would like to add to the specified collection"));
+                newCollectionMember.Add(new Option<string>(new[] { "--user", "-u" }, "The UniqueUserName of the user you would like to add to the specified collection, including escaped backslashes (e.g., \"APERTURE\\\\cave.johnson\")"));
+                newCollectionMember.Add(new Option<string>(new[] { "--resource-id", "-r" }, "The unique ResourceID of the device or user you would like to add to the specified collection"));
+                newCollectionMember.Add(new Option<int>(new[] { "--wait-time", "-w" }, "The time (in seconds) to wait for the collection to populate before displaying new collection members (default: 15 seconds)"));
+                newCollectionMember.Handler = CommandHandler.Create(
+                    (string server, string siteCode, string collection, string collectionType, string device, string user, string resourceId, int waitTime) =>
+                    {
+                        if (string.IsNullOrEmpty(device) && string.IsNullOrEmpty(user) && string.IsNullOrEmpty(resourceId))
+                        {
+                            Console.WriteLine("[!] You must specify a device Name (-d), user UniqueUserName (-u), or ResourceID (-r) to add to the collection");
+                        }
+                        else if (!string.IsNullOrEmpty(resourceId) && (string.IsNullOrEmpty(collectionType) && string.IsNullOrEmpty(device) && string.IsNullOrEmpty(user)))
+                        {
+                            Console.WriteLine("[!] You must specify a collection type (-t), a device Name (-d), or user UniqueUserName (-u) when using a ResourceID (-r)");
+                        }
+                        else if (!string.IsNullOrEmpty(device) && !string.IsNullOrEmpty(user))
+                        {
+                            Console.WriteLine("[!] Please specify either a device Name (-d) and a user UniqueUserName (-u), but not both");
+                        }
+                        else
+                        {
+                            ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
+                            if (wmiConnection != null && wmiConnection.IsConnected)
+                            {
+                                MgmtPointWmi.NewCollectionMember(wmiConnection, collection, collectionType, device, user, resourceId, waitTime = waitTime == 0 ? 15 : waitTime);
+                            }
+                        }
+                    });
+
                 // new deployment
-                var newDeployment = new Command("deployment", "Create an assignment to deploy an application to a collection");
+                var newDeployment = new Command("deployment", "Create an assignment to deploy an application to a collection by contacting a management via WMI\n" +
+                    "    Permitted security roles:\n" +
+                    "      - Full Administrator\n" +
+                    "      - Application Administrator\n" +
+                    "      - Application Deployment Manager\n" +
+                    "      - Operations Administrator");
                 newCommand.Add(newDeployment);
                 newDeployment.Add(new Argument<string>("application", "The name of the application you would like to deploy"));
                 newDeployment.Add(new Argument<string>("collection", "The name of the collection you would like to deploy the application to"));
@@ -756,7 +832,9 @@ namespace SharpSCCM
                     });
 
                 // new device
-                var newDevice = new Command("device", "Create a new device record and obtain a reusable certificate for subsequent requests (experimental)");
+                var newDevice = new Command("device", "Create a new device record and obtain a reusable certificate for subsequent requests (experimental)\n" +
+                    "    Requirements:\n" +
+                    "      - PKI certificates are not required for client authentication (default)");
                 newCommand.Add(newDevice);
                 newDevice.Add(new Option<string>(new[] { "--name", "-n" }, "The NetBIOS name, IP address, or IP address and port (e.g., 192.168.1.1@8080) of the new device") { IsRequired = true });
                 newDevice.Add(new Option<string>(new[] { "--password", "-p" }, "The password for the specified computer account (required to get secrets)"));
@@ -782,13 +860,18 @@ namespace SharpSCCM
                     });
 
                 // remove
-                var removeCommand = new Command("remove", "A group of commands that deletes objects from the server");
-                removeCommand.AddGlobalOption(new Option<string>(new[] { "--server", "-mp" }, "The IP address, FQDN, or NetBIOS name of the Configuration Manager management point server to connect to (default: the current management point of the client running SharpSCCM)"));
-                removeCommand.AddGlobalOption(new Option<string>(new[] { "--site-code", "-sc" }, "The three character site code of the Configuration Manager server (e.g., PS1) (default: the site code of the client running SharpSCCM)"));
+                var removeCommand = new Command("remove", "A group of commands that deletes objects by contacting a management point via WMI");
+                removeCommand.AddGlobalOption(new Option<string>(new[] { "--server", "-mp" }, "The IP address, FQDN, or NetBIOS name of the management point to connect to (default: the current management point of the client running SharpSCCM)"));
+                removeCommand.AddGlobalOption(new Option<string>(new[] { "--site-code", "-sc" }, "The three character site code (e.g., PS1) (default: the site code of the client running SharpSCCM)"));
                 rootCommand.Add(removeCommand);
 
                 // remove application
-                var removeApplication = new Command("application", "Delete a specified application");
+                var removeApplication = new Command("application", "Delete a specified application by contacting a management point via WMI\n" +
+                    "    Permitted security roles:\n" +
+                    "      - Full Administrator\n" +
+                    "      - Application Administrator\n" +
+                    "      - Application Author\n" +
+                    "      - Operations Administrator");
                 removeCommand.Add(removeApplication);
                 removeApplication.Add(new Argument<string>("name", "The exact name (LocalizedDisplayName) of the application to delete"));
                 removeApplication.Handler = CommandHandler.Create(
@@ -802,7 +885,13 @@ namespace SharpSCCM
                     });
 
                 // remove collection
-                var removeCollection = new Command("collection", "Delete a specified collection");
+                var removeCollection = new Command("collection", "Delete a specified collection by contacting a management point via WMI\n" +
+                    "    Permitted security roles:\n" +
+                    "      - Full Administrator\n" +
+                    "      - Application Administrator\n" +
+                    "      - Infrastructure Administrator\n" +
+                    "      - Operations Administrator\n" +
+                    "      - Security Administrator");
                 removeCommand.Add(removeCollection);
                 removeCollection.Add(new Argument<string>("name", "The exact name (Name) of the collection"));
                 removeCollection.Handler = CommandHandler.Create(
@@ -815,23 +904,67 @@ namespace SharpSCCM
                         }
                     });
 
+
+                // remove collection-member
+                var removeDeviceFromCollectionCommand = new Command("collection-member", "Remove a device from a collection by contacting a management point via WMI\n" +
+                    "    Permitted security roles:");
+                removeCommand.Add(removeDeviceFromCollectionCommand);
+                removeDeviceFromCollectionCommand.Add(new Option<string>(new[] { "--collection", "-c" }, "The name of the collection to remove the resource from (e.g., \"DEVICE_COLLECTION_1001\"") { IsRequired = true });
+                removeDeviceFromCollectionCommand.Add(new Option<string>(new[] { "--collection-type", "-t" }, "The type of the collection (device or user)").FromAmong(new string[] { "device", "user" }));
+                removeDeviceFromCollectionCommand.Add(new Option<string>(new[] { "--device", "-d" }, "The Name of the device you would like to add to the specified collection"));
+                removeDeviceFromCollectionCommand.Add(new Option<string>(new[] { "--user", "-u" }, "The UniqueUserName of the user you would like to add to the specified collection, including escaped backslashes (e.g., \"APERTURE\\\\cave.johnson\")"));
+                removeDeviceFromCollectionCommand.Add(new Option<string>(new[] { "--resource-id", "-r" }, "The unique ResourceID of the device or user you would like to add to the specified collection"));
+                removeDeviceFromCollectionCommand.Handler = CommandHandler.Create(
+                    (string server, string siteCode, string collection, string collectionType, string device, string user, string resourceId) =>
+                    {
+                        if (string.IsNullOrEmpty(device) && string.IsNullOrEmpty(user) && string.IsNullOrEmpty(resourceId))
+                        {
+                            Console.WriteLine("[!] You must specify a device Name (-d), user UniqueUserName (-u), or ResourceID (-r) to remove from the collection");
+                        }
+                        else if (!string.IsNullOrEmpty(resourceId) && (string.IsNullOrEmpty(collectionType) && string.IsNullOrEmpty(device) && string.IsNullOrEmpty(user)))
+                        {
+                            Console.WriteLine("[!] You must specify a collection type (-t), a device Name (-d), or user UniqueUserName (-u) when using a ResourceID (-r)");
+                        }
+                        else if (!string.IsNullOrEmpty(device) && !string.IsNullOrEmpty(user))
+                        {
+                            Console.WriteLine("[!] Please specify either a device Name (-d) and a user UniqueUserName (-u), but not both");
+                        }
+                        else
+                        {
+                            ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
+                            if (wmiConnection != null && wmiConnection.IsConnected)
+                            {
+                                Cleanup.RemoveCollectionMember(wmiConnection, collection, collectionType, device, user, resourceId);
+                            }
+                        }
+                    });
+
                 // remove deployment
-                var removeDeployment = new Command("deployment", "Delete a deployment of a specified application to a specified collection");
+                var removeDeployment = new Command("deployment", "Delete a deployment of a specified application to a specified collection by contacting a management point via WMI\n" +
+                    "    Permitted security roles:\n" +
+                    "      - Full Administrator\n" +
+                    "      - Application Administrator\n" +
+                    "      - Application Deployment Manager\n" +
+                    "      - Operations Administrator");
                 removeCommand.Add(removeDeployment);
-                removeDeployment.Add(new Argument<string>("application", "The exact name (ApplicationName) of the application deployed"));
-                removeDeployment.Add(new Argument<string>("collection", "The exact name (CollectionName) of the collection the application was deployed to"));
+                removeDeployment.Add(new Argument<string>("name", "The exact AssignmentName of the deployment"));
                 removeDeployment.Handler = CommandHandler.Create(
-                    (string server, string siteCode, string application, string collection) =>
+                    (string server, string siteCode, string name) =>
                     {
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
                         if (wmiConnection != null && wmiConnection.IsConnected)
                         {
-                            Cleanup.RemoveDeployment(wmiConnection, application, collection);
+                            Cleanup.RemoveDeployment(wmiConnection, name);
                         }
                     });
 
                 // remove device
-                var removeDevice = new Command("device", "Remove a device from SCCM");
+                var removeDevice = new Command("device", "Remove a device from SCCM by contacting a management point via WMI\n" +
+                    "    Permitted security roles:\n" +
+                    "      - Full Administrator\n" +
+                    "      - Application Administrator\n" +
+                    "      - Infrastructure Administrator\n" +
+                    "      - Operations Administrator");
                 removeCommand.Add(removeDevice);
                 removeDevice.Add(new Argument<string>("guid", "The GUID of the device to remove (e.g., \"GUID:AB424B0D-F582-4020-AA26-71D32EA07683\""));
                 removeDevice.Handler = CommandHandler.Create(

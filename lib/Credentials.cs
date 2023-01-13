@@ -172,7 +172,7 @@ namespace SharpSCCM
 
                     if (username.StartsWith("00 00 0E 0E 0E") || password.StartsWith("00 00 0E 0E 0E"))
                     {
-                        Console.WriteLine("\n[!] SCCM is configured to use the client's machine account instead of NAA\n");
+                        Console.WriteLine("[!] SCCM is configured to use the client's machine account instead of NAA\n");
                     }
                     else
                     {
@@ -209,36 +209,16 @@ namespace SharpSCCM
             }
         }
 
-        public static void LocalNetworkAccessAccountsWmi(bool reg)
-        {
-            ManagementScope wmiConnection = MgmtUtil.NewWmiConnection("127.0.0.1", "root\\ccm\\policy\\Machine\\ActualConfig");
-            Console.WriteLine();
-            Console.WriteLine("[+] Retrieving network access account blobs via WMI");
-            ManagementObjectCollection networkAccessAccounts = MgmtUtil.GetClassWmiObjects(wmiConnection, "CCM_NetworkAccessAccount");
-            Console.WriteLine();
-            if (networkAccessAccounts.Count > 0)
-            {
-                Dictionary<string, string> masterkeys = Dpapi.TriageSystemMasterKeys(reg);
-                DecryptLocalNetworkAccessAccountsWmi(networkAccessAccounts, masterkeys);
-            }
-            else
-            {
-                Console.WriteLine("[+] No network access accounts were found");
-            }
-        }
-
         public static void LocalSecretsWmi(bool reg)
         {
             ManagementScope wmiConnection = MgmtUtil.NewWmiConnection("127.0.0.1", "root\\ccm\\policy\\Machine\\ActualConfig");
             Console.WriteLine();
             Console.WriteLine("[+] Retrieving network access account blobs via WMI");
-            ManagementObjectCollection networkAccessAccounts = MgmtUtil.GetClassWmiObjects(wmiConnection, "CCM_NetworkAccessAccount");
-
+            ManagementObjectCollection networkAccessAccounts = MgmtUtil.GetClassInstances(wmiConnection, "CCM_NetworkAccessAccount");
             Console.WriteLine("[+] Retrieving task sequence blobs via WMI");
-            ManagementObjectCollection taskSequences = MgmtUtil.GetClassWmiObjects(wmiConnection, "CCM_TaskSequence");
-
+            ManagementObjectCollection taskSequences = MgmtUtil.GetClassInstances(wmiConnection, wmiClass: "CCM_TaskSequence");
             Console.WriteLine("[+] Retrieving collection variable blobs via WMI");
-            ManagementObjectCollection collectionVariables = MgmtUtil.GetClassWmiObjects(wmiConnection, "CCM_CollectionVariable");
+            ManagementObjectCollection collectionVariables = MgmtUtil.GetClassInstances(wmiConnection, "CCM_CollectionVariable");
             Console.WriteLine();
 
             // Don't touch DPAPI unless there are secrets to decrypt
