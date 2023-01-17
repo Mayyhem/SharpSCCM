@@ -64,7 +64,7 @@ namespace SharpSCCM
                     {
                         if ((String.IsNullOrEmpty(device) && String.IsNullOrEmpty(collection)) || (!String.IsNullOrEmpty(device) && !String.IsNullOrEmpty(collection)))
                         {
-                            Console.WriteLine("[!] You must specify either a device or existing collection.");
+                            Console.WriteLine("[!] Please specify either a device or existing collection.");
                         }
                         else if (!String.IsNullOrEmpty(relayServer) && !String.IsNullOrEmpty(path) || (String.IsNullOrEmpty(relayServer) && String.IsNullOrEmpty(path)))
                         {
@@ -225,23 +225,58 @@ namespace SharpSCCM
                     "    Permitted security roles:\n" +
                     "      - Any (SMS Admins local group)");
                 getCommand.Add(getCollectionMember);
-                getCollectionMember.Add(new Argument<string>("name", "The name of the collection"));
-                getCollectionMember.Add(new Option<bool>(new[] { "--dry-run", "-d" }, "Display the resulting WQL query but do not connect to the specified server and execute it"));
+                getCollectionMember.Add(new Option<string>(new[] { "--collection", "-c" }, "The name of the collection you would like to add the specified device or user to"));
+                getCollectionMember.Add(new Option<bool>(new[] { "--dry-run", "-d" }, description: "Display the resulting WQL query but do not connect to the specified server and execute it"));
+                getCollectionMember.Add(new Option<string>(new[] { "--collection-id", "-i" }, "The CollectionID of the collection you would like to add the specified device or user to"));
                 getCollectionMember.Add(new Option<string[]>(new[] { "--properties", "-p" }, "Specify this option for each property to query (e.g., \"-p Name -p IsActive\"") { Arity = ArgumentArity.OneOrMore });
                 getCollectionMember.Add(new Option<bool>(new[] { "--verbose", "-v" }, "Display all class properties and their values"));
                 getCollectionMember.Add(new Option<string>(new[] { "--where-condition", "-w" }, "A WHERE condition to narrow the scope of data returned by the query (e.g., \"IsActive='True'\" or \"Name LIKE '%cave-johnson%'\")"));
                 // COUNT and ORDER BY don't seem to work when querying SMS_CollectionMember_a
                 getCollectionMember.Handler = CommandHandler.Create(
-                    (string server, string siteCode, string[] properties, string whereCondition, bool dryRun, bool verbose, string name) =>
+                    (string server, string siteCode, string collection, bool dryRun, string collectionId, string[] properties,bool verbose, string whereCondition) =>
                     {
                         if (properties.Length == 0 && !verbose)
                         {
                             properties = new[] { "Collection", "CollectionID", "Domain", "IsActive", "IsApproved", "IsAssigned", "IsClient", "Name", "ResourceID", "SiteCode" };
                         }
-                        ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
-                        if (wmiConnection != null && wmiConnection.IsConnected)
+                        if (string.IsNullOrEmpty(collection) && string.IsNullOrEmpty(collectionId))
                         {
-                            MgmtPointWmi.GetCollectionMember(wmiConnection, name, properties, dryRun, verbose);
+                            Console.WriteLine("[!] Please specify a collection name (-c) or ID (-i)");
+                        }
+                        else
+                        {
+                            ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
+                            if (wmiConnection != null && wmiConnection.IsConnected)
+                            {
+                                MgmtPointWmi.GetCollectionMember(wmiConnection, collection, collectionId, properties, dryRun, verbose);
+                            }
+                        }
+                    });
+
+                // get collection-membership-rules
+                var getCollectionRule = new Command("collection-rule", "Get the rules that are evaluated to add members to a collection from a management point via WMI\n" +
+                    "    Permitted security roles:\n" +
+                    "      - Any (SMS Admins local group)");
+                getCommand.Add(getCollectionRule);
+                getCollectionRule.Add(new Option<string>(new[] { "--collection", "-c" }, "The name of the collection you would like to get applicable rules for"));
+                getCollectionRule.Add(new Option<string>(new[] { "--device", "-d" }, "The Name of the device you would like to get applicable rules for"));
+                getCollectionRule.Add(new Option<string>(new[] { "--collection-id", "-i" }, "The ID of the collection you would like to get applicable rules for"));
+                getCollectionRule.Add(new Option<string>(new[] { "--user", "-u" }, "The UniqueUserName of the user you would like to get applicable rules for (e.g., \"APERTURE\\cave.johnson\")"));
+                getCollectionRule.Add(new Option<string>(new[] { "--resource-id", "-r" }, "The unique ResourceID of the device or user you would like to get applicable rules for"));
+                getCollectionRule.Handler = CommandHandler.Create(
+                    (string server, string siteCode, string collection, string device, string collectionId, string user, string resourceId) =>
+                    {
+                        if (string.IsNullOrEmpty(collection) && string.IsNullOrEmpty(collectionId) && string.IsNullOrEmpty(device) && string.IsNullOrEmpty(user) && string.IsNullOrEmpty(resourceId))
+                        {
+                            Console.WriteLine("[!] Please specify a collection (-c), CollectionID (-i), device Name (-d), user UniqueUserName (-u), or ResourceID (-r) to get applicable rules for");
+                        }
+                        else
+                        {
+                            ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
+                            if (wmiConnection != null && wmiConnection.IsConnected)
+                            {
+                                MgmtPointWmi.GetCollectionRule(wmiConnection, collection, collectionId, device, user, resourceId);
+                            }
                         }
                     });
 
@@ -436,6 +471,36 @@ namespace SharpSCCM
                         {
                             // work in progress
                             MgmtPointMessaging.SendContentLocationRequest(server, siteCode, "CHQ00004", 2);
+                        }
+                    });
+
+                // get user
+                var getUser = new Command("user", "Get information on users from a management point via WMI\n" +
+                    "    Permitted security roles:" +
+                    "      - Any (SMS Admins local group)");
+                getCommand.Add(getUser);
+                getUser.Add(new Option<bool>(new[] { "--count", "-c" }, "Returns the number of rows that match the specified criteria"));
+                getUser.Add(new Option<bool>(new[] { "--dry-run", "-d" }, "Display the resulting WQL query but do not connect to the specified server and execute it"));
+                getUser.Add(new Option<string>(new[] { "--order-by", "-o" }, "An ORDER BY clause to set the order of data returned by the query (e.g., \"UniqueUserName DESC\") (default: ascending (ASC) order)"));
+                getUser.Add(new Option<string[]>(new[] { "--properties", "-p" }, "Specify this option for each property to query (e.g., \"-p Name -p UniqueUserName\"") { Arity = ArgumentArity.OneOrMore });
+                getUser.Add(new Option<string>(new[] { "--user", "-u" }, "A user to search for (returns all users with names containing the provided string)"));
+                getUser.Add(new Option<bool>(new[] { "--verbose", "-v" }, "Display all class properties and their values"));
+                getUser.Add(new Option<string>(new[] { "--where-condition", "-w" }, "A WHERE condition to narrow the scope of data returned by the query, including escaped backslashes (e.g., \"UniqueUserName='APERTURE\\\\cave.johnson'\" or \"UniqueUserName LIKE '%cave.johnson%'\")"));
+                getUser.Handler = CommandHandler.Create(
+                    (string server, string siteCode, bool count, string[] properties, string whereCondition, string orderBy, bool dryRun, bool verbose, string user) =>
+                    {
+                        if (!string.IsNullOrEmpty(user))
+                        {
+                            whereCondition = "UniqueUserName LIKE '%" + user + "%'";
+                        }
+                        if (properties.Length == 0)
+                        {
+                            verbose = true;
+                        }
+                        ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
+                        if (wmiConnection != null && wmiConnection.IsConnected)
+                        {
+                            MgmtUtil.GetClassInstances(wmiConnection, "SMS_R_User", null, count, properties, whereCondition, orderBy, dryRun, verbose, true, true);
                         }
                     });
 
@@ -780,22 +845,28 @@ namespace SharpSCCM
                     "      - Operations Administrator\n" +
                     "      - Security Administrator\n");
                 newCommand.Add(newCollectionMember);
-                newCollectionMember.Add(new Option<string>(new[] { "--collection", "-c" }, "The name of the collection you would like to add the specified device or user to") { IsRequired = true });
+                newCollectionMember.Add(new Option<string>(new[] { "--collection", "-c" }, "The name of the collection you would like to add the specified device or user to"));
                 newCollectionMember.Add(new Option<string>(new[] { "--collection-type", "-t" }, "The type of the collection (device or user)").FromAmong(new string[] { "device", "user" }));
                 newCollectionMember.Add(new Option<string>(new[] { "--device", "-d" }, "The Name of the device you would like to add to the specified collection"));
+                newCollectionMember.Add(new Option<string>(new[] { "--collection-id", "-i" }, "The CollectionID of the collection you would like to add the specified device or user to"));
                 newCollectionMember.Add(new Option<string>(new[] { "--user", "-u" }, "The UniqueUserName of the user you would like to add to the specified collection, including escaped backslashes (e.g., \"APERTURE\\\\cave.johnson\")"));
                 newCollectionMember.Add(new Option<string>(new[] { "--resource-id", "-r" }, "The unique ResourceID of the device or user you would like to add to the specified collection"));
                 newCollectionMember.Add(new Option<int>(new[] { "--wait-time", "-w" }, "The time (in seconds) to wait for the collection to populate before displaying new collection members (default: 15 seconds)"));
                 newCollectionMember.Handler = CommandHandler.Create(
-                    (string server, string siteCode, string collection, string collectionType, string device, string user, string resourceId, int waitTime) =>
+                    (string server, string siteCode, string collection, string collectionType, string device, string collectionId, string user, string resourceId, int waitTime) =>
                     {
-                        if (string.IsNullOrEmpty(device) && string.IsNullOrEmpty(user) && string.IsNullOrEmpty(resourceId))
+
+                        if (string.IsNullOrEmpty(collection) && string.IsNullOrEmpty(collectionId))
                         {
-                            Console.WriteLine("[!] You must specify a device Name (-d), user UniqueUserName (-u), or ResourceID (-r) to add to the collection");
+                            Console.WriteLine("[!] Please specify a collection name (-c) or ID (-i) to add a member to");
+                        }
+                        else if (string.IsNullOrEmpty(device) && string.IsNullOrEmpty(user) && string.IsNullOrEmpty(resourceId))
+                        {
+                            Console.WriteLine("[!] Please specify a device Name (-d), user UniqueUserName (-u), or ResourceID (-r) to add to the collection");
                         }
                         else if (!string.IsNullOrEmpty(resourceId) && (string.IsNullOrEmpty(collectionType) && string.IsNullOrEmpty(device) && string.IsNullOrEmpty(user)))
                         {
-                            Console.WriteLine("[!] You must specify a collection type (-t), a device Name (-d), or user UniqueUserName (-u) when using a ResourceID (-r)");
+                            Console.WriteLine("[!] Please specify a collection type (-t), a device Name (-d), or user UniqueUserName (-u) when using a ResourceID (-r)");
                         }
                         else if (!string.IsNullOrEmpty(device) && !string.IsNullOrEmpty(user))
                         {
@@ -806,7 +877,7 @@ namespace SharpSCCM
                             ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
                             if (wmiConnection != null && wmiConnection.IsConnected)
                             {
-                                MgmtPointWmi.NewCollectionMember(wmiConnection, collection, collectionType, device, user, resourceId, waitTime = waitTime == 0 ? 15 : waitTime);
+                                MgmtPointWmi.NewCollectionMember(wmiConnection, collection, collectionType, collectionId, device, user, resourceId, waitTime == 0 ? 15 : waitTime);
                             }
                         }
                     });
@@ -904,26 +975,36 @@ namespace SharpSCCM
                         }
                     });
 
-
                 // remove collection-member
-                var removeDeviceFromCollectionCommand = new Command("collection-member", "Remove a device from a collection by contacting a management point via WMI\n" +
-                    "    Permitted security roles:");
-                removeCommand.Add(removeDeviceFromCollectionCommand);
-                removeDeviceFromCollectionCommand.Add(new Option<string>(new[] { "--collection", "-c" }, "The name of the collection to remove the resource from (e.g., \"DEVICE_COLLECTION_1001\"") { IsRequired = true });
-                removeDeviceFromCollectionCommand.Add(new Option<string>(new[] { "--collection-type", "-t" }, "The type of the collection (device or user)").FromAmong(new string[] { "device", "user" }));
-                removeDeviceFromCollectionCommand.Add(new Option<string>(new[] { "--device", "-d" }, "The Name of the device you would like to add to the specified collection"));
-                removeDeviceFromCollectionCommand.Add(new Option<string>(new[] { "--user", "-u" }, "The UniqueUserName of the user you would like to add to the specified collection, including escaped backslashes (e.g., \"APERTURE\\\\cave.johnson\")"));
-                removeDeviceFromCollectionCommand.Add(new Option<string>(new[] { "--resource-id", "-r" }, "The unique ResourceID of the device or user you would like to add to the specified collection"));
-                removeDeviceFromCollectionCommand.Handler = CommandHandler.Create(
-                    (string server, string siteCode, string collection, string collectionType, string device, string user, string resourceId) =>
+                var removeCollectionMember = new Command("collection-member", "Remove a device from a collection by by contacting a management point via WMI and adding a collection rule to explicitly exclude it\n" +
+                    "    Permitted security roles:\n" +
+                    "      - Full Administrator\n" +
+                    "      - Application Administrator\n" +
+                    "      - Infrastructure Administrator\n" +
+                    "      - Operations Administrator\n" +
+                    "      - Security Administrator\n");
+                removeCommand.Add(removeCollectionMember);
+                removeCollectionMember.Add(new Option<string>(new[] { "--collection", "-c" }, "The name of the collection you would like to exclude the specified device or user from"));
+                removeCollectionMember.Add(new Option<string>(new[] { "--collection-id", "-i" }, "The ID of the collection to exclude the resource from (e.g., \"PS100020\""));
+                removeCollectionMember.Add(new Option<string>(new[] { "--device", "-d" }, "The Name of the device you would like to exclude from the specified collection"));
+                removeCollectionMember.Add(new Option<string>(new[] { "--collection-type", "-t" }, "The type of the collection (device or user)").FromAmong(new string[] { "device", "user" }));
+                removeCollectionMember.Add(new Option<string>(new[] { "--user", "-u" }, "The UniqueUserName of the user you would like to exclude from the specified collection, including escaped backslashes (e.g., \"APERTURE\\\\cave.johnson\")"));
+                removeCollectionMember.Add(new Option<string>(new[] { "--resource-id", "-r" }, "The unique ResourceID of the device or user you would like to exclude from the specified collection"));
+                removeCollectionMember.Add(new Option<int>(new[] { "--wait-time", "-w" }, "The time (in seconds) to wait for the excluded collection to populate before displaying updated collection members (default: 15 seconds)"));
+                removeCollectionMember.Handler = CommandHandler.Create(
+                    (string server, string siteCode, string collection, string collectionId, string device, string collectionType, string user, string resourceId, int waitTime) =>
                     {
-                        if (string.IsNullOrEmpty(device) && string.IsNullOrEmpty(user) && string.IsNullOrEmpty(resourceId))
+                        if (string.IsNullOrEmpty(collection) && string.IsNullOrEmpty(collectionId))
                         {
-                            Console.WriteLine("[!] You must specify a device Name (-d), user UniqueUserName (-u), or ResourceID (-r) to remove from the collection");
+                            Console.WriteLine("[!] Please specify a collection name (-c) or ID (-i) to remove a member from");
+                        }
+                        else if (string.IsNullOrEmpty(device) && string.IsNullOrEmpty(user) && string.IsNullOrEmpty(resourceId))
+                        {
+                            Console.WriteLine("[!] Please specify a device Name (-d), user UniqueUserName (-u), or ResourceID (-r) to remove from the collection");
                         }
                         else if (!string.IsNullOrEmpty(resourceId) && (string.IsNullOrEmpty(collectionType) && string.IsNullOrEmpty(device) && string.IsNullOrEmpty(user)))
                         {
-                            Console.WriteLine("[!] You must specify a collection type (-t), a device Name (-d), or user UniqueUserName (-u) when using a ResourceID (-r)");
+                            Console.WriteLine("[!] Please specify a collection type (-t), a device Name (-d), or user UniqueUserName (-u) when using a ResourceID (-r)");
                         }
                         else if (!string.IsNullOrEmpty(device) && !string.IsNullOrEmpty(user))
                         {
@@ -934,8 +1015,30 @@ namespace SharpSCCM
                             ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
                             if (wmiConnection != null && wmiConnection.IsConnected)
                             {
-                                Cleanup.RemoveCollectionMember(wmiConnection, collection, collectionType, device, user, resourceId);
+                                Cleanup.RemoveCollectionMember(wmiConnection, collection, collectionType, collectionId, device, user, resourceId, waitTime == 0 ? 15 : waitTime);
                             }
+                        }
+                    });
+
+
+                // remove collection-rule
+                var removeCollectionRule = new Command("collection-rule", "Remove a device from a collection rule by contacting a management point via WMI\n" +
+                    "    Permitted security roles:\n" +
+                    "      - Full Administrator\n" +
+                    "      - Application Administrator\n" +
+                    "      - Infrastructure Administrator\n" +
+                    "      - Operations Administrator\n" +
+                    "      - Security Administrator\n");
+                removeCommand.Add(removeCollectionRule);
+                removeCollectionRule.Add(new Option<string>(new[] { "--collection-id", "-c" }, "The ID of the collection to remove the resource from (e.g., \"PS100020\"") { IsRequired = true });
+                removeCollectionRule.Add(new Option<string>(new[] { "--query-id", "-q" }, "The QueryID of the rule you would like to remove from the specified collection") { IsRequired = true });
+                removeCollectionRule.Handler = CommandHandler.Create(
+                    (string server, string siteCode, string collectionId, string queryId) =>
+                    {
+                        ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
+                        if (wmiConnection != null && wmiConnection.IsConnected)
+                        {
+                            Cleanup.RemoveCollectionRule(wmiConnection, collectionId, queryId);
                         }
                     });
 

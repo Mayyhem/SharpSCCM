@@ -58,7 +58,7 @@ namespace SharpSCCM
             ManagementObjectCollection classInstances = null;
             if (wmiConnection.IsConnected)
             {
-                // build query string if not provided
+                // Build query string if not provided
                 query = string.IsNullOrEmpty(query) ? BuildClassInstanceQueryString(wmiConnection, wmiClass, count, properties, whereCondition, orderByColumn, verbose) : query;
                 if (dryRun)
                 {
@@ -325,6 +325,15 @@ namespace SharpSCCM
                 {
                     Console.WriteLine($"{property.Name} ({property.Type}): {property.Value}");
                 }
+            }
+            Console.WriteLine("-----------------------------------");
+        }
+
+        public static void PrintObjectProperties(ManagementBaseObject managementBaseObject, bool showValue = false)
+        {
+            foreach (PropertyData property in managementBaseObject.Properties)
+            {
+                Console.WriteLine($"{property.Name}: {property.Value}");
             }
             Console.WriteLine("-----------------------------------");
         }
