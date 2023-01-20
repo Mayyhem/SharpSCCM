@@ -8,7 +8,7 @@ namespace SharpSCCM
 {
     public class MgmtUtil
     {
-        public static string BuildClassInstanceQueryString(ManagementScope scope, string wmiClass, bool count = false, string[] properties = null, string whereCondition = null, string orderByColumn = null, bool verbose = false)
+        public static string BuildClassInstanceQueryString(ManagementScope wmiConnection, string wmiClass, bool count = false, string[] properties = null, string whereCondition = null, string orderByColumn = null, bool verbose = false)
         {
             string propString;
             if (verbose || count || properties == null)
@@ -17,7 +17,7 @@ namespace SharpSCCM
             }
             else
             {
-                string[] keyPropertyNames = GetKeyPropertyNames(scope, wmiClass);
+                string[] keyPropertyNames = GetKeyPropertyNames(wmiConnection, wmiClass);
                 if (keyPropertyNames.Length > 0)
                 {
                     properties = keyPropertyNames.Union(properties).ToArray();
@@ -76,7 +76,7 @@ namespace SharpSCCM
                         {
                             if (classInstances.Count > 0)
                             {
-                                PrintClassInstances(wmiConnection, wmiClass, query, classInstances, count, properties, verbose, getLazyProps);
+                                PrintClassInstances(wmiClass, classInstances, count, properties, verbose, getLazyProps);
                             }
                             else
                             {
@@ -120,6 +120,7 @@ namespace SharpSCCM
                 return new string[0];
             }
         }
+
         public static ManagementScope NewWmiConnection(string server = null, string wmiNamespace = null, string siteCode = null)
         {
             string path = "";
@@ -222,12 +223,12 @@ namespace SharpSCCM
             return wmiConnection;
         }
 
-        public static void PrintClasses(ManagementScope scope)
+        public static void PrintClasses(ManagementScope wmiConnection)
         {
             string query = "SELECT * FROM meta_class";
             Console.WriteLine($"[+] Executing WQL query: {query}");
             ObjectQuery objQuery = new ObjectQuery(query);
-            ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, objQuery);
+            ManagementObjectSearcher searcher = new ManagementObjectSearcher(wmiConnection, objQuery);
             var classes = new List<string>();
             foreach (ManagementClass wmiClass in searcher.Get())
             {
@@ -239,7 +240,7 @@ namespace SharpSCCM
             //Console.WriteLine(jsonString);
         }
 
-        public static void PrintClassInstances(ManagementScope scope, string wmiClass, string query, ManagementObjectCollection classInstances, bool count = false, string[] properties = null, bool verbose = false, bool getLazyProps = true)
+        public static void PrintClassInstances(string wmiClass, ManagementObjectCollection classInstances, bool count = false, string[] properties = null, bool verbose = false, bool getLazyProps = true)
         {
             if (classInstances != null)
             {

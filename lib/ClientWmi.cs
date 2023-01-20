@@ -26,15 +26,29 @@ namespace SharpSCCM
                             if (prop.Name == "CurrentManagementPoint")
                             {
                                 currentManagementPoint = prop.Value.ToString();
+                                if (!string.IsNullOrEmpty(currentManagementPoint))
+                                {
+                                    Console.WriteLine(value: $"[+] Current management point: {currentManagementPoint}");
+                                }
+                                else
+                                {
+                                    Console.WriteLine("[!] Could not find the current management point");
+                                }
                             }
                             else if (prop.Name == "Name")
                             {
                                 siteCode = prop.Value.ToString().Substring(4, 3);
+                                if (!string.IsNullOrEmpty(siteCode))
+                                {
+                                    Console.WriteLine($"[+] Site code: {siteCode}");
+                                }
+                                else
+                                {
+                                    Console.WriteLine("[!] Could not find the current site code");
+                                }
                             }
                         }
                     }
-                    Console.WriteLine($"[+] Current management point: {currentManagementPoint}");
-                    Console.WriteLine($"[+] Site code: {siteCode}");
                 }
                 else
                 {

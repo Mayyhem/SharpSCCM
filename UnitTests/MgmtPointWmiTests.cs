@@ -74,7 +74,7 @@ namespace SharpSCCM.UnitTests
             MgmtPointWmi.NewCollectionMember(wmiConnection, collectionName, null, deviceName);
             StringAssert.Contains(stringWriter.ToString(), $"Name: {deviceName.ToUpper()}");
             TestContext.WriteLine(stringWriter.ToString());
-            Cleanup.RemoveCollection(wmiConnection, collectionName);
+            Cleanup.RemoveCollection(wmiConnection, collectionName, null);
         }
 
         [TestMethod]

@@ -102,7 +102,7 @@ namespace SharpSCCM
             }
         }
 
-        public static void GrepFile(string filePath, string stringToFind)
+        public static void GrepFile(string stringToFind, string filePath)
         {
             try
             {
