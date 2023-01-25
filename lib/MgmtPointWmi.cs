@@ -2,7 +2,6 @@
 using System.Data;
 using System.Linq;
 using System.Management;
-using System.Runtime.Versioning;
 using System.Threading;
 
 namespace SharpSCCM
@@ -43,13 +42,28 @@ namespace SharpSCCM
             return collection;
         }
 
-        public static ManagementObjectCollection GetCollectionMember(ManagementScope wmiConnection, string collectionName = null, string collectionId = null, string[] properties = null, bool dryRun = false, bool verbose = false, bool printOutput = false)
+        public static ManagementObjectCollection GetCollectionMembers(ManagementScope wmiConnection, string collectionName = null, string collectionId = null, string[] properties = null, bool dryRun = false, bool verbose = false, bool printOutput = false)
         {
             ManagementObjectCollection collectionMembers = null;
             ManagementObject collection = GetCollection(wmiConnection, collectionName, collectionId, printOutput);
             if (collection != null)
             {
                 collectionMembers = MgmtUtil.GetClassInstances(wmiConnection, "SMS_CollectionMember_a", null, false, properties, $"CollectionID='{collection.GetPropertyValue("CollectionID")}'", null, dryRun, verbose, printOutput: printOutput);
+                if (collectionMembers.Count == 0)
+                {
+                    Console.WriteLine($"[+] Found 0 members in {collection["Name"]} ({collection["CollectionID"]})");
+                }
+            }
+            return collectionMembers;
+        }
+
+        public static ManagementObjectCollection GetCollectionMember(ManagementScope wmiConnection, string collectionName = null, string collectionId = null, bool count = false, string[] properties = null, string whereCondition = null, string orderByColumn = null, bool dryRun = false, bool verbose = false, bool printOutput = false)
+        {
+            ManagementObjectCollection collectionMembers = null;
+            ManagementObject collection = GetCollection(wmiConnection, collectionName, collectionId, printOutput);
+            if (collection != null)
+            {
+                collectionMembers = MgmtUtil.GetClassInstances(wmiConnection, "SMS_FullCollectionMembership", null, count, properties, $"CollectionID='{collection.GetPropertyValue("CollectionID")}'", null, dryRun, verbose, printOutput: printOutput);
                 if (collectionMembers.Count == 0)
                 {
                     Console.WriteLine($"[+] Found 0 members in {collection["Name"]} ({collection["CollectionID"]})");
@@ -170,9 +184,11 @@ namespace SharpSCCM
             }
         }
 
-        public static ManagementObjectCollection GetPrimaryUserDevices(ManagementScope wmiConnection, string resourceId = null, string userName = null)
+        public static ManagementObjectCollection GetPrimaryDeviceForUser(ManagementScope wmiConnection, string resourceId = null, string userName = null)
         {
-            string whereCondition = !string.IsNullOrEmpty(resourceId) ? $"ResourceID='{resourceId}'" : $"UniqueUserName='{userName}'";
+            userName = !string.IsNullOrEmpty(resourceId) ? (string)GetDeviceOrUserFromResourceID(wmiConnection, resourceId)["UniqueUserName"] : userName;
+            // Escape backslash for WQL query
+            string whereCondition = $"UniqueUserName='{userName.Replace("\\", "\\\\")}'";
             // Get the device associated with the user
             ManagementObjectCollection userDevices = MgmtUtil.GetClassInstances(wmiConnection, "SMS_UserMachineRelationship", whereCondition: whereCondition);
             if (userDevices.Count == 1)
@@ -194,6 +210,27 @@ namespace SharpSCCM
                 Console.WriteLine($"[!] Could not find any devices where {userName} is the primary user");
             }
             return userDevices;
+        }
+
+        public static ManagementObject GetDeviceOrUserFromResourceID(ManagementScope wmiConnection, string resourceId)
+        {
+            ManagementObject resource = null;
+            string[] classes = { "SMS_R_System", "SMS_R_User" };
+            foreach (string className in classes)
+            {
+                ManagementObjectCollection matchingResources = MgmtUtil.GetClassInstances(wmiConnection, className, whereCondition: $"ResourceID='{resourceId}'");
+                if (matchingResources.Count == 1)
+                {
+                    resource = matchingResources.OfType<ManagementObject>().First();
+                    Console.WriteLine($"[+] Found resource named {resource["Name"]} with ResourceID {resource["ResourceID"]}");
+                    break;
+                }
+                else
+                {
+                    Console.WriteLine($"[+] Found 0 devices or users with ResourceID {resourceId} in {className}");
+                }
+            }
+            return resource;
         }
 
         public static void GetSitePushSettings(ManagementScope wmiConnection = null)
@@ -303,10 +340,14 @@ namespace SharpSCCM
             // Create a collection is one is not specified
             if (collection == null)
             {
-                collectionType = !string.IsNullOrEmpty(deviceName) ? "device" : !string.IsNullOrEmpty(userName) ? "user" : collectionType;
-                string newCollectionName = !string.IsNullOrEmpty(deviceName) ? $"Devices_{Guid.NewGuid()}" : !string.IsNullOrEmpty(userName) ? $"Users_{Guid.NewGuid()}" : null;
+                collectionType = !string.IsNullOrEmpty(collectionType) ? collectionType : !string.IsNullOrEmpty(deviceName) ? "device" : !string.IsNullOrEmpty(userName) ? "user" : null;
+                string newCollectionName = !string.IsNullOrEmpty(deviceName) ? $"Devices_{Guid.NewGuid()}" : !string.IsNullOrEmpty(userName) ? $"Users_{Guid.NewGuid()}" : (!string.IsNullOrEmpty(resourceId) && !string.IsNullOrEmpty(collectionType)) ? $"Resources_{Guid.NewGuid()}" : null;
                 collection = NewCollection(wmiConnection, collectionType, newCollectionName);
                 NewCollectionMember(wmiConnection, newCollectionName, collectionType, (string)collection["CollectionID"], deviceName, userName, resourceId);
+            }
+            else
+            {
+                collectionType = !string.IsNullOrEmpty(collectionType) ? collectionType : (uint)collection["CollectionType"] == 2 ? "device" : (uint)collection["CollectionType"] == 1 ? "user" : null;
             }
             string newApplicationName = $"Application_{Guid.NewGuid()}";
             string newDeploymentName = $"{newApplicationName}_{(string)collection["CollectionID"]}_Install";
@@ -321,7 +362,7 @@ namespace SharpSCCM
                 ManagementObjectCollection deployments = MgmtUtil.GetClassInstances(wmiConnection, "SMS_ApplicationAssignment", whereCondition: $"AssignmentName='{newDeploymentName}'");
                 if (deployments.Count == 1)
                 {
-                    Console.WriteLine("[+] New deployment is available, waiting 30 seconds for updated machine policy to become available");
+                    Console.WriteLine("[+] New deployment is available, waiting 30 seconds for updated policy to become available");
                     Thread.Sleep(millisecondsTimeout: 30000);
                     deploymentAvailable = true;
                 }
@@ -330,7 +371,14 @@ namespace SharpSCCM
                     Console.WriteLine("[+] New deployment is not available yet... trying again in 5 seconds");
                 }
             }
-            UpdateMachinePolicy(wmiConnection, (string)collection["CollectionID"]);
+            if (collectionType == "device")
+            {
+                UpdateMachinePolicy(wmiConnection, (string)collection["CollectionID"]);
+            }
+            else if (collectionType == "user")
+            {
+                UpdateUserPolicy(wmiConnection, (string)collection["CollectionID"]);
+            }
             Console.WriteLine("[+] Waiting 1 minute for execution to complete...");
             Thread.Sleep(60000);
             Console.WriteLine("[+] Cleaning up");
@@ -355,10 +403,10 @@ namespace SharpSCCM
             initiateClientOpParams.SetPropertyValue("Type", 8); // RequestPolicyNow
 
             ManagementObject collection = GetCollection(wmiConnection, collectionName, collectionId);
-            initiateClientOpParams["TargetCollectionID"] = collection["CollectionID"];
-            Console.WriteLine($"[+] Forcing all members of {collection["Name"]} ({collection["CollectionID"]}) to check for updates to machine policy and execute any new applications available");
+            Console.WriteLine($"[+] Forcing all members of {collection["Name"]} ({collection["CollectionID"]}) to retrieve machine policy and execute any new applications available");
             try
             {
+                initiateClientOpParams[propertyName: "TargetCollectionID"] = collection["CollectionID"];
                 clientOperation.InvokeMethod("InitiateClientOperation", initiateClientOpParams, null);
             }
             catch (ManagementException ex)
@@ -373,22 +421,50 @@ namespace SharpSCCM
             if (!string.IsNullOrEmpty(collectionId) || !string.IsNullOrEmpty(collectionName))
             {
                 ManagementObject collection = GetCollection(wmiConnection, collectionName, collectionId);
-                Console.WriteLine($"[+] Forcing all members of {collection["Name"]} ({collection["CollectionID"]}) to check for updates to user policy and execute any new applications available");
+                if (collection != null)
+                {
+                    ManagementObjectCollection collectionMembers = GetCollectionMember(wmiConnection, collectionName, collectionId);
+                    if (collectionMembers.Count > 0)
+                    {
+                        // Run policy retrieval and evaluation cycle on device collections
+                        if ((uint)collection["CollectionType"] == 2)
+                        {
+                            Console.WriteLine($"[+] Forcing all members of {collection["Name"]} ({collection["CollectionID"]}) to retrieve user policy and execute any new applications available");
+                            // $CurrentUser = Get-WmiObject -Query "SELECT UserSID, LogoffTime FROM CCM_UserLogonEvents WHERE LogoffTime=NULL" -Namespace "root\ccm"; $UserID=$CurrentUser.UserSID; $UserID=$UserID.replace("-", "_"); $MessageIDs = "{00000000-0000-0000-0000-000000000026}","{00000000-0000-0000-0000-000000000027}"; ForEach ($MessageID in $MessageIDs) { $ScheduledMessage = ([wmi]"root\ccm\Policy\$UserID\ActualConfig:CCM_Scheduler_ScheduledMessage.ScheduledMessageID=$MessageID"); $ScheduledMessage.Triggers = @("SimpleInterval;Minutes=1;MaxRandomDelayMinutes=0"); $ScheduledMessage.TargetEndpoint = "direct:PolicyAgent_RequestAssignments"; $ScheduledMessage.Put(); $ScheduledMessage.Triggers = @("SimpleInterval;Minutes=15;MaxRandomDelayMinutes=0"); sleep 30; $ScheduledMessage.Put()}
+                            string commandToExecute = "powershell -EncodedCommand JABDAHUAcgByAGUAbgB0AFUAcwBlAHIAIAA9ACAARwBlAHQALQBXAG0AaQBPAGIAagBlAGMAdAAgAC0AUQB1AGUAcgB5ACAAIgBTAEUATABFAEMAVAAgAFUAcwBlAHIAUwBJAEQALAAgAEwAbwBnAG8AZgBmAFQAaQBtAGUAIABGAFIATwBNACAAQwBDAE0AXwBVAHMAZQByAEwAbwBnAG8AbgBFAHYAZQBuAHQAcwAgAFcASABFAFIARQAgAEwAbwBnAG8AZgBmAFQAaQBtAGUAPQBOAFUATABMACIAIAAtAE4AYQBtAGUAcwBwAGEAYwBlACAAIgByAG8AbwB0AFwAYwBjAG0AIgA7ACAAJABVAHMAZQByAEkARAA9ACQAQwB1AHIAcgBlAG4AdABVAHMAZQByAC4AVQBzAGUAcgBTAEkARAA7ACAAJABVAHMAZQByAEkARAA9ACQAVQBzAGUAcgBJAEQALgByAGUAcABsAGEAYwBlACgAIgAtACIALAAgACIAXwAiACkAOwAgACQATQBlAHMAcwBhAGcAZQBJAEQAcwAgAD0AIAAiAHsAMAAwADAAMAAwADAAMAAwAC0AMAAwADAAMAAtADAAMAAwADAALQAwADAAMAAwAC0AMAAwADAAMAAwADAAMAAwADAAMAAyADYAfQAiACwAIgB7ADAAMAAwADAAMAAwADAAMAAtADAAMAAwADAALQAwADAAMAAwAC0AMAAwADAAMAAtADAAMAAwADAAMAAwADAAMAAwADAAMgA3AH0AIgA7ACAARgBvAHIARQBhAGMAaAAgACgAJABNAGUAcwBzAGEAZwBlAEkARAAgAGkAbgAgACQATQBlAHMAcwBhAGcAZQBJAEQAcwApACAAewAgACQAUwBjAGgAZQBkAHUAbABlAGQATQBlAHMAcwBhAGcAZQAgAD0AIAAoAFsAdwBtAGkAXQAiAHIAbwBvAHQAXABjAGMAbQBcAFAAbwBsAGkAYwB5AFwAJABVAHMAZQByAEkARABcAEEAYwB0AHUAYQBsAEMAbwBuAGYAaQBnADoAQwBDAE0AXwBTAGMAaABlAGQAdQBsAGUAcgBfAFMAYwBoAGUAZAB1AGwAZQBkAE0AZQBzAHMAYQBnAGUALgBTAGMAaABlAGQAdQBsAGUAZABNAGUAcwBzAGEAZwBlAEkARAA9ACQATQBlAHMAcwBhAGcAZQBJAEQAIgApADsAIAAkAFMAYwBoAGUAZAB1AGwAZQBkAE0AZQBzAHMAYQBnAGUALgBUAHIAaQBnAGcAZQByAHMAIAA9ACAAQAAoACIAUwBpAG0AcABsAGUASQBuAHQAZQByAHYAYQBsADsATQBpAG4AdQB0AGUAcwA9ADEAOwBNAGEAeABSAGEAbgBkAG8AbQBEAGUAbABhAHkATQBpAG4AdQB0AGUAcwA9ADAAIgApADsAIAAkAFMAYwBoAGUAZAB1AGwAZQBkAE0AZQBzAHMAYQBnAGUALgBUAGEAcgBnAGUAdABFAG4AZABwAG8AaQBuAHQAIAA9ACAAIgBkAGkAcgBlAGMAdAA6AFAAbwBsAGkAYwB5AEEAZwBlAG4AdABfAFIAZQBxAHUAZQBzAHQAQQBzAHMAaQBnAG4AbQBlAG4AdABzACIAOwAgACQAUwBjAGgAZQBkAHUAbABlAGQATQBlAHMAcwBhAGcAZQAuAFAAdQB0ACgAKQA7ACAAJABTAGMAaABlAGQAdQBsAGUAZABNAGUAcwBzAGEAZwBlAC4AVAByAGkAZwBnAGUAcgBzACAAPQAgAEAAKAAiAFMAaQBtAHAAbABlAEkAbgB0AGUAcgB2AGEAbAA7AE0AaQBuAHUAdABlAHMAPQAxADUAOwBNAGEAeABSAGEAbgBkAG8AbQBEAGUAbABhAHkATQBpAG4AdQB0AGUAcwA9ADAAIgApADsAIABzAGwAZQBlAHAAIAAzADAAOwAgACQAUwBjAGgAZQBkAHUAbABlAGQATQBlAHMAcwBhAGcAZQAuAFAAdQB0ACgAKQB9AA==";
+                            Exec(wmiConnection, collectionId, collectionName, applicationPath: commandToExecute, runAsUser: false);
+                        }
+                        // Run policy retrieval and evaluation cycle on the primary device for each user in user collections
+                        else if ((uint)collection["CollectionType"] == 1)
+                        {
+                            foreach (ManagementObject collectionMember in collectionMembers)
+                            {
+                                UpdateUserPolicyForDevice(wmiConnection, resourceId: collectionMember["ResourceID"].ToString());
+                            }
+                        }
+                    }
+                }
             }
-            string collectionType = null;
+            else if (!string.IsNullOrEmpty(deviceName) || !string.IsNullOrEmpty(resourceId) || !string.IsNullOrEmpty(userName))
+            {
+                UpdateUserPolicyForDevice(wmiConnection, deviceName, resourceId, userName);
+            }
+        }
+
+        public static void UpdateUserPolicyForDevice(ManagementScope wmiConnection, string deviceName = null, string resourceId = null, string userName = null)
+        {
             if (!string.IsNullOrEmpty(resourceId) || !string.IsNullOrEmpty(userName))
             {
-                ManagementObject userDevice = GetPrimaryUserDevices(wmiConnection, resourceId, userName).OfType<ManagementObject>().First();
-                Console.WriteLine($"[+] Forcing {userDevice["ResourceName"]} ({userDevice["ResourceID"]}) to check for updates to user policy and execute any new applications available for {userDevice["UniqueUserName"]}");
+                ManagementObject userDevice = GetPrimaryDeviceForUser(wmiConnection, resourceId, userName).OfType<ManagementObject>().First();
+                Console.WriteLine($"[+] Forcing {userDevice["ResourceName"]} ({userDevice["ResourceID"]}) to retrieve user policy and execute any new applications available for {userDevice["UniqueUserName"]}");
                 deviceName = userDevice["ResourceName"].ToString();
-                collectionType = "device";
             }
             // $CurrentUser = Get-WmiObject -Query "SELECT UserSID, LogoffTime FROM CCM_UserLogonEvents WHERE LogoffTime=NULL" -Namespace "root\ccm"; $UserID=$CurrentUser.UserSID; $UserID=$UserID.replace("-", "_"); $MessageIDs = "{00000000-0000-0000-0000-000000000026}","{00000000-0000-0000-0000-000000000027}"; ForEach ($MessageID in $MessageIDs) { $ScheduledMessage = ([wmi]"root\ccm\Policy\$UserID\ActualConfig:CCM_Scheduler_ScheduledMessage.ScheduledMessageID=$MessageID"); $ScheduledMessage.Triggers = @("SimpleInterval;Minutes=1;MaxRandomDelayMinutes=0"); $ScheduledMessage.TargetEndpoint = "direct:PolicyAgent_RequestAssignments"; $ScheduledMessage.Put(); $ScheduledMessage.Triggers = @("SimpleInterval;Minutes=15;MaxRandomDelayMinutes=0"); sleep 30; $ScheduledMessage.Put()}
             string commandToExecute = "powershell -EncodedCommand JABDAHUAcgByAGUAbgB0AFUAcwBlAHIAIAA9ACAARwBlAHQALQBXAG0AaQBPAGIAagBlAGMAdAAgAC0AUQB1AGUAcgB5ACAAIgBTAEUATABFAEMAVAAgAFUAcwBlAHIAUwBJAEQALAAgAEwAbwBnAG8AZgBmAFQAaQBtAGUAIABGAFIATwBNACAAQwBDAE0AXwBVAHMAZQByAEwAbwBnAG8AbgBFAHYAZQBuAHQAcwAgAFcASABFAFIARQAgAEwAbwBnAG8AZgBmAFQAaQBtAGUAPQBOAFUATABMACIAIAAtAE4AYQBtAGUAcwBwAGEAYwBlACAAIgByAG8AbwB0AFwAYwBjAG0AIgA7ACAAJABVAHMAZQByAEkARAA9ACQAQwB1AHIAcgBlAG4AdABVAHMAZQByAC4AVQBzAGUAcgBTAEkARAA7ACAAJABVAHMAZQByAEkARAA9ACQAVQBzAGUAcgBJAEQALgByAGUAcABsAGEAYwBlACgAIgAtACIALAAgACIAXwAiACkAOwAgACQATQBlAHMAcwBhAGcAZQBJAEQAcwAgAD0AIAAiAHsAMAAwADAAMAAwADAAMAAwAC0AMAAwADAAMAAtADAAMAAwADAALQAwADAAMAAwAC0AMAAwADAAMAAwADAAMAAwADAAMAAyADYAfQAiACwAIgB7ADAAMAAwADAAMAAwADAAMAAtADAAMAAwADAALQAwADAAMAAwAC0AMAAwADAAMAAtADAAMAAwADAAMAAwADAAMAAwADAAMgA3AH0AIgA7ACAARgBvAHIARQBhAGMAaAAgACgAJABNAGUAcwBzAGEAZwBlAEkARAAgAGkAbgAgACQATQBlAHMAcwBhAGcAZQBJAEQAcwApACAAewAgACQAUwBjAGgAZQBkAHUAbABlAGQATQBlAHMAcwBhAGcAZQAgAD0AIAAoAFsAdwBtAGkAXQAiAHIAbwBvAHQAXABjAGMAbQBcAFAAbwBsAGkAYwB5AFwAJABVAHMAZQByAEkARABcAEEAYwB0AHUAYQBsAEMAbwBuAGYAaQBnADoAQwBDAE0AXwBTAGMAaABlAGQAdQBsAGUAcgBfAFMAYwBoAGUAZAB1AGwAZQBkAE0AZQBzAHMAYQBnAGUALgBTAGMAaABlAGQAdQBsAGUAZABNAGUAcwBzAGEAZwBlAEkARAA9ACQATQBlAHMAcwBhAGcAZQBJAEQAIgApADsAIAAkAFMAYwBoAGUAZAB1AGwAZQBkAE0AZQBzAHMAYQBnAGUALgBUAHIAaQBnAGcAZQByAHMAIAA9ACAAQAAoACIAUwBpAG0AcABsAGUASQBuAHQAZQByAHYAYQBsADsATQBpAG4AdQB0AGUAcwA9ADEAOwBNAGEAeABSAGEAbgBkAG8AbQBEAGUAbABhAHkATQBpAG4AdQB0AGUAcwA9ADAAIgApADsAIAAkAFMAYwBoAGUAZAB1AGwAZQBkAE0AZQBzAHMAYQBnAGUALgBUAGEAcgBnAGUAdABFAG4AZABwAG8AaQBuAHQAIAA9ACAAIgBkAGkAcgBlAGMAdAA6AFAAbwBsAGkAYwB5AEEAZwBlAG4AdABfAFIAZQBxAHUAZQBzAHQAQQBzAHMAaQBnAG4AbQBlAG4AdABzACIAOwAgACQAUwBjAGgAZQBkAHUAbABlAGQATQBlAHMAcwBhAGcAZQAuAFAAdQB0ACgAKQA7ACAAJABTAGMAaABlAGQAdQBsAGUAZABNAGUAcwBzAGEAZwBlAC4AVAByAGkAZwBnAGUAcgBzACAAPQAgAEAAKAAiAFMAaQBtAHAAbABlAEkAbgB0AGUAcgB2AGEAbAA7AE0AaQBuAHUAdABlAHMAPQAxADUAOwBNAGEAeABSAGEAbgBkAG8AbQBEAGUAbABhAHkATQBpAG4AdQB0AGUAcwA9ADAAIgApADsAIABzAGwAZQBlAHAAIAAzADAAOwAgACQAUwBjAGgAZQBkAHUAbABlAGQATQBlAHMAcwBhAGcAZQAuAFAAdQB0ACgAKQB9AA==";
-            Exec(wmiConnection, collectionId, collectionName, deviceName, commandToExecute, null, resourceId, false, collectionType);
+            Exec(wmiConnection, deviceName: deviceName, applicationPath: commandToExecute, runAsUser: false, collectionType: "device");
         }
 
-        public static ManagementObject NewApplication(ManagementScope wmiConnection, string name, string path, bool runAsUser = false, bool stealth = false)
+        public static ManagementObject NewApplication(ManagementScope wmiConnection, string name, string path, bool runAsUser = false, bool show = false)
         {
             ManagementObject application = null;
 
@@ -554,7 +630,7 @@ namespace SharpSCCM
                 application = new ManagementClass(wmiConnection, new ManagementPath("SMS_Application"), null).CreateInstance();
                 //application["SDMPackageXML"] = xmla;
                 application["SDMPackageXML"] = xml;
-                if (stealth)
+                if (!show)
                 {
                     application["IsHidden"] = true;
                     Console.WriteLine("[+] Updated application to hide it from the Configuration Manager console");
@@ -743,7 +819,7 @@ namespace SharpSCCM
                 }
                 else
                 {
-                    Console.WriteLine($"[!] Could not find the specified device or user");
+                    Console.WriteLine($"[!] Found 0 instances of the specified device or user with ResourceID {resourceId}");
                 }
             }
             return collectionMembers;

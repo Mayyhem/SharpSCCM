@@ -231,9 +231,11 @@ namespace SharpSCCM
                     "  Permitted security roles:\n" +
                     "    - Any (SMS Admins local group)");
                 getCommand.Add(getCollectionMember);
+                getCollectionMember.Add(new Option<bool>(new[] { "--count", "-c" }, "Returns the number of rows that match the specified criteria"));
                 getCollectionMember.Add(new Option<string>(new[] { "--device", "-d" }, "The name of the device to get collection membership for (returns all collection members where the name contains the provided string)"));
                 getCollectionMember.Add(new Option<string>(new[] { "--collection-id", "-i" }, "The CollectionID of the collection to get members for"));
                 getCollectionMember.Add(new Option<string>(new[] { "--collection-name", "-n" }, "The name of the collection to get members for"));
+                getCollectionMember.Add(new Option<string>(new[] { "--order-by", "-o" }, "An ORDER BY clause to set the order of data returned by the query (e.g., \"Name DESC\") (default: ascending (ASC) order)"));
                 getCollectionMember.Add(new Option<string[]>(new[] { "--properties", "-p" }, "Specify this option for each property to query (e.g., \"-p Name -p IsActive\"") { Arity = ArgumentArity.OneOrMore });
                 getCollectionMember.Add(new Option<string>(new[] { "--resource-id", "-r" }, "The unique ResourceID of the device or user to get applicable rules for"));
                 getCollectionMember.Add(new Option<string>(new[] { "--user", "-u" }, "The UniqueUserName of the user to get collection membership for (e.g., \"APERTURE\\cave.johnson\") (returns all collection members where the name contains the provided string)"));
@@ -242,11 +244,11 @@ namespace SharpSCCM
                 getCollectionMember.Add(new Option<bool>(new[] { "--dry-run", "-z" }, "Display the resulting WQL query but do not connect to the specified server and execute it"));
                 // COUNT and ORDER BY don't seem to work when querying SMS_CollectionMember_a
                 getCollectionMember.Handler = CommandHandler.Create(
-                    (string managementPoint, string siteCode, string device, string collectionId, string collectionName, string[] properties, string user, bool verbose, string whereCondition, bool dryRun) =>
+                    (string managementPoint, string siteCode, bool count, string device, string collectionId, string collectionName, string orderBy, string[] properties, string resourceId, string user, bool verbose, string whereCondition, bool dryRun) =>
                     {
-                        if (string.IsNullOrEmpty(collectionName) && string.IsNullOrEmpty(collectionId) && string.IsNullOrEmpty(device) && string.IsNullOrEmpty(user))
+                        if (string.IsNullOrEmpty(collectionName) && string.IsNullOrEmpty(collectionId) && string.IsNullOrEmpty(device) && string.IsNullOrEmpty(resourceId) && string.IsNullOrEmpty(user))
                         {
-                            Console.WriteLine("[!] Please specify a CollectionID (-i), collection Name (-n), device Name (-d), or user Name (-u)");
+                            Console.WriteLine("[!] Please specify a CollectionID (-i), collection Name (-n), device or user ResourceID (-r), device Name (-d), or user Name (-u)");
                         }
                         else if (!string.IsNullOrEmpty(device) && !string.IsNullOrEmpty(user))
                         {
@@ -257,21 +259,19 @@ namespace SharpSCCM
                             ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(managementPoint, null, siteCode);
                             if (wmiConnection != null && wmiConnection.IsConnected)
                             {
+                                if (properties.Length == 0 && !verbose)
+                                {
+                                    properties = new[] { "ClientCertType", "CollectionID", "Domain", "IsActive", "IsApproved", "IsAssigned", "IsClient", "Name", "ResourceID", "SiteCode", "SMSID" };
+                                }
                                 if (!string.IsNullOrEmpty(collectionId) || !string.IsNullOrEmpty(collectionName))
                                 {
-                                    if (properties.Length == 0 && !verbose)
-                                    {
-                                        properties = new[] { "Collection", "CollectionID", "Domain", "IsActive", "IsApproved", "IsAssigned", "IsClient", "Name", "ResourceID", "SiteCode" };
-                                    }
-                                    MgmtPointWmi.GetCollectionMember(wmiConnection, collectionName, collectionId, properties, dryRun, verbose, true);
+
+                                    MgmtPointWmi.GetCollectionMember(wmiConnection, collectionName, collectionId, count, properties, whereCondition, orderBy, dryRun, verbose, true);
                                 }
-                                else if (!string.IsNullOrEmpty(device) || !string.IsNullOrEmpty(user))
+                                else if (!string.IsNullOrEmpty(device) || !string.IsNullOrEmpty(resourceId) || !string.IsNullOrEmpty(user))
                                 {
-                                    if (properties.Length == 0 && !verbose)
-                                    {
-                                        properties = new[] { "CollectionID", "Domain", "IsActive", "IsApproved", "IsAssigned", "IsClient", "Name", "ResourceID", "SiteCode" };
-                                    }
-                                    MgmtUtil.GetClassInstances(wmiConnection, "SMS_FullCollectionMembership", null, false, properties, $"Name LIKE '%{(!string.IsNullOrEmpty(device) ? device : user)}%'", null, dryRun, verbose, true, true);
+                                    whereCondition = !string.IsNullOrEmpty(whereCondition) ? whereCondition : !string.IsNullOrEmpty(resourceId) ? $"ResourceID='{resourceId}'" : !string.IsNullOrEmpty(device) ? $"Name LIKE '%{device}%'" : !string.IsNullOrEmpty(user) ? $"Name LIKE '%{user}%'" : null;
+                                    MgmtUtil.GetClassInstances(wmiConnection, "SMS_FullCollectionMembership", null, count, properties, whereCondition, orderBy, dryRun, verbose, true, true);
                                 }
                             }
                         }
@@ -504,18 +504,18 @@ namespace SharpSCCM
                     "    - Any (SMS Admins local group)");
                 getCommand.Add(getUser);
                 getUser.Add(new Option<bool>(new[] { "--count", "-c" }, "Returns the number of rows that match the specified criteria"));
+                getUser.Add(new Option<string>(new[] { "--name", "-n" }, "A user to search for (returns all users with names containing the provided string)"));
                 getUser.Add(new Option<string>(new[] { "--order-by", "-o" }, "An ORDER BY clause to set the order of data returned by the query (e.g., \"UniqueUserName DESC\") (default: ascending (ASC) order)"));
                 getUser.Add(new Option<string[]>(new[] { "--properties", "-p" }, "Specify this option for each property to query (e.g., \"-p Name -p UniqueUserName\"") { Arity = ArgumentArity.OneOrMore });
-                getUser.Add(new Option<string>(new[] { "--user", "-u" }, "A user to search for (returns all users with names containing the provided string)"));
                 getUser.Add(new Option<bool>(new[] { "--verbose", "-v" }, "Display all class properties and their values"));
                 getUser.Add(new Option<string>(new[] { "--where-condition", "-w" }, "A WHERE condition to narrow the scope of data returned by the query, including escaped backslashes (e.g., \"UniqueUserName='APERTURE\\\\cave.johnson'\" or \"UniqueUserName LIKE '%cave.johnson%'\")"));
                 getUser.Add(new Option<bool>(new[] { "--dry-run", "-z" }, "Display the resulting WQL query but do not connect to the specified server and execute it"));
                 getUser.Handler = CommandHandler.Create(
-                    (string managementPoint, string siteCode, bool count, string orderBy, string[] properties, string user, bool verbose, bool dryRun, string whereCondition) =>
+                    (string managementPoint, string siteCode, bool count, string name, string orderBy, string[] properties, bool verbose, bool dryRun, string whereCondition) =>
                     {
-                        if (!string.IsNullOrEmpty(user))
+                        if (!string.IsNullOrEmpty(name))
                         {
-                            whereCondition = $"UniqueUserName LIKE '%{user}%'";
+                            whereCondition = $"UniqueUserName LIKE '%{name}%'";
                         }
                         if (properties.Length == 0)
                         {
@@ -870,14 +870,14 @@ namespace SharpSCCM
                 newApplication.Add(new Option<string>(new[] { "--name", "-n" }, "The name of the new application") { IsRequired = true });
                 newApplication.Add(new Option<string>(new[] { "--path", "-p" }, "The local or UNC path of the binary/script the application will execute (e.g., \"C:\\Windows\\System32\\calc.exe\", \"\\\\site-server.domain.com\\Sources$\\my.exe") { IsRequired = true });
                 newApplication.Add(new Option<bool>(new[] { "--run-as-user", "-r" }, "Execute the application in the context of the logged on user (default: SYSTEM)"));
-                newApplication.Add(new Option<bool>(new[] { "--stealth", "-s" }, "Hide the application from the Configuration Manager console"));
+                newApplication.Add(new Option<bool>(new[] { "--show", "-s" }, "Show the application in the Configuration Manager console (default: hidden)"));
                 newApplication.Handler = CommandHandler.Create(
-                    (string managementPoint, string siteCode, string name, string path, bool runAsUser, bool stealth) =>
+                    (string managementPoint, string siteCode, string name, string path, bool runAsUser, bool show) =>
                     {
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(managementPoint, null, siteCode);
                         if (wmiConnection != null && wmiConnection.IsConnected)
                         {
-                            MgmtPointWmi.NewApplication(wmiConnection, name, path, runAsUser, stealth);
+                            MgmtPointWmi.NewApplication(wmiConnection, name, path, runAsUser, show);
                         }
                     });
 
