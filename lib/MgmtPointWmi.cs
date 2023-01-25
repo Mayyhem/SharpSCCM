@@ -340,8 +340,13 @@ namespace SharpSCCM
             // Create a collection is one is not specified
             if (collection == null)
             {
+                if (!string.IsNullOrEmpty(resourceId))
+                {
+                    ManagementObject resource = GetDeviceOrUserFromResourceID(wmiConnection, resourceId);
+                    collectionType = resource.ClassPath.ClassName == "SMS_R_System" ? "device" : resource.ClassPath.ClassName == "SMS_R_User" ? "user" : null;
+                }
                 collectionType = !string.IsNullOrEmpty(collectionType) ? collectionType : !string.IsNullOrEmpty(deviceName) ? "device" : !string.IsNullOrEmpty(userName) ? "user" : null;
-                string newCollectionName = !string.IsNullOrEmpty(deviceName) ? $"Devices_{Guid.NewGuid()}" : !string.IsNullOrEmpty(userName) ? $"Users_{Guid.NewGuid()}" : (!string.IsNullOrEmpty(resourceId) && !string.IsNullOrEmpty(collectionType)) ? $"Resources_{Guid.NewGuid()}" : null;
+                string newCollectionName = $"{char.ToUpper(collectionType[0]) + collectionType.Substring(1)}s_{Guid.NewGuid()}";
                 collection = NewCollection(wmiConnection, collectionType, newCollectionName);
                 NewCollectionMember(wmiConnection, newCollectionName, collectionType, (string)collection["CollectionID"], deviceName, userName, resourceId);
             }
