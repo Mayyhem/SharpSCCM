@@ -379,13 +379,13 @@ namespace SharpSCCM
             if (collectionType == "device")
             {
                 UpdateMachinePolicy(wmiConnection, (string)collection["CollectionID"]);
+                Console.WriteLine("[+] Waiting 1 minute for execution to complete...");
+                Thread.Sleep(60000);
             }
             else if (collectionType == "user")
             {
                 UpdateUserPolicy(wmiConnection, (string)collection["CollectionID"]);
             }
-            Console.WriteLine("[+] Waiting 1 minute for execution to complete...");
-            Thread.Sleep(60000);
             Console.WriteLine("[+] Cleaning up");
             Cleanup.RemoveDeployment(wmiConnection, newDeploymentName);
             Cleanup.RemoveApplication(wmiConnection, newApplicationName);
