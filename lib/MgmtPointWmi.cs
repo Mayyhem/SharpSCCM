@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Management;
@@ -32,7 +34,7 @@ namespace SharpSCCM
             }
             else if (collections.Count == 0)
             {
-                Console.WriteLine("[+] Found 0 collections matching the specified Name or CollectionID");
+                Console.WriteLine($"[+] Found 0 collections matching the specified {(!string.IsNullOrEmpty(collectionId) ? "CollectionID" : !string.IsNullOrEmpty(collectionName) ? "Name" : null)}");
             }
             else
             {
@@ -42,7 +44,8 @@ namespace SharpSCCM
             return collection;
         }
 
-        public static ManagementObjectCollection GetCollectionMembers(ManagementScope wmiConnection, string collectionName = null, string collectionId = null, string[] properties = null, bool dryRun = false, bool verbose = false, bool printOutput = false)
+        /*
+        public static ManagementObjectCollection GetCollectionMember(ManagementScope wmiConnection, string collectionName = null, string collectionId = null, string[] properties = null, bool dryRun = false, bool verbose = false, bool printOutput = false)
         {
             ManagementObjectCollection collectionMembers = null;
             ManagementObject collection = GetCollection(wmiConnection, collectionName, collectionId, printOutput);
@@ -51,13 +54,14 @@ namespace SharpSCCM
                 collectionMembers = MgmtUtil.GetClassInstances(wmiConnection, "SMS_CollectionMember_a", null, false, properties, $"CollectionID='{collection.GetPropertyValue("CollectionID")}'", null, dryRun, verbose, printOutput: printOutput);
                 if (collectionMembers.Count == 0)
                 {
-                    Console.WriteLine($"[+] Found 0 members in {collection["Name"]} ({collection["CollectionID"]})");
+                    if (printOutput) Console.WriteLine($"[+] Found 0 members in {collection["Name"]} ({collection["CollectionID"]})");
                 }
             }
             return collectionMembers;
         }
+        */
 
-        public static ManagementObjectCollection GetCollectionMember(ManagementScope wmiConnection, string collectionName = null, string collectionId = null, bool count = false, string[] properties = null, string whereCondition = null, string orderByColumn = null, bool dryRun = false, bool verbose = false, bool printOutput = false)
+        public static ManagementObjectCollection GetCollectionMembers(ManagementScope wmiConnection, string collectionName = null, string collectionId = null, bool count = false, string[] properties = null, string whereCondition = null, string orderByColumn = null, bool dryRun = false, bool verbose = false, bool printOutput = false)
         {
             ManagementObjectCollection collectionMembers = null;
             ManagementObject collection = GetCollection(wmiConnection, collectionName, collectionId, printOutput);
@@ -66,103 +70,211 @@ namespace SharpSCCM
                 collectionMembers = MgmtUtil.GetClassInstances(wmiConnection, "SMS_FullCollectionMembership", null, count, properties, $"CollectionID='{collection.GetPropertyValue("CollectionID")}'", null, dryRun, verbose, printOutput: printOutput);
                 if (collectionMembers.Count == 0)
                 {
-                    Console.WriteLine($"[+] Found 0 members in {collection["Name"]} ({collection["CollectionID"]})");
+                    if (printOutput) Console.WriteLine($"[+] Found 0 members in {collection["Name"]} ({collection["CollectionID"]})");
                 }
             }
             return collectionMembers;
         }
 
-        public static void GetCollectionRule(ManagementScope wmiConnection, string collectionName, string providedCollectionId, string deviceName, string userName, string resourceId)
+        public static void GetCollectionRule(ManagementScope wmiConnection, string providedCollectionName, string providedCollectionId, string deviceName, string userName, string resourceId)
         {
-            bool foundMatchingRule = false;
-            ManagementObjectCollection collections;
-            if (!string.IsNullOrEmpty(providedCollectionId))
+            // Get collections that match the provided criteria
+            ManagementObject providedCollection;
+            if (!string.IsNullOrEmpty(providedCollectionName) || !string.IsNullOrEmpty(providedCollectionId))
             {
-                collections = MgmtUtil.GetClassInstances(wmiConnection, "SMS_Collection", $"SELECT * FROM SMS_Collection WHERE CollectionID='{providedCollectionId}'");
-            }
-            else if (!string.IsNullOrEmpty(collectionName))
-            {
-                collections = MgmtUtil.GetClassInstances(wmiConnection, "SMS_Collection", $"SELECT * FROM SMS_Collection WHERE Name='{collectionName}'");
-            }
-            else
-            {
-                collections = MgmtUtil.GetClassInstances(wmiConnection, "SMS_Collection", "SELECT * FROM SMS_Collection");
-            }
-            // Get rules for all collections if a collection Name or CollectionID was not specified
-            if ((!string.IsNullOrEmpty(providedCollectionId) || !string.IsNullOrEmpty(collectionName)) && collections.Count == 1 || (string.IsNullOrEmpty(collectionName) && string.IsNullOrEmpty(providedCollectionId)))
-            {
-                Console.WriteLine("[+] Searching for matching collection rules");
-                foreach (ManagementObject collection in collections)
+                providedCollection = GetCollection(wmiConnection, providedCollectionName, providedCollectionId, true);
+                if (providedCollection != null)
                 {
-                    // Get the CollectionID to for each rule
-                    string collectionId = (string)collection["CollectionID"];
-                    
-                    // Fetch CollectionRules lazy property
-                    collection.Get();
+                    providedCollectionName = (string)providedCollection["Name"];
+                    providedCollectionId = (string)providedCollection["CollectionID"];
+                }
+                else
+                {
+                    return;
+                }
+            }
 
-                    ManagementBaseObject[] collectionRules = (ManagementBaseObject[])collection["CollectionRules"];
-                    // Account for collections with no rules
-                    if (collectionRules != null)
+            // Get devices and users that match the provided criteria
+            ManagementObject providedDeviceOrUser = null;
+            if (!string.IsNullOrEmpty(deviceName) || !string.IsNullOrEmpty(userName) || !string.IsNullOrEmpty(resourceId))
+            {
+                providedDeviceOrUser = GetDeviceOrUser(wmiConnection, deviceName, resourceId, userName, true);
+                if (providedDeviceOrUser == null)
+                {
+                    return;
+                }
+            }
+
+            // Get rules for all collections so they can be compared to the provided criteria
+            ManagementObjectCollection existingCollections = MgmtUtil.GetClassInstances(wmiConnection, "SMS_Collection");
+            if (existingCollections.Count > 0)
+            {
+                bool foundMatchingRule = false;
+                Console.WriteLine("[+] Searching for matching collection rules");
+
+                // Loop through once to identify matching collections and again to compare those matches to all existing collections
+                int loopsCompleted = 0;
+                List<string> existingCollectionsMatchingProvidedResource = new List<string>();
+                while (loopsCompleted < 2)
+                {
+                    foreach (ManagementObject existingCollection in existingCollections)
                     {
-                        foreach (ManagementBaseObject collectionRule in collectionRules)
+                        // Get the Name and CollectionID to for each collection
+                        string existingCollectionName = (string)existingCollection["Name"];
+                        string existingCollectionId = (string)existingCollection["CollectionID"];
+
+                        // Get collection members that match the provided criteria
+                        ManagementObjectCollection existingCollectionMembers;
+                        if (providedDeviceOrUser != null)
                         {
-                            // Grab the query and fetch the results
-                            if (collectionRule.Properties.Cast<PropertyData>().Any(property => property.Name == "QueryExpression"))
+                            existingCollectionMembers = GetCollectionMembers(wmiConnection, existingCollectionName, existingCollectionId);
+                            foreach (ManagementObject existingCollectionMember in existingCollectionMembers)
                             {
-                                string collectionRuleQuery = (string)collectionRule["QueryExpression"];
-                                ManagementObjectCollection collectionRuleQueryResults = MgmtUtil.GetClassInstances(wmiConnection, "Query Results", collectionRuleQuery);
-                                if (collectionRuleQueryResults.Count > 0)
+                                if ((uint)existingCollectionMember["ResourceID"] == (uint)providedDeviceOrUser["ResourceID"])
                                 {
-                                    foreach (ManagementObject collectionRuleQueryResult in collectionRuleQueryResults)
+                                    existingCollectionsMatchingProvidedResource.Add(existingCollectionId);
+                                }
+                            }
+                        }
+
+                        // Populate the CollectionRules lazy property
+                        existingCollection.Get();
+                        ManagementBaseObject[] collectionRules = (ManagementBaseObject[])existingCollection["CollectionRules"];
+
+                        // Account for collections with no rules
+                        if (collectionRules != null)
+                        {
+                            foreach (ManagementBaseObject collectionRule in collectionRules)
+                            {
+                                // Grab the query and fetch the results
+                                if (collectionRule.Properties.Cast<PropertyData>().Any(property => property.Name == "QueryExpression"))
+                                {
+                                    string collectionRuleQuery = (string)collectionRule["QueryExpression"];
+                                    ManagementObjectCollection collectionRuleQueryResults = MgmtUtil.GetClassInstances(wmiConnection, "Query Results", collectionRuleQuery);
+                                    if (collectionRuleQueryResults.Count > 0)
                                     {
-                                        // If device Name, user UniqueUserName, or ResourceID provided, or if only a collection Name or CollectionID is provided, print matching or all collection rules, respectively
-                                        try
+                                        foreach (ManagementObject collectionRuleQueryResult in collectionRuleQueryResults)
                                         {
-                                            if ((!string.IsNullOrEmpty(collectionName) || !string.IsNullOrEmpty(collectionId)) && string.IsNullOrEmpty(deviceName) && string.IsNullOrEmpty(userName) && string.IsNullOrEmpty(resourceId) ||
-                                            (string)collectionRuleQueryResult.GetPropertyValue("Name") == deviceName ||
-                                            (string)collectionRuleQueryResult.GetPropertyValue("UniqueUserName") == userName ||
-                                            (uint)collectionRuleQueryResult.GetPropertyValue("ResourceID") == Convert.ToUInt32(resourceId))
+                                            // If device Name, user UniqueUserName, or ResourceID provided, or if only a collection Name or CollectionID is provided, print matching or all collection rules, respectively
+                                            try
                                             {
-                                                foundMatchingRule = true;
-                                                Console.WriteLine("-----------------------------------\n" +
-                                                    $"CollectionID: {collectionId}\n" +
-                                                    $"Collection Name: {collection["Name"]}\n" +
-                                                    $"QueryID: {collectionRule["QueryID"]}\n" +
-                                                    $"RuleName: {collectionRule["RuleName"]}\n" +
-                                                    $"Query Expression:{collectionRule["QueryExpression"]}");
+                                                // Print matching rules
+                                                // If only a collection Name or CollectionID is provided
+                                                if ((((!string.IsNullOrEmpty(providedCollectionName) && providedCollectionName == existingCollectionName) ||
+                                                    (!string.IsNullOrEmpty(providedCollectionId) && providedCollectionId == existingCollectionId)) &&
+                                                    string.IsNullOrEmpty(deviceName) && string.IsNullOrEmpty(userName) && string.IsNullOrEmpty(resourceId)) ||
+                                                    // If this collection matches a provided or previously matched resource
+                                                    existingCollectionsMatchingProvidedResource.Contains(existingCollectionId) ||
+                                                    // If device Name, user UniqueUserName, or ResourceID provided
+                                                    (string)collectionRuleQueryResult.GetPropertyValue("Name") == deviceName ||
+                                                    (string)collectionRuleQueryResult.GetPropertyValue("UniqueUserName") == userName ||
+                                                    (uint)collectionRuleQueryResult.GetPropertyValue("ResourceID") == Convert.ToUInt32(resourceId))
+                                                {
+                                                    foundMatchingRule = true;
+                                                    if (!existingCollectionsMatchingProvidedResource.Contains(existingCollectionId))
+                                                    {
+                                                        existingCollectionsMatchingProvidedResource.Add(existingCollectionId);
+                                                    }
+                                                    if (loopsCompleted == 1)
+                                                    {
+                                                        Console.WriteLine("-----------------------------------\n" +
+                                                        $"CollectionID: {existingCollectionId}\n" +
+                                                        $"Collection Name: {existingCollectionName}\n" +
+                                                        $"RuleName: {collectionRule["RuleName"]}\n" +
+                                                        $"QueryID: {collectionRule["QueryID"]}\n" +
+                                                        $"Query Expression:{collectionRule["QueryExpression"]}");
+                                                    }
+                                                }
+                                            }
+                                            catch (ManagementException)
+                                            {
+                                                // Keep going if the property isn't found because it doesn't exist in both SMS_R_System and SMS_R_User
                                             }
                                         }
-                                        catch (ManagementException)
+                                    }
+                                }
+                                else if (collectionRule.Properties.Cast<PropertyData>().Any(property => property.Name == "ExcludeCollectionID"))
+                                {
+
+                                    string collectionRuleExcludedCollectionId = (string)collectionRule["ExcludeCollectionID"];
+                                    // If a collection Name or CollectionID is provided, print matching or all collection rules, respectively
+                                    if (collectionRuleExcludedCollectionId == providedCollectionId ||
+                                        existingCollectionId == providedCollectionId ||
+                                        existingCollectionsMatchingProvidedResource.Contains(collectionRuleExcludedCollectionId))
+                                    {
+                                        foundMatchingRule = true;
+                                        if (!existingCollectionsMatchingProvidedResource.Contains(collectionRuleExcludedCollectionId))
                                         {
-                                            // Keep going if the property isn't found because the column names don't exist in both SMS_R_System or SMS_R_User
+                                            existingCollectionsMatchingProvidedResource.Add(collectionRuleExcludedCollectionId);
+                                        }
+                                        if (loopsCompleted == 1)
+                                        {
+                                            Console.WriteLine("-----------------------------------\n" +
+                                            $"CollectionID: {existingCollectionId}\n" +
+                                            $"Collection Name: {existingCollectionName}\n" +
+                                            $"RuleName: {collectionRule["RuleName"]}\n" +
+                                            $"ExcludeCollectionID: {collectionRule["ExcludeCollectionID"]}");
+                                        }
+                                    }
+                                }
+                                else if (collectionRule.Properties.Cast<PropertyData>().Any(property => property.Name == "IncludeCollectionID"))
+                                {
+                                    string collectionRuleIncludedCollectionId = (string)collectionRule["IncludeCollectionID"];
+                                    // If a collection Name or CollectionID is provided, print matching or all collection rules, respectively
+                                    if (collectionRuleIncludedCollectionId == providedCollectionId ||
+                                       existingCollectionId == providedCollectionId ||
+                                       existingCollectionsMatchingProvidedResource.Contains(collectionRuleIncludedCollectionId))
+                                    {
+                                        foundMatchingRule = true;
+                                        if (!existingCollectionsMatchingProvidedResource.Contains(collectionRuleIncludedCollectionId))
+                                        {
+                                            existingCollectionsMatchingProvidedResource.Add(collectionRuleIncludedCollectionId);
+                                        }
+                                        if (loopsCompleted == 1)
+                                        {
+                                            Console.WriteLine("-----------------------------------\n" +
+                                            $"CollectionID: {existingCollectionId}\n" +
+                                            $"Collection Name: {existingCollectionName}\n" +
+                                            $"RuleName: {collectionRule["RuleName"]}\n" +
+                                            $"IncludeCollectionID: {collectionRule["IncludeCollectionID"]}");
+                                        }
+
+                                    }
+                                }
+                                else if (collectionRule.Properties.Cast<PropertyData>().Any(property => property.Name == "ResourceID"))
+                                {
+                                    // Print matching rules
+                                    // If only a collection Name or CollectionID is provided
+                                    if ((((!string.IsNullOrEmpty(providedCollectionName) && providedCollectionName == existingCollectionName) || 
+                                        (!string.IsNullOrEmpty(providedCollectionId) && providedCollectionId == existingCollectionId)) && 
+                                        string.IsNullOrEmpty(deviceName) && string.IsNullOrEmpty(userName) && string.IsNullOrEmpty(resourceId)) ||
+                                        // If this collection matches a provided or previously matched resource
+                                        existingCollectionsMatchingProvidedResource.Contains(existingCollectionId) ||
+                                        // If device Name, user UniqueUserName, or ResourceID provided
+                                        (uint)collectionRule.GetPropertyValue("ResourceID") == Convert.ToUInt32(resourceId) ||
+                                        (string)collectionRule.GetPropertyValue("RuleName") == deviceName ||
+                                        (string)collectionRule.GetPropertyValue("RuleName") == userName)
+                                    {
+                                        foundMatchingRule = true;
+                                        if (!existingCollectionsMatchingProvidedResource.Contains(existingCollectionId))
+                                        {
+                                            existingCollectionsMatchingProvidedResource.Add(existingCollectionId);
+                                        }
+                                        if (loopsCompleted == 1)
+                                        {
+                                            Console.WriteLine("-----------------------------------\n" +
+                                            $"CollectionID: {existingCollectionId}\n" +
+                                            $"Collection Name: {existingCollectionName}\n" +
+                                            $"RuleName: {collectionRule[propertyName: "RuleName"]}\n" +
+                                            $"ResourceClassName: {collectionRule["ResourceClassName"]}\n" +
+                                            $"ResourceID: {collectionRule["ResourceID"]}");
                                         }
                                     }
                                 }
                             }
-                            else if (collectionRule.Properties.Cast<PropertyData>().Any(property => property.Name == "ExcludeCollectionID"))
-                            {
-                                string collectionRuleExcludedCollectionId = (string)collectionRule["ExcludeCollectionID"];
-                                if (collectionRuleExcludedCollectionId == providedCollectionId)
-                                {
-                                    foundMatchingRule = true;
-                                    Console.WriteLine("-----------------------------------\n" +
-                                        $"CollectionID: {collectionId}\n" +
-                                        $"Collection Name: {collection["Name"]}\n" +
-                                        $"ExcludeCollectionID: {collectionRule["ExcludeCollectionID"]}\n" +
-                                        $"RuleName: {collectionRule["RuleName"]}");
-                                }
-
-                            }
-                            else if (collectionRule.Properties.Cast<PropertyData>().Any(property => property.Name == "IncludeCollectionID"))
-                            {
-                                // finish
-                            }
-                            else if (collectionRule.Properties.Cast<PropertyData>().Any(property => property.Name == "ResourceID"))
-                            {
-                                // finish
-                            }
                         }
                     }
+                    loopsCompleted++;
                 }
                 if (foundMatchingRule)
                 {
@@ -173,20 +285,11 @@ namespace SharpSCCM
                     Console.WriteLine("[+] Found 0 matching collection membership rules");
                 }
             }
-            else if (collections.Count > 1)
-            {
-                Console.WriteLine($"[!] Found {collections.Count} collections named {collectionName}");
-                Console.WriteLine("[!] Try using a CollectionID instead (-i)");
-            }
-            else
-            {
-                Console.WriteLine("[+] Found 0 matching collections");
-            }
         }
 
         public static ManagementObjectCollection GetPrimaryDeviceForUser(ManagementScope wmiConnection, string resourceId = null, string userName = null)
         {
-            userName = !string.IsNullOrEmpty(resourceId) ? (string)GetDeviceOrUserFromResourceID(wmiConnection, resourceId)["UniqueUserName"] : userName;
+            userName = !string.IsNullOrEmpty(resourceId) ? (string)GetDeviceOrUser(wmiConnection, resourceId: resourceId)["UniqueUserName"] : userName;
             // Escape backslash for WQL query
             string whereCondition = $"UniqueUserName='{userName.Replace("\\", "\\\\")}'";
             // Get the device associated with the user
@@ -212,7 +315,7 @@ namespace SharpSCCM
             return userDevices;
         }
 
-        public static ManagementObject GetDeviceOrUserFromResourceID(ManagementScope wmiConnection, string resourceId)
+        public static ManagementObject GetDeviceOrUserFromResourceId(ManagementScope wmiConnection, string resourceId)
         {
             ManagementObject resource = null;
             string[] classes = { "SMS_R_System", "SMS_R_User" };
@@ -228,6 +331,36 @@ namespace SharpSCCM
                 else
                 {
                     Console.WriteLine($"[+] Found 0 devices or users with ResourceID {resourceId} in {className}");
+                }
+            }
+            return resource;
+        }
+
+        public static ManagementObject GetDeviceOrUser(ManagementScope wmiConnection, string deviceName = null, string resourceId = null, string userName = null, bool printOutput = false)
+        {
+            // Escape backslashes (e.g., "DOMAIN\username") for WQL
+            userName = !string.IsNullOrEmpty(userName) ? Helpers.EscapeBackslashes(userName) : null;
+            
+            ManagementObject resource = null;
+            string[] classes = { "SMS_R_System", "SMS_R_User" };
+            string whereCondition = !string.IsNullOrEmpty(resourceId) ? $"ResourceID='{resourceId}'" : !string.IsNullOrEmpty(deviceName) ? $"Name='{deviceName}'" : !string.IsNullOrEmpty(userName) ? $"UniqueUserName='{userName}'" : null;         
+            foreach (string className in classes)
+            {
+                // Skip searches for devices in the users class and vice versa
+                if ((className == "SMS_R_System" && string.IsNullOrEmpty(userName)) ||
+                    (className == "SMS_R_User" && string.IsNullOrEmpty(deviceName)))
+                {
+                    ManagementObjectCollection matchingResources = MgmtUtil.GetClassInstances(wmiConnection, className, whereCondition: whereCondition);
+                    if (matchingResources.Count == 1)
+                    {
+                        resource = matchingResources.OfType<ManagementObject>().First();
+                        if (printOutput) Console.WriteLine($"[+] Found resource named {resource["Name"]} with ResourceID {resource["ResourceID"]}");
+                        break;
+                    }
+                    else
+                    {
+                        if (printOutput) Console.WriteLine($"[+] Found 0 matching {(className == "SMS_R_System" ? "devices" : "users")} in {className}");
+                    }
                 }
             }
             return resource;
@@ -342,7 +475,7 @@ namespace SharpSCCM
             {
                 if (!string.IsNullOrEmpty(resourceId))
                 {
-                    ManagementObject resource = GetDeviceOrUserFromResourceID(wmiConnection, resourceId);
+                    ManagementObject resource = GetDeviceOrUser(wmiConnection, resourceId: resourceId);
                     collectionType = resource.ClassPath.ClassName == "SMS_R_System" ? "device" : resource.ClassPath.ClassName == "SMS_R_User" ? "user" : null;
                 }
                 collectionType = !string.IsNullOrEmpty(collectionType) ? collectionType : !string.IsNullOrEmpty(deviceName) ? "device" : !string.IsNullOrEmpty(userName) ? "user" : null;
@@ -428,7 +561,7 @@ namespace SharpSCCM
                 ManagementObject collection = GetCollection(wmiConnection, collectionName, collectionId);
                 if (collection != null)
                 {
-                    ManagementObjectCollection collectionMembers = GetCollectionMember(wmiConnection, collectionName, collectionId);
+                    ManagementObjectCollection collectionMembers = GetCollectionMembers(wmiConnection, collectionName, collectionId);
                     if (collectionMembers.Count > 0)
                     {
                         // Run policy retrieval and evaluation cycle on device collections
@@ -716,19 +849,19 @@ namespace SharpSCCM
             return returnedCollection;
         }
 
-        public static ManagementObjectCollection NewCollectionMember(ManagementScope wmiConnection, string collectionName = null, string collectionType = null, string collectionId = null, string deviceName = null, string userName = null, string resourceId = null, int waitTime = 15)
+        public static ManagementObject NewCollectionMember(ManagementScope wmiConnection, string collectionName = null, string collectionType = null, string collectionId = null, string deviceName = null, string userName = null, string resourceId = null, int waitTime = 15)
         {
-            ManagementObjectCollection collectionMembers = null;
+            ManagementObject collectionMember = null;
 
             // Use the provided collection type or set to device/user depending on which was provided
             collectionType = !string.IsNullOrEmpty(deviceName) ? "device" : !string.IsNullOrEmpty(userName) ? "user" : collectionType;
 
-            // Make sure the specified collection exists
+            // Check whether the specified collection exists
             ManagementObject collection = GetCollection(wmiConnection, collectionName, collectionId);
             if (collection != null)
             {
                 // Check if the resource is already a member of the collection
-                ManagementObjectCollection existingMembers = GetCollectionMember(wmiConnection, collectionName, collectionId, printOutput: false);
+                ManagementObjectCollection existingMembers = GetCollectionMembers(wmiConnection, collectionName, collectionId, printOutput: false);
                 if (existingMembers.Count > 0)
                 {
                     foreach (ManagementObject existingMember in existingMembers)
@@ -750,39 +883,10 @@ namespace SharpSCCM
                         }
                     }
                 }
-                // Make sure the specified resource exists
-                string membershipQuery = null;
-                ManagementObjectCollection matchingResources = null;
-                if (!string.IsNullOrEmpty(resourceId))
+                // Check whether the specified resource exists
+                ManagementObject matchingResource = GetDeviceOrUser(wmiConnection, deviceName, resourceId, userName, true);
+                if (matchingResource != null)
                 {
-                    membershipQuery = $"SELECT * FROM SMS_R_{(collectionType == "device" ? "System" : "User")} WHERE ResourceID='{resourceId}'";
-                    matchingResources = MgmtUtil.GetClassInstances(wmiConnection, $"SMS_R_{(collectionType == "device" ? "System" : "User")}", membershipQuery);
-
-                }
-                else if (!string.IsNullOrEmpty(deviceName))
-                {
-                    membershipQuery = $"SELECT * FROM SMS_R_System WHERE Name='{deviceName}'";
-                    matchingResources = MgmtUtil.GetClassInstances(wmiConnection, "SMS_R_System", membershipQuery);
-                }
-                else if (!string.IsNullOrEmpty(userName))
-                {
-                    membershipQuery = $"SELECT * FROM SMS_R_User WHERE UniqueUserName='{userName}'";
-                    matchingResources = MgmtUtil.GetClassInstances(wmiConnection, "SMS_R_User", membershipQuery);
-                }
-                if (matchingResources.Count > 1)
-                {
-                    Console.WriteLine($"[!] Found {matchingResources.Count} instances matching the specified device or user name");
-                    Console.WriteLine("[!] Try using a ResourceID instead (-r)");
-                }
-                else if (matchingResources.Count > 0)
-                {
-                    ManagementObject matchingResource = matchingResources.OfType<ManagementObject>().First();
-                    Console.WriteLine($"[+] Verified {matchingResource["Name"]} ({matchingResource["ResourceID"]}) exists");
-                    ManagementObject newCollectionRule = new ManagementClass(wmiConnection, new ManagementPath("SMS_CollectionRuleQuery"), null).CreateInstance();
-                    newCollectionRule["QueryExpression"] = membershipQuery;
-                    newCollectionRule["RuleName"] = $"{collectionType}_{Guid.NewGuid()}";
-                        ManagementBaseObject addMembershipRuleParams = collection.GetMethodParameters("AddMembershipRule");
-                    addMembershipRuleParams.SetPropertyValue("collectionRule", newCollectionRule);
                     if ((uint)collection.Properties[propertyName: "CollectionType"].Value == 1 && collectionType == "device")
                     {
                         Console.WriteLine("[!] Can't add a device to a user collection");
@@ -790,10 +894,15 @@ namespace SharpSCCM
                     else if ((uint)collection.Properties["CollectionType"].Value == 2 && collectionType == "user")
                     {
                         Console.WriteLine("[!] Can't add a user to a device collection");
-
                     }
                     else
                     {
+                        ManagementObject newCollectionRule = new ManagementClass(wmiConnection, new ManagementPath("SMS_CollectionRuleQuery"), null).CreateInstance();
+                        string membershipQuery = $"SELECT * FROM {(collectionType == "device" ? "SMS_R_System" : collectionType == "user" ? "SMS_R_User" : null)} WHERE ResourceID='{matchingResource["ResourceID"]}'";
+                        newCollectionRule["QueryExpression"] = membershipQuery;
+                        newCollectionRule["RuleName"] = $"{collectionType}_{Guid.NewGuid()}";
+                        ManagementBaseObject addMembershipRuleParams = collection.GetMethodParameters("AddMembershipRule");
+                        addMembershipRuleParams.SetPropertyValue("collectionRule", newCollectionRule);
                         try
                         {
                             collection.InvokeMethod("AddMembershipRule", addMembershipRuleParams, null);
@@ -803,11 +912,12 @@ namespace SharpSCCM
                             while (!memberAvailable)
                             {
                                 Thread.Sleep(millisecondsTimeout: 5000);
-                                collectionMembers = GetCollectionMember(wmiConnection, collectionName, collectionId);
+                                ManagementObjectCollection collectionMembers = GetCollectionMembers(wmiConnection, collectionName, collectionId);
                                 if (collectionMembers.Count == 1)
                                 {
                                     Console.WriteLine($"[+] Successfully added {matchingResource["Name"]} {matchingResource["ResourceID"]} to {(!string.IsNullOrEmpty(collectionName) ? collectionName : collectionId)}");
                                     memberAvailable = true;
+                                    collectionMember = collectionMembers.Cast<ManagementObject>().First();
                                 }
                                 else
                                 {
@@ -827,7 +937,7 @@ namespace SharpSCCM
                     Console.WriteLine($"[!] Found 0 instances of the specified device or user with ResourceID {resourceId}");
                 }
             }
-            return collectionMembers;
+            return collectionMember;
         }
 
         public static ManagementObject NewDeployment(ManagementScope wmiConnection, string applicationName, string collectionName, string collectionId)

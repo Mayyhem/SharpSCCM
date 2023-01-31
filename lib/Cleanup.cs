@@ -81,58 +81,44 @@ namespace SharpSCCM
             // Use the provided collection type or set to device/user depending on which was provided
             collectionType = !string.IsNullOrEmpty(deviceName) ? "device" : !string.IsNullOrEmpty(userName) ? "user" : collectionType;
 
-            // Make sure the specified collection exists
-            ManagementObject collection = MgmtPointWmi.GetCollection(wmiConnection, collectionName, collectionId);
+            // Check whether the specified collection exists
+            ManagementObject collection = MgmtPointWmi.GetCollection(wmiConnection, collectionName, collectionId, true);
             if (collection != null)
             {
-                // Make sure the specified resource is a member of the collection
-                ManagementObjectCollection existingMembers = MgmtPointWmi.GetCollectionMember(wmiConnection, collectionName, collectionId, printOutput: false);
+                // Check whether the specified resource is a member of the collection
+                ManagementObjectCollection existingMembers = MgmtPointWmi.GetCollectionMembers(wmiConnection, collectionName, collectionId, printOutput: false);
                 if (existingMembers.Count > 0)
                 {
+                    bool resourceIsExistingMember = false;
                     foreach (ManagementObject existingMember in existingMembers)
                     {
                         if (!string.IsNullOrEmpty(deviceName) && (string)existingMember.GetPropertyValue("Name") == deviceName)
                         {
                             Console.WriteLine($"[+] Found a device named {deviceName} in the collection");
+                            resourceIsExistingMember = true;
                         }
                         else if (!string.IsNullOrEmpty(userName) && existingMember.GetPropertyValue("Name").ToString().Contains(userName))
                         {
                             Console.WriteLine($"[+] Found a user named {existingMember.GetPropertyValue("Name")} in the collection");
+                            resourceIsExistingMember = true;
                         }
                         else if (!string.IsNullOrEmpty(resourceId) && (uint)existingMember.GetPropertyValue("ResourceID") == Convert.ToUInt32(resourceId))
                         {
                             Console.WriteLine($"[+] Found resource with ID {resourceId} in the collection");
+                            resourceIsExistingMember = true;
                         }
+                    }
+                    if (!resourceIsExistingMember)
+                    {
+                        Console.WriteLine("[!] Found 0 matching resources in the specified collection");
+                        return;
                     }
                 }
 
-                // Make sure the specified resource exists
-                string membershipQuery = null;
-                ManagementObjectCollection matchingResources = null;
-                if (!string.IsNullOrEmpty(resourceId))
+                // Check whether the specified resource exists
+                ManagementObject matchingResource = MgmtPointWmi.GetDeviceOrUser(wmiConnection, deviceName, resourceId, userName, true);
+                if (matchingResource != null)
                 {
-                    membershipQuery = $"SELECT * FROM SMS_R_{(collectionType == "device" ? "System" : "User")} WHERE ResourceID='{resourceId}'";
-                    matchingResources = MgmtUtil.GetClassInstances(wmiConnection, $"SMS_R_{(collectionType == "device" ? "System" : "User")}", membershipQuery);
-
-                }
-                else if (!string.IsNullOrEmpty(deviceName))
-                {
-                    membershipQuery = $"SELECT * FROM SMS_R_System WHERE Name='{deviceName}'";
-                    matchingResources = MgmtUtil.GetClassInstances(wmiConnection, "SMS_R_System", membershipQuery);
-                }
-                else if (!string.IsNullOrEmpty(userName))
-                {
-                    membershipQuery = $"SELECT * FROM SMS_R_User WHERE UniqueUserName='{userName}'";
-                    matchingResources = MgmtUtil.GetClassInstances(wmiConnection, "SMS_R_User", membershipQuery);
-                }
-                if (matchingResources.Count > 1)
-                {
-                    Console.WriteLine("[!] Found more than one instance of the specified resource");
-                    Console.WriteLine("[!] Try using a ResourceID instead (-r)");
-                }
-                else if (matchingResources.Count > 0)
-                {
-                    Console.WriteLine("[+] Found the specified resource");
                     string newCollectionName = $"{collectionType}_{Guid.NewGuid()}";
                     ManagementObject collectionToExclude = MgmtPointWmi.NewCollection(wmiConnection, collectionType, newCollectionName);
                     if (collectionToExclude != null)
@@ -160,7 +146,7 @@ namespace SharpSCCM
                                 Console.WriteLine($"[+] Added rule to exclude resource from {(!string.IsNullOrEmpty(collectionName) ? collectionName : collectionId)}");
                                 Console.WriteLine($"[+] Waiting {waitTime}s for collection to populate");
                                 Thread.Sleep(waitTime * 1000);
-                                ManagementObjectCollection collectionMembers = MgmtPointWmi.GetCollectionMember(wmiConnection, collectionName, collectionId);
+                                ManagementObjectCollection collectionMembers = MgmtPointWmi.GetCollectionMembers(wmiConnection, collectionName, collectionId, printOutput: true);
                             }
                             catch (ManagementException ex)
                             {
@@ -180,7 +166,7 @@ namespace SharpSCCM
         public static void RemoveCollectionRule(ManagementScope wmiConnection, string collectionId, string queryId)
         {
             bool foundMatchingRule = false;
-            // Make sure the specified collection exists
+            // Check whether the specified collection exists
             ManagementObjectCollection collections = MgmtUtil.GetClassInstances(wmiConnection, "SMS_Collection", $"SELECT * FROM SMS_Collection WHERE CollectionID='{collectionId}'");
             if (collections.Count == 1)
             {

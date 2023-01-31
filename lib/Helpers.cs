@@ -51,6 +51,15 @@ namespace SharpSCCM
             return false;
         }
 
+        public static string EscapeBackslashes(string theString)
+        {
+            if (theString.Contains(@"\"))
+            {
+                theString = theString.Replace(@"\", @"\\");
+            }
+            return theString; 
+        }
+
         static bool IsEmptyLocate<T>(T[] array, T[] candidate)
         {
             return array == null

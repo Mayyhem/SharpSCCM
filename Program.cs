@@ -4,6 +4,8 @@ using System.CommandLine.Builder;
 using System.CommandLine.NamingConventionBinder;
 using System.CommandLine.Parsing;
 using System.Diagnostics;
+using System.IO.Ports;
+using System.Linq;
 using System.Management;
 using System.Xml.Linq;
 
@@ -270,7 +272,7 @@ namespace SharpSCCM
                                 if (!string.IsNullOrEmpty(collectionId) || !string.IsNullOrEmpty(collectionName))
                                 {
 
-                                    MgmtPointWmi.GetCollectionMember(wmiConnection, collectionName, collectionId, count, properties, whereCondition, orderBy, dryRun, verbose, true);
+                                    MgmtPointWmi.GetCollectionMembers(wmiConnection, collectionName, collectionId, count, properties, whereCondition, orderBy, dryRun, verbose, true);
                                 }
                                 else if (!string.IsNullOrEmpty(device) || !string.IsNullOrEmpty(resourceId) || !string.IsNullOrEmpty(user))
                                 {
@@ -281,7 +283,7 @@ namespace SharpSCCM
                         }
                     });
 
-                // get collection-membership-rules
+                // get collection-rule
                 var getCollectionRule = new Command("collection-rule", "Get the rules that are evaluated to add members to a collection from a management point via WMI\n" +
                     "  Permitted security roles:\n" +
                     "    - Any (SMS Admins local group)");
@@ -294,7 +296,8 @@ namespace SharpSCCM
                 getCollectionRule.Handler = CommandHandler.Create(
                     (string managementPoint, string siteCode, string device, string collectionId, string collectionName, string user, string resourceId) =>
                     {
-                        if (string.IsNullOrEmpty(collectionName) && string.IsNullOrEmpty(collectionId) && string.IsNullOrEmpty(device) && string.IsNullOrEmpty(user) && string.IsNullOrEmpty(resourceId))
+                        if ((string.IsNullOrEmpty(collectionName) && string.IsNullOrEmpty(collectionId) && string.IsNullOrEmpty(device) && string.IsNullOrEmpty(user) && string.IsNullOrEmpty(resourceId)) ||
+                            (new string[] { collectionName, collectionId, device, user, resourceId }.Count(x => x != null) > 1))
                         {
                             Console.WriteLine("[!] Please specify a collection Name (-n), CollectionID (-i), device Name (-d), user UniqueUserName (-u), or ResourceID (-r) to get applicable rules for");
                         }
