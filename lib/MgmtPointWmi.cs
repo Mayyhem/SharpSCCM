@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
@@ -43,23 +42,6 @@ namespace SharpSCCM
             }
             return collection;
         }
-
-        /*
-        public static ManagementObjectCollection GetCollectionMember(ManagementScope wmiConnection, string collectionName = null, string collectionId = null, string[] properties = null, bool dryRun = false, bool verbose = false, bool printOutput = false)
-        {
-            ManagementObjectCollection collectionMembers = null;
-            ManagementObject collection = GetCollection(wmiConnection, collectionName, collectionId, printOutput);
-            if (collection != null)
-            {
-                collectionMembers = MgmtUtil.GetClassInstances(wmiConnection, "SMS_CollectionMember_a", null, false, properties, $"CollectionID='{collection.GetPropertyValue("CollectionID")}'", null, dryRun, verbose, printOutput: printOutput);
-                if (collectionMembers.Count == 0)
-                {
-                    if (printOutput) Console.WriteLine($"[+] Found 0 members in {collection["Name"]} ({collection["CollectionID"]})");
-                }
-            }
-            return collectionMembers;
-        }
-        */
 
         public static ManagementObjectCollection GetCollectionMembers(ManagementScope wmiConnection, string collectionName = null, string collectionId = null, bool count = false, string[] properties = null, string whereCondition = null, string orderByColumn = null, bool dryRun = false, bool verbose = false, bool printOutput = false)
         {
@@ -112,10 +94,12 @@ namespace SharpSCCM
                 bool foundMatchingRule = false;
                 Console.WriteLine("[+] Searching for matching collection rules");
 
-                // Loop through once to identify matching collections and again to compare those matches to all existing collections
+                // Loop through once to identify matching collections, again to compare those matches to all existing collections, then additional times as needed for nested rules
                 int loopsCompleted = 0;
+                int depth = 1;
+                int matchingIncludeAndExcludeRules = 0;
                 List<string> existingCollectionsMatchingProvidedResource = new List<string>();
-                while (loopsCompleted < 2)
+                while (loopsCompleted <= depth)
                 {
                     foreach (ManagementObject existingCollection in existingCollections)
                     {
@@ -158,7 +142,6 @@ namespace SharpSCCM
                                             // If device Name, user UniqueUserName, or ResourceID provided, or if only a collection Name or CollectionID is provided, print matching or all collection rules, respectively
                                             try
                                             {
-                                                // Print matching rules
                                                 // If only a collection Name or CollectionID is provided
                                                 if ((((!string.IsNullOrEmpty(providedCollectionName) && providedCollectionName == existingCollectionName) ||
                                                     (!string.IsNullOrEmpty(providedCollectionId) && providedCollectionId == existingCollectionId)) &&
@@ -171,11 +154,12 @@ namespace SharpSCCM
                                                     (uint)collectionRuleQueryResult.GetPropertyValue("ResourceID") == Convert.ToUInt32(resourceId))
                                                 {
                                                     foundMatchingRule = true;
+                                                    // Add the ID of the collection containing the matching rule to the list of matches
                                                     if (!existingCollectionsMatchingProvidedResource.Contains(existingCollectionId))
                                                     {
                                                         existingCollectionsMatchingProvidedResource.Add(existingCollectionId);
                                                     }
-                                                    if (loopsCompleted == 1)
+                                                    if (loopsCompleted == depth)
                                                     {
                                                         Console.WriteLine("-----------------------------------\n" +
                                                         $"CollectionID: {existingCollectionId}\n" +
@@ -197,17 +181,26 @@ namespace SharpSCCM
                                 {
 
                                     string collectionRuleExcludedCollectionId = (string)collectionRule["ExcludeCollectionID"];
-                                    // If a collection Name or CollectionID is provided, print matching or all collection rules, respectively
-                                    if (collectionRuleExcludedCollectionId == providedCollectionId ||
+
+                                    if (
+                                        // If a collection Name or CollectionID is provided, print all collection rules
                                         existingCollectionId == providedCollectionId ||
-                                        existingCollectionsMatchingProvidedResource.Contains(collectionRuleExcludedCollectionId))
+                                        // If the collection nested in this collection matches the provided collection
+                                        collectionRuleExcludedCollectionId == providedCollectionId ||
+                                        // If this collection was previously matched because it was included in or excluded from another collection
+                                        existingCollectionsMatchingProvidedResource.Contains(existingCollectionId) ||
+                                        // If the collection nested in this collection was previously matched because it was included in or excluded from another collection
+                                        existingCollectionsMatchingProvidedResource.Contains(collectionRuleExcludedCollectionId)
+                                       )
                                     {
                                         foundMatchingRule = true;
+                                        // Add the excluded collection ID to the list of matches if it's not already present
                                         if (!existingCollectionsMatchingProvidedResource.Contains(collectionRuleExcludedCollectionId))
                                         {
                                             existingCollectionsMatchingProvidedResource.Add(collectionRuleExcludedCollectionId);
+                                            matchingIncludeAndExcludeRules++;
                                         }
-                                        if (loopsCompleted == 1)
+                                        if (loopsCompleted == depth)
                                         {
                                             Console.WriteLine("-----------------------------------\n" +
                                             $"CollectionID: {existingCollectionId}\n" +
@@ -220,17 +213,25 @@ namespace SharpSCCM
                                 else if (collectionRule.Properties.Cast<PropertyData>().Any(property => property.Name == "IncludeCollectionID"))
                                 {
                                     string collectionRuleIncludedCollectionId = (string)collectionRule["IncludeCollectionID"];
-                                    // If a collection Name or CollectionID is provided, print matching or all collection rules, respectively
-                                    if (collectionRuleIncludedCollectionId == providedCollectionId ||
-                                       existingCollectionId == providedCollectionId ||
-                                       existingCollectionsMatchingProvidedResource.Contains(collectionRuleIncludedCollectionId))
+                                    if (
+                                        // If a collection Name or CollectionID is provided, print all collection rules
+                                        existingCollectionId == providedCollectionId || 
+                                        // If the collection nested in this collection matches the provided collection
+                                        collectionRuleIncludedCollectionId == providedCollectionId ||
+                                        // If this collection was previously matched because it was included in or excluded from another collection
+                                        existingCollectionsMatchingProvidedResource.Contains(existingCollectionId) ||
+                                        // If the collection nested in this collection was previously matched because it was included in or excluded from another collection
+                                        existingCollectionsMatchingProvidedResource.Contains(collectionRuleIncludedCollectionId)
+                                       )
                                     {
                                         foundMatchingRule = true;
+                                        // Add the included collection ID to the list of matches if it's not already present
                                         if (!existingCollectionsMatchingProvidedResource.Contains(collectionRuleIncludedCollectionId))
                                         {
                                             existingCollectionsMatchingProvidedResource.Add(collectionRuleIncludedCollectionId);
+                                            matchingIncludeAndExcludeRules++;
                                         }
-                                        if (loopsCompleted == 1)
+                                        if (loopsCompleted == depth)
                                         {
                                             Console.WriteLine("-----------------------------------\n" +
                                             $"CollectionID: {existingCollectionId}\n" +
@@ -243,7 +244,6 @@ namespace SharpSCCM
                                 }
                                 else if (collectionRule.Properties.Cast<PropertyData>().Any(property => property.Name == "ResourceID"))
                                 {
-                                    // Print matching rules
                                     // If only a collection Name or CollectionID is provided
                                     if ((((!string.IsNullOrEmpty(providedCollectionName) && providedCollectionName == existingCollectionName) || 
                                         (!string.IsNullOrEmpty(providedCollectionId) && providedCollectionId == existingCollectionId)) && 
@@ -256,11 +256,12 @@ namespace SharpSCCM
                                         (string)collectionRule.GetPropertyValue("RuleName") == userName)
                                     {
                                         foundMatchingRule = true;
+                                        // Add the collection ID to the list of matches if it's not already present
                                         if (!existingCollectionsMatchingProvidedResource.Contains(existingCollectionId))
                                         {
                                             existingCollectionsMatchingProvidedResource.Add(existingCollectionId);
                                         }
-                                        if (loopsCompleted == 1)
+                                        if (loopsCompleted == depth)
                                         {
                                             Console.WriteLine("-----------------------------------\n" +
                                             $"CollectionID: {existingCollectionId}\n" +
@@ -274,11 +275,24 @@ namespace SharpSCCM
                             }
                         }
                     }
+                    // Increase depth of search if any include or exclude rules were found
+                    if (matchingIncludeAndExcludeRules > 0)
+                    {
+                        depth++;
+                        Console.WriteLine($"[+] Found {matchingIncludeAndExcludeRules} matching collection rule{(matchingIncludeAndExcludeRules > 1 ? "s" : null)} that reference{(matchingIncludeAndExcludeRules == 1 ? "s" : null)} other collections");
+                        Console.WriteLine("[+] Increasing search depth and looping through collection rules again to resolve any nested rules");
+                        matchingIncludeAndExcludeRules = 0;
+                    }
+                    int loopsRemaining = depth - loopsCompleted;
+                    if (loopsRemaining > 0)
+                    {
+                        Console.WriteLine($"[+] {loopsRemaining} loop{(loopsRemaining > 1 ? "s" : null)} remaining");
+                    }
                     loopsCompleted++;
                 }
                 if (foundMatchingRule)
                 {
-                    Console.WriteLine("-----------------------------------");
+                    Console.WriteLine(value: "-----------------------------------");
                 }
                 else
                 {
