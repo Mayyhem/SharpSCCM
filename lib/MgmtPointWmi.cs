@@ -99,6 +99,7 @@ namespace SharpSCCM
                 int depth = 1;
                 int matchingIncludeAndExcludeRules = 0;
                 List<string> existingCollectionsMatchingProvidedResource = new List<string>();
+                List<ManagementBaseObject> unprintedRules = new List<ManagementBaseObject>();
                 while (loopsCompleted <= depth)
                 {
                     foreach (ManagementObject existingCollection in existingCollections)
@@ -137,29 +138,45 @@ namespace SharpSCCM
                                     ManagementObjectCollection collectionRuleQueryResults = MgmtUtil.GetClassInstances(wmiConnection, "Query Results", collectionRuleQuery);
                                     if (collectionRuleQueryResults.Count > 0)
                                     {
+                                        // If only a collection Name or CollectionID is provided
+                                        if ((((!string.IsNullOrEmpty(providedCollectionName) && providedCollectionName == existingCollectionName) ||
+                                            (!string.IsNullOrEmpty(providedCollectionId) && providedCollectionId == existingCollectionId)) &&
+                                            string.IsNullOrEmpty(deviceName) && string.IsNullOrEmpty(userName) && string.IsNullOrEmpty(resourceId)) ||
+                                            // If this collection matches a provided or previously matched resource
+                                            existingCollectionsMatchingProvidedResource.Contains(existingCollectionId))
+                                        {
+                                            // Add the ID of the collection containing the matching rule to the list of matches
+                                            if (!existingCollectionsMatchingProvidedResource.Contains(existingCollectionId))
+                                            {
+                                                existingCollectionsMatchingProvidedResource.Add(existingCollectionId);
+                                            }
+                                            if (loopsCompleted == depth)
+                                            {
+                                                Console.WriteLine("-----------------------------------\n" +
+                                                $"CollectionID: {existingCollectionId}\n" +
+                                                $"Collection Name: {existingCollectionName}\n" +
+                                                $"RuleName: {collectionRule["RuleName"]}\n" +
+                                                $"QueryID: {collectionRule["QueryID"]}\n" +
+                                                $"Query Expression:{collectionRule["QueryExpression"]}");
+                                            }
+                                        }
                                         foreach (ManagementObject collectionRuleQueryResult in collectionRuleQueryResults)
                                         {
                                             // If device Name, user UniqueUserName, or ResourceID provided, or if only a collection Name or CollectionID is provided, print matching or all collection rules, respectively
                                             try
                                             {
-                                                // If only a collection Name or CollectionID is provided
-                                                if ((((!string.IsNullOrEmpty(providedCollectionName) && providedCollectionName == existingCollectionName) ||
-                                                    (!string.IsNullOrEmpty(providedCollectionId) && providedCollectionId == existingCollectionId)) &&
-                                                    string.IsNullOrEmpty(deviceName) && string.IsNullOrEmpty(userName) && string.IsNullOrEmpty(resourceId)) ||
-                                                    // If this collection matches a provided or previously matched resource
-                                                    existingCollectionsMatchingProvidedResource.Contains(existingCollectionId) ||
-                                                    // If device Name, user UniqueUserName, or ResourceID provided
-                                                    (string)collectionRuleQueryResult.GetPropertyValue("Name") == deviceName ||
-                                                    (string)collectionRuleQueryResult.GetPropertyValue("UniqueUserName") == userName ||
-                                                    (uint)collectionRuleQueryResult.GetPropertyValue("ResourceID") == Convert.ToUInt32(resourceId))
+                                                // If device Name, user UniqueUserName, or ResourceID provided matches a query result
+                                                if ((string)collectionRuleQueryResult.GetPropertyValue("Name") == deviceName ||
+                                                   (string)collectionRuleQueryResult.GetPropertyValue("UniqueUserName") == userName ||
+                                                   (uint)collectionRuleQueryResult.GetPropertyValue("ResourceID") == Convert.ToUInt32(resourceId))
                                                 {
                                                     foundMatchingRule = true;
-                                                    // Add the ID of the collection containing the matching rule to the list of matches
-                                                    if (!existingCollectionsMatchingProvidedResource.Contains(existingCollectionId))
+                                                    // Add the matching rule to the list of matches
+                                                    if (!unprintedRules.Contains(collectionRule))
                                                     {
-                                                        existingCollectionsMatchingProvidedResource.Add(existingCollectionId);
+                                                        unprintedRules.Add(collectionRule);
                                                     }
-                                                    if (loopsCompleted == depth)
+                                                    else if (loopsCompleted == depth)
                                                     {
                                                         Console.WriteLine("-----------------------------------\n" +
                                                         $"CollectionID: {existingCollectionId}\n" +
@@ -174,6 +191,27 @@ namespace SharpSCCM
                                             {
                                                 // Keep going if the property isn't found because it doesn't exist in both SMS_R_System and SMS_R_User
                                             }
+                                        }
+                                    }
+                                    // Account for collection rules with queries that return no objects
+                                    else if (((!string.IsNullOrEmpty(providedCollectionName) && providedCollectionName == existingCollectionName) ||
+                                            (!string.IsNullOrEmpty(providedCollectionId) && providedCollectionId == existingCollectionId)) &&
+                                            string.IsNullOrEmpty(deviceName) && string.IsNullOrEmpty(userName) && string.IsNullOrEmpty(resourceId))
+                                    {
+                                        foundMatchingRule = true;
+                                        // Add the ID of the collection containing the matching rule to the list of matches
+                                        if (!existingCollectionsMatchingProvidedResource.Contains(existingCollectionId))
+                                        {
+                                            existingCollectionsMatchingProvidedResource.Add(existingCollectionId);
+                                        }
+                                        if (loopsCompleted == depth)
+                                        {
+                                            Console.WriteLine("-----------------------------------\n" +
+                                            $"CollectionID: {existingCollectionId}\n" +
+                                            $"Collection Name: {existingCollectionName}\n" +
+                                            $"RuleName: {collectionRule["RuleName"]}\n" +
+                                            $"QueryID: {collectionRule["QueryID"]}\n" +
+                                            $"Query Expression:{collectionRule["QueryExpression"]}");
                                         }
                                     }
                                 }
@@ -279,8 +317,8 @@ namespace SharpSCCM
                     if (matchingIncludeAndExcludeRules > 0)
                     {
                         depth++;
-                        Console.WriteLine($"[+] Found {matchingIncludeAndExcludeRules} matching collection rule{(matchingIncludeAndExcludeRules > 1 ? "s" : null)} that reference{(matchingIncludeAndExcludeRules == 1 ? "s" : null)} other collections");
-                        Console.WriteLine("[+] Increasing search depth and looping through collection rules again to resolve any nested rules");
+                        Console.WriteLine($"[+] Found {matchingIncludeAndExcludeRules} matching collection rule{(matchingIncludeAndExcludeRules > 1 ? "s" : null)} at depth {depth} that reference{(matchingIncludeAndExcludeRules == 1 ? "s" : null)} other collections");
+                        Console.WriteLine($"[+] Increasing search depth to {depth + 1} and looping through collection rules again to resolve any nested rules");
                         matchingIncludeAndExcludeRules = 0;
                     }
                     int loopsRemaining = depth - loopsCompleted;

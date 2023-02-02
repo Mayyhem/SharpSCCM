@@ -910,7 +910,7 @@ namespace SharpSCCM
                     });
 
                 // new collection-member
-                var newCollectionMember = new Command("collection-member", "Add a device to a collection for application deployment by contacting a management point via WMI\n " +
+                var newCollectionMember = new Command("collection-member", "Add a device to a collection by contacting a management point via WMI\n " +
                     "  Permitted security roles:\n" +
                     "    - Full Administrator\n" +
                     "    - Application Administrator\n" +
