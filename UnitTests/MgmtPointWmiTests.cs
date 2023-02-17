@@ -13,45 +13,6 @@ namespace SharpSCCM.UnitTests
         public TestContext TestContext { get; set; }
 
         [TestMethod]
-        public void AddDeviceToCollection_PrintsDeviceNameInCollectionMembers()
-        {
-            string collectionName = "AddDeviceToCollection_UnitTest";
-            string deviceName = Dns.GetHostName();
-            
-            ManagementScope wmiConnection = MgmtUtil.NewWmiConnection();
-            TestContext.WriteLine($"Device name is {deviceName}");
-            MgmtPointWmi.NewCollection(wmiConnection, "device", collectionName);
-            var stringWriter = new StringWriter();
-            Console.SetOut(stringWriter);
-            MgmtPointWmi.AddDeviceToCollection(wmiConnection, deviceName, collectionName);
-            StringAssert.Contains(stringWriter.ToString(), $"Name: {deviceName.ToUpper()}");
-            TestContext.WriteLine(stringWriter.ToString());
-            Cleanup.RemoveCollection(wmiConnection, collectionName);
-        }
-
-        [TestMethod]
-        public void AddUserToCollection_PrintsUserNameInCollectionMembers()
-        {
-            /*
-            string collectionName = "AddUserToCollection_UnitTest";
-            string domainName = Environment.UserDomainName;
-            string userName = Environment.UserName;
-            string fullUserName = $"{domainName}\\{userName}";
-            
-            ManagementScope wmiConnection = MgmtUtil.NewWmiConnection();
-            TestContext.WriteLine($"User name is {fullUserName}");
-            MgmtPointWmi.NewCollection(wmiConnection, "user", collectionName);
-            var stringWriter = new StringWriter();
-            Console.SetOut(stringWriter);
-            MgmtPointWmi.AddUserToCollection(wmiConnection, fullUserName, collectionName);
-            StringAssert.Contains(stringWriter.ToString(), $"Name: {fullUserName.ToUpper()}");
-            TestContext.WriteLine(stringWriter.ToString());
-            //Cleanup.RemoveCollection(wmiConnection, CollectionName);
-            */
-            Assert.Inconclusive();
-        }
-
-        [TestMethod]
         public void GenerateCCR_DoesStuff()
         {
             Assert.Inconclusive();
@@ -97,6 +58,23 @@ namespace SharpSCCM.UnitTests
         public void NewApplication_PrintsNewCollectionNameIn_SMS_Collection()
         {
             Assert.Inconclusive();
+        }
+
+        [TestMethod]
+        public void NewCollectionMember_Device_PrintsDeviceNameInCollectionMembers()
+        {
+            string collectionName = "NewCollectionMember_Device_UnitTest";
+            string deviceName = Dns.GetHostName();
+
+            ManagementScope wmiConnection = MgmtUtil.NewWmiConnection();
+            TestContext.WriteLine($"Device name is {deviceName}");
+            MgmtPointWmi.NewCollection(wmiConnection, "device", collectionName);
+            var stringWriter = new StringWriter();
+            Console.SetOut(stringWriter);
+            MgmtPointWmi.NewCollectionMember(wmiConnection, collectionName, null, deviceName);
+            StringAssert.Contains(stringWriter.ToString(), $"Name: {deviceName.ToUpper()}");
+            TestContext.WriteLine(stringWriter.ToString());
+            Cleanup.RemoveCollection(wmiConnection, collectionName, null);
         }
 
         [TestMethod]

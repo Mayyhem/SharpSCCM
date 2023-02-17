@@ -9,7 +9,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]
 [assembly: AssemblyProduct("SharpSCCM")]
-[assembly: AssemblyCopyright("Copyright © @_Mayyhem 2023")]
+[assembly: AssemblyCopyright("© 2023 Chris Thompson (@_Mayyhem)")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
@@ -27,5 +27,5 @@ using System.Runtime.InteropServices;
 //      Minor Version
 //      Revision
 //
-[assembly: AssemblyVersion("1.2.0")]
-[assembly: AssemblyFileVersion("1.2.0")]
+[assembly: AssemblyVersion("2.0.0")]
+[assembly: AssemblyFileVersion("2.0.0")]

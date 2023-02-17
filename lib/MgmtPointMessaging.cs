@@ -62,7 +62,6 @@ namespace SharpSCCM
             RecipientInfo encryptedKey = pkcs7EnvelopedCms.RecipientInfos[0];
             try
             {
-                //pkcs7EnvelopedCms.Decrypt(encryptedKey);
                 pkcs7EnvelopedCms.Decrypt(encryptedKey, new X509Certificate2Collection(encryptionCertificate.X509Certificate));
                 Console.WriteLine($"[+] Successfully decoded and decrypted secret policy");
                 string decryptedPolicyBody = Encoding.ASCII.GetString(pkcs7EnvelopedCms.ContentInfo.Content).Replace("\0", string.Empty);
@@ -80,7 +79,7 @@ namespace SharpSCCM
             var x509Store = new X509Store("My", StoreLocation.CurrentUser);
             x509Store.Open(OpenFlags.MaxAllowed);
             x509Store.Remove(certificate.X509Certificate);
-            Console.WriteLine($"[+] Deleted \"{certificate.X509Certificate.SubjectName.Name}\" certificate from {x509Store.Name} store for {x509Store.Location}");
+            Console.WriteLine($"[+] Deleted the \"{certificate.X509Certificate.SubjectName.Name}\" certificate from {x509Store.Name} store for {x509Store.Location}");
         }
 
         public static void GetAvailablePackages(string managementPoint = null, string siteCode = null)

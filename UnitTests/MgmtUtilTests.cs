@@ -19,11 +19,11 @@ namespace SharpSCCM.UnitTests
         }
 
         [TestMethod]
-        public void GetClassInstanceCollection_Success_ReturnsManagementObjectCollection()
+        public void GetClassInstances_Success_ReturnsManagementObjectCollection()
         {
             ManagementScope wmiConnection = MgmtUtil.NewWmiConnection("localhost");
             string query = MgmtUtil.BuildClassInstanceQueryString(wmiConnection, "SMS_Authority");
-            ManagementObjectCollection classInstanceCollection = MgmtUtil.GetClassInstanceCollection(wmiConnection, null, query);
+            ManagementObjectCollection classInstanceCollection = MgmtUtil.GetClassInstances(wmiConnection, "SMS_Authority", query, printOutput: true);
             Assert.IsInstanceOfType(classInstanceCollection, typeof(ManagementObjectCollection));
             Assert.IsNotNull(classInstanceCollection, "classInstanceCollection != null");
         }
@@ -36,7 +36,7 @@ namespace SharpSCCM.UnitTests
             string query = MgmtUtil.BuildClassInstanceQueryString(wmiConnection, "SMS_Authority");
             var stringWriter = new StringWriter();
             Console.SetOut(stringWriter);
-            MgmtUtil.GetClassInstances(wmiConnection, "SMS_Authority", false, null, null, null, true);
+            MgmtUtil.GetClassInstances(wmiConnection, "SMS_Authority", null, false, null, null, null, true, printOutput: true);
             string expectedOutput = $"[+] WQL query: {query}";
             Assert.AreEqual(expectedOutput.Trim(), stringWriter.ToString().Trim());
         }
@@ -47,7 +47,7 @@ namespace SharpSCCM.UnitTests
             ManagementScope wmiConnection = MgmtUtil.NewWmiConnection("localhost");
             var stringWriter = new StringWriter();
             Console.SetOut(stringWriter);
-            MgmtUtil.GetClassInstances(wmiConnection, "SMS_Authority");
+            MgmtUtil.GetClassInstances(wmiConnection, "SMS_Authority", printOutput: true);
             StringAssert.Contains( stringWriter.ToString(), "CurrentManagementPoint");
         }
 
