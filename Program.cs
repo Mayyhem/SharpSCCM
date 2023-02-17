@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.IO.Ports;
 using System.Linq;
 using System.Management;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
 // Configuration Manager SDK
@@ -100,8 +101,8 @@ namespace SharpSCCM
                 getCommand.AddGlobalOption(new Option<string>(new[] { "--management-point", "-mp" }, "The IP address, FQDN, or NetBIOS name of the management point to connect to (default: the current management point of the client running SharpSCCM)"));
                 getCommand.AddGlobalOption(new Option<string>(new[] { "--site-code", "-sc" }, "The three character site code (e.g., PS1) (default: the site code of the client running SharpSCCM)"));
 
-                // get application
-                var getApplication = new Command("application", "Get information on applications from a management point via WMI\n" +
+                // get applications
+                var getApplication = new Command("applications", "Get information on applications from a management point via WMI\n" +
                     "  Permitted security roles:\n" +
                     "    - Full Administrator\n" +
                     "    - Application Administrator\n" +
@@ -197,8 +198,8 @@ namespace SharpSCCM
                         }
                     });
 
-                // get collection
-                var getCollection = new Command("collection", "Get information on collections from a management point via WMI\n" +
+                // get collections
+                var getCollection = new Command("collections", "Get information on collections from a management point via WMI\n" +
                     "  Permitted security roles:\n" +
                     "    - Any (SMS Admins local group)");
                 getCommand.Add(getCollection);
@@ -232,8 +233,8 @@ namespace SharpSCCM
                         }
                     });
 
-                // get collection-member
-                var getCollectionMember = new Command("collection-member", "Get the members of a specified collection from a management point via WMI\n" +
+                // get collection-members
+                var getCollectionMember = new Command("collection-members", "Get the members of a specified collection from a management point via WMI\n" +
                     "  Permitted security roles:\n" +
                     "    - Any (SMS Admins local group)");
                 getCommand.Add(getCollectionMember);
@@ -283,8 +284,8 @@ namespace SharpSCCM
                         }
                     });
 
-                // get collection-rule
-                var getCollectionRule = new Command("collection-rule", "Get the rules that are evaluated to add members to a collection from a management point via WMI\n" +
+                // get collection-rules
+                var getCollectionRule = new Command("collection-rules", "Get the rules that are evaluated to add members to a collection from a management point via WMI\n" +
                     "  Permitted security roles:\n" +
                     "    - Any (SMS Admins local group)");
                 getCommand.Add(getCollectionRule);
@@ -311,8 +312,8 @@ namespace SharpSCCM
                         }
                     });
 
-                // get deployment
-                var getDeployment = new Command("deployment", "Get information on deployments from a management point via WMI\n" +
+                // get deployments
+                var getDeployment = new Command("deployments", "Get information on deployments from a management point via WMI\n" +
                     "  Permitted security roles:\n" +
                     "    - Full Administrator\n" +
                     "    - Application Administrator\n" +
@@ -347,8 +348,8 @@ namespace SharpSCCM
                         }
                     });
 
-                // get device
-                var getDevice = new Command("device", "Get information on devices from a management point via WMI\n" +
+                // get devices
+                var getDevice = new Command("devices", "Get information on devices from a management point via WMI\n" +
                     "  Permitted security roles:\n" +
                     "    - Any (SMS Admins local group)");
                 getCommand.Add(getDevice);
@@ -382,8 +383,8 @@ namespace SharpSCCM
                         }
                     });
 
-                // get primary-user
-                var getPrimaryUser = new Command("primary-user", "Get information on primary users set for devices from a management point via WMI\n" +
+                // get primary-users
+                var getPrimaryUser = new Command("primary-users", "Get information on primary users set for devices from a management point via WMI\n" +
                     "  Permitted security roles:\n" +
                     "    - Full Administrator\n" +
                     "    - Application Administrator\n" +
@@ -505,9 +506,9 @@ namespace SharpSCCM
                         }
                     });
 
-                // get user
-                var getUser = new Command("user", "Get information on users from a management point via WMI\n" +
-                    "  Permitted security roles:" +
+                // get users
+                var getUser = new Command("users", "Get information on users from a management point via WMI\n" +
+                    "  Permitted security roles:\n" +
                     "    - Any (SMS Admins local group)");
                 getCommand.Add(getUser);
                 getUser.Add(new Option<bool>(new[] { "--count", "-c" }, "Returns the number of rows that match the specified criteria"));
@@ -611,7 +612,17 @@ namespace SharpSCCM
                         ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(managementPoint, wmiNamespace, siteCode);
                         if (wmiConnection != null && wmiConnection.IsConnected)
                         {
-                            MgmtUtil.GetClassInstances(wmiConnection, null, query, printOutput: true);
+                            string pattern = @"FROM\s+(\w+)";
+                            Match match = Regex.Match(query, pattern);
+                            if (match.Success)
+                            {
+                                string wmiClassName = match.Groups[1].Value;
+                                MgmtUtil.GetClassInstances(wmiConnection, wmiClassName, query, printOutput: true);
+                            }
+                            else
+                            {
+                            Console.WriteLine("[!] Malformed query");
+                            }
                         }
                     });
 
@@ -626,19 +637,14 @@ namespace SharpSCCM
                 invokeUpdate.Add(new Option<string>(new[] { "--policy-type", "-p" }, "The type of policy to update (default: \"machine\")").FromAmong(new string[] { "machine", "user" }));
                 invokeUpdate.Add(new Option<string>(new[] { "--collection-name", "-n" }, "The name of the collection to force to update"));
                 invokeUpdate.Add(new Option<string>(new[] { "--resource-id", "-r" }, "The unique ResourceID of the device or user to force to update"));
-                invokeUpdate.Add(new Option<string>(new[] { "--collection-type", "-t" }, "The type of the collection (\"device\" or \"user\")").FromAmong(new string[] { "device", "user" }));
-                invokeUpdate.Add(new Option<string>(new[] { "--user", "-u" }, "The UniqueUserName of the user to force to update, including escaped backslashes (e.g., \"APERTURE\\\\cave.johnson\")"));
+                invokeUpdate.Add(new Option<string>(new[] { "--user", "-u" }, "The UniqueUserName of the user to force to update (e.g., \"APERTURE\\cave.johnson\")"));
                 invokeUpdate.Handler = CommandHandler.Create(
-                    (string managementPoint, string siteCode, string device, string collectionId, string policyType, string collectionName, string resourceId, string collectionType, string user) =>
+                    (string managementPoint, string siteCode, string device, string collectionId, string policyType, string collectionName, string resourceId, string user) =>
                     {
 
                         if (string.IsNullOrEmpty(device) && string.IsNullOrEmpty(collectionId) && string.IsNullOrEmpty(collectionName) && string.IsNullOrEmpty(resourceId) && string.IsNullOrEmpty(user))
                         {
                             Console.WriteLine("[!] Please specify a collection Name (-n), CollectionID (-i), device Name (-d), user UniqueUserName (-u), or ResourceID (-r) to force to update");
-                        }
-                        else if (!string.IsNullOrEmpty(resourceId) && (string.IsNullOrEmpty(collectionType) && string.IsNullOrEmpty(device) && string.IsNullOrEmpty(user)))
-                        {
-                            Console.WriteLine("[!] Please specify a collection type (-t), a device Name (-d), or user UniqueUserName (-u) when using a ResourceID (-r)");
                         }
                         else if (!string.IsNullOrEmpty(device) && !string.IsNullOrEmpty(user))
                         {
@@ -651,7 +657,7 @@ namespace SharpSCCM
                             {
                                 if (string.IsNullOrEmpty(policyType) || policyType == "machine")
                                 {
-                                    MgmtPointWmi.UpdateMachinePolicy(wmiConnection, collectionId, collectionName);
+                                    MgmtPointWmi.UpdateMachinePolicy(wmiConnection, collectionId, collectionName, device, resourceId, user);
                                 }
                                 else
                                 {
@@ -1111,7 +1117,7 @@ namespace SharpSCCM
 
 
                 // remove collection-rule
-                var removeCollectionRule = new Command("collection-rule", "Remove a device from a collection rule by contacting a management point via WMI\n" +
+                var removeCollectionRule = new Command("collection-rule", "Remove a device from a collection rule by contacting a management point via WMI (currently supports Query type rules only)\n" +
                     "  Permitted security roles:\n" +
                     "    - Full Administrator\n" +
                     "    - Application Administrator\n" +
@@ -1119,7 +1125,7 @@ namespace SharpSCCM
                     "    - Operations Administrator\n" +
                     "    - Security Administrator\n");
                 removeCommand.Add(removeCollectionRule);
-                removeCollectionRule.Add(new Option<string>(new[] { "--collection-id", "-c" }, "The CollectionID of the collection to remove the resource from (e.g., \"PS100020\"") { IsRequired = true });
+                removeCollectionRule.Add(new Option<string>(new[] { "--collection-id", "-i" }, "The CollectionID of the collection to remove the resource from (e.g., \"PS100020\")") { IsRequired = true });
                 removeCollectionRule.Add(new Option<string>(new[] { "--query-id", "-q" }, "The QueryID of the rule to remove from the specified collection") { IsRequired = true });
                 removeCollectionRule.Handler = CommandHandler.Create(
                     (string managementPoint, string siteCode, string collectionId, string queryId) =>

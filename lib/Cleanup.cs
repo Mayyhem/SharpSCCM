@@ -177,27 +177,30 @@ namespace SharpSCCM
                     ManagementBaseObject[] collectionRules = (ManagementBaseObject[])collection["CollectionRules"];
                     foreach (ManagementBaseObject collectionRule in collectionRules)
                     {
-                        if ((uint)collectionRule["QueryID"] == Convert.ToUInt32(queryId))
+                        if (collectionRule.Properties.Cast<PropertyData>().Any(property => property.Name == "QueryID"))
                         {
-                            foundMatchingRule = true;
-                            Console.WriteLine($"[+] Found matching rule for CollectionID {collectionId}");
-                            Console.WriteLine($"-----------------------------------");
-                            Console.WriteLine("CollectionRule");
-                            Console.WriteLine($"-----------------------------------");
-                            foreach (PropertyData property in collectionRule.Properties)
+                            if ((uint)collectionRule["QueryID"] == Convert.ToUInt32(queryId))
                             {
-                                Console.WriteLine($"{property.Name}: {property.Value}");
-                            }
-                            Console.WriteLine($"-----------------------------------");
-                            try
-                            {
-                                collection.InvokeMethod("DeleteMembershipRule", new object[] { collectionRule });
-                                Console.WriteLine($"[+] Successfully removed collection rule");
-                            }
-                            catch (Exception ex) 
-                            {
-                                Console.WriteLine($"[!] An exception occurred while attempting to remove the collection rule: {ex.Message}");
-                                Console.WriteLine("[!] Is your account assigned the correct security role?");
+                                foundMatchingRule = true;
+                                Console.WriteLine($"[+] Found matching rule for CollectionID {collectionId}");
+                                Console.WriteLine($"-----------------------------------");
+                                Console.WriteLine("CollectionRule");
+                                Console.WriteLine($"-----------------------------------");
+                                foreach (PropertyData property in collectionRule.Properties)
+                                {
+                                    Console.WriteLine($"{property.Name}: {property.Value}");
+                                }
+                                Console.WriteLine($"-----------------------------------");
+                                try
+                                {
+                                    collection.InvokeMethod("DeleteMembershipRule", new object[] { collectionRule });
+                                    Console.WriteLine($"[+] Successfully removed collection rule");
+                                }
+                                catch (Exception ex)
+                                {
+                                    Console.WriteLine($"[!] An exception occurred while attempting to remove the collection rule: {ex.Message}");
+                                    Console.WriteLine("[!] Is your account assigned the correct security role?");
+                                }
                             }
                         }
                     }

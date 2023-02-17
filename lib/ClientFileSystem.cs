@@ -119,7 +119,7 @@ namespace SharpSCCM
                             if (line.Contains(stringToFind))
                             {
                                 fileMatched= true;
-                                matchLines.Append(line);
+                                matchLines.Add(line);
                             }
                         }
                     }
