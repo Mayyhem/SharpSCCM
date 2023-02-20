@@ -236,6 +236,7 @@ namespace SharpSCCM
                 success = Interop.DuplicateToken(hToken, 2, ref hDupToken);
                 if (!success)
                 {
+                    Interop.CloseHandle(hToken);
                     //Console.WriteLine("DuplicateToken failed!");
                     return false;
                 }
@@ -243,6 +244,8 @@ namespace SharpSCCM
                 success = Interop.ImpersonateLoggedOnUser(hDupToken);
                 if (!success)
                 {
+                    Interop.CloseHandle(hToken);
+                    Interop.CloseHandle(hDupToken);
                     //Console.WriteLine("ImpersonateLoggedOnUser failed!");
                     return false;
                 }
@@ -290,6 +293,7 @@ namespace SharpSCCM
                 int error = Marshal.GetLastWin32Error();
                 string errorMessage = new Win32Exception((int)error).Message;
                 Console.WriteLine("Error enumerating {0} ({1}) : {2}", keyPath, error, errorMessage);
+                Interop.RegCloseKey(hKey);
                 return null;
             }
 
@@ -300,6 +304,7 @@ namespace SharpSCCM
                 int error = Marshal.GetLastWin32Error();
                 string errorMessage = new Win32Exception((int)error).Message;
                 Console.WriteLine("Error enumerating {0} ({1}) : {2}", keyPath, error, errorMessage);
+                Interop.RegCloseKey(hKey);
                 return null;
             }
             byte[] data = new byte[cbData];
