@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Net;
 using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
@@ -16,15 +16,14 @@ namespace SharpSCCM
 
     public static class AdminService
     {
-
-        public static string triggerMethod(string Query)
+        
+        public static string TriggerMethod(string Query, string CollName)
         {
-
+            Console.WriteLine("[+] Sending query to AdminService");
             var operationId = "";
             var trustAllCerts = new TrustAllCertsPolicy();
             ServicePointManager.ServerCertificateValidationCallback = trustAllCerts.ValidateCertificate;
-
-            var request = (HttpWebRequest)WebRequest.Create("https://CM1/AdminService/v1.0/Collections('SMS00001')/AdminService.RunCMPivot");
+            var request = (HttpWebRequest)WebRequest.Create($"https://CM1/AdminService/v1.0/Collections('{CollName}')/AdminService.RunCMPivot");
             request.Method = "POST";
             request.ContentType = "application/json";
             request.UseDefaultCredentials = true;
@@ -48,16 +47,17 @@ namespace SharpSCCM
             }
             return operationId;
         }
-        public static async Task<string> CheckStatusAsync(string inpt2)
+        public static async Task<string> CheckStatusAsync(string inpt2, string CollName)
 
         {
-            var opId = triggerMethod(inpt2);
+            var opId = TriggerMethod(inpt2, CollName);
             var clientHandler = new HttpClientHandler();
             clientHandler.ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true;
             clientHandler.UseDefaultCredentials = true;
 
+            //Right now the collection name is hardcoded. Need to take it as argument
             var client = new HttpClient(clientHandler);
-            var url = $"https://CM1/AdminService/v1.0/Collections('SMS00001')/AdminService.CMPivotResult(OperationId={opId})";
+            var url = $"https://CM1/AdminService/v1.0/Collections('{CollName}')/AdminService.CMPivotResult(OperationId={opId})";
             var status = 0;
             System.Diagnostics.Debug.WriteLine(status);
             HttpResponseMessage response = null;
@@ -74,7 +74,7 @@ namespace SharpSCCM
                 {
                     counter++;
                     //The messaging here needs to be better
-                    System.Diagnostics.Debug.WriteLine($"Attempt {counter}: Checking for operation to complete");
+                    Console.WriteLine($"[+] Attempt {counter}: Checking for query operation to completition");
                     await Task.Delay(TimeSpan.FromSeconds(7));
                 }
             }
@@ -82,11 +82,11 @@ namespace SharpSCCM
             if (status == 200)
             {   
                 //Wording could be better here as well
-                System.Diagnostics.Debug.WriteLine("Successfuly retrieved results from AdminService");
+                Console.WriteLine("[+] Successfuly retrieved results from AdminService");
             }
             else
             {   //Wording could be better or maybe just a Fail message here
-                System.Diagnostics.Debug.WriteLine("Failed to get a 200 after 5 attempts");
+                System.Diagnostics.Debug.WriteLine("[!] Failed to get a response from REST API after 5 attempts");
             }
 
 
@@ -109,8 +109,8 @@ namespace SharpSCCM
 
                     output.Append(property.Name + pad1 + ": ");
 
-                    //When testing against Windows EventLog queries. There is a very long string which contains some other strings
-                    //some JSON like with a key:value and some that are just simple strings. This was difficult to parse but here
+                    //When testing against Windows EventLog queries. There is a very long string which contains some nested
+                    //JSON-like key:value pairs mixed with some regular strings. This was difficult to parse but here
                     //follows my attempt at making presentable
 
                     if (property.Value is JValue jValue)
@@ -128,8 +128,7 @@ namespace SharpSCCM
                                 if (!Regex.IsMatch(_line, pattern))
                                 {
                                     output.AppendLine();
-                                }                           
-                            
+                                } 
 
                             string[] line_string = lines[i].Split(':');
 
@@ -162,19 +161,17 @@ namespace SharpSCCM
                         {
                             output.AppendLine(jValue.ToString());
                         }
-                        
                     }
-                }   
+                }   output.AppendLine("--------------------------------------------");
             }
-
             return output.ToString();
         }
 
-        public static async Task Main(string inpt3)
-        {
-            var status = await CheckStatusAsync(inpt3);
-            //System.Diagnostics.Debug.WriteLine("Got results:" + status);
-            Console.WriteLine("Got results:" + status);
+        public static async Task Main(string inpt3, string CollName)
+        {   
+            var status = await CheckStatusAsync(inpt3, CollName);
+            System.Diagnostics.Debug.WriteLine(status);
+            Console.WriteLine("\r\n\r\n Received Data:" + status);
 
         }
 
