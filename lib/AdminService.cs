@@ -16,7 +16,7 @@ namespace SharpSCCM
 
     public static class AdminService
     {
-        
+        //This function handles the inital query to AdminService and returns the Operation Id
         public static string TriggerMethod(string Query, string CollName)
         {
             Console.WriteLine("[+] Sending query to AdminService");
@@ -45,8 +45,12 @@ namespace SharpSCCM
                 operationId = jsonObject.OperationId;
                 System.Diagnostics.Debug.WriteLine(operationId);
             }
+            //After sending the query we gather the Operation Id for next steps -> Gather operation results
             return operationId;
         }
+        
+        //This functions will periodically check the response status we get when looking for operation completition
+        //It will make 5 attempts before exiting
         public static async Task<string> CheckStatusAsync(string inpt2, string CollName)
 
         {
@@ -55,7 +59,7 @@ namespace SharpSCCM
             clientHandler.ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true;
             clientHandler.UseDefaultCredentials = true;
 
-            //Right now the collection name is hardcoded. Need to take it as argument
+            //This is the request made to adminService checking for operation results
             var client = new HttpClient(clientHandler);
             var url = $"https://CM1/AdminService/v1.0/Collections('{CollName}')/AdminService.CMPivotResult(OperationId={opId})";
             var status = 0;
@@ -73,7 +77,6 @@ namespace SharpSCCM
                 if (status != 200)
                 {
                     counter++;
-                    //The messaging here needs to be better
                     Console.WriteLine($"[+] Attempt {counter}: Checking for query operation to completition");
                     await Task.Delay(TimeSpan.FromSeconds(7));
                 }
@@ -81,11 +84,11 @@ namespace SharpSCCM
 
             if (status == 200)
             {   
-                //Wording could be better here as well
+                //Success message after retrieving operation results data
                 Console.WriteLine("[+] Successfuly retrieved results from AdminService");
             }
             else
-            {   //Wording could be better or maybe just a Fail message here
+            {   //Failure message
                 System.Diagnostics.Debug.WriteLine("[!] Failed to get a response from REST API after 5 attempts");
             }
 
@@ -98,9 +101,11 @@ namespace SharpSCCM
 
             foreach (var item in result)
             {
-                //Need to change this for some other word that describes this is an element of the output received describing one row of results
+                // Would like to change this for some other word that describes this is an element of the output received describing one row of results. 
+                // Hard to encapsulate all the data we can get with CMPivot though
                 output.AppendLine("\r\n\r\n\r\n---------------- Result ------------------");
 
+                // Here we start parsing the JSON to display it in a command line and make as readabla as possible
                 foreach (JProperty property in item.Children())
                 {
                     output.AppendLine();
@@ -118,6 +123,9 @@ namespace SharpSCCM
                         if (jValue.Type == JTokenType.String && jValue.ToString().Contains(Environment.NewLine))
                         {
                             output.AppendLine();
+                            
+                            //Separating actual JSON from strings that contain mix of key:value pairs and single strings
+                            
                             string[] lines = jValue.ToString().Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
 
                             for (int i = 0; i < lines.Length; i++)
@@ -167,6 +175,7 @@ namespace SharpSCCM
             return output.ToString();
         }
 
+        // Entry point with arguments provided by user or defaults from command handler
         public static async Task Main(string inpt3, string CollName)
         {   
             var status = await CheckStatusAsync(inpt3, CollName);
