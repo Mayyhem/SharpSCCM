@@ -542,18 +542,24 @@ namespace SharpSCCM
                 invokeCommand.AddGlobalOption(new Option<string>(new[] { "--site-code", "-sc" }, "The three character site code (e.g., \"PS1\") (default: the site code of the client running SharpSCCM)"));
                 rootCommand.Add(invokeCommand);
                  
-                //invoke adminService
+                 //invoke adminService
                 var invokeAdminService = new Command("adminService", "Invoke an arbitrary query against a collection of clients by using CMPivot via AdminService");
                 invokeCommand.Add(invokeAdminService);
-                invokeAdminService.Add(new Argument<string>("Query", "The query you want to execute against a collection of clients"));
-
-                //Maybe not good to point against all clients by default !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-                invokeAdminService.Add(new Argument<string>("collection-name", "The name of the collection you would like to execute the query against. By default it will be executed against all clients"));
+                invokeAdminService.Add(new Argument<string>("query", "The query you want to execute against a collection of clients"));
+                //I need to make it so it can also be pointed to a single device (IF POSSIBLE???)
+                invokeAdminService.Add(new Option<string>(new[] { "--collection-id", "-i" }, "The collectionID  you would like to execute the CMPivot query against") { Arity = ArgumentArity.ExactlyOne });
                 invokeAdminService.Handler = CommandHandler.Create(
-                    (string server, string siteCode, string Query, string collectioName) =>
+                    async (string server, string siteCode, string Query, string collectionId) =>
                     {
-                        //ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
-                        System.Threading.Tasks.Task task = AdminService.Main(Query);
+                        if (string.IsNullOrEmpty(collectionId))
+                        {
+                            Console.WriteLine("\r\n[!] A device collection or hostname to point the CMPivot query against must be specified. Example use SMS00001 for the all systems device collection\r\n");
+                        }
+                        else
+                        {
+
+                            await AdminService.Main(Query, collectionId);
+                        }
                     }); 
 
                 // invoke client-push
