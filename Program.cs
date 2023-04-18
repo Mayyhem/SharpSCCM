@@ -541,6 +541,20 @@ namespace SharpSCCM
                 invokeCommand.AddGlobalOption(new Option<string>(new[] { "--management-point", "-mp" }, "The IP address, FQDN, or NetBIOS name of the management point to connect to (default: the current management point of the client running SharpSCCM)"));
                 invokeCommand.AddGlobalOption(new Option<string>(new[] { "--site-code", "-sc" }, "The three character site code (e.g., \"PS1\") (default: the site code of the client running SharpSCCM)"));
                 rootCommand.Add(invokeCommand);
+                 
+                //invoke adminService
+                var invokeAdminService = new Command("adminService", "Invoke an arbitrary query against a collection of clients by using CMPivot via AdminService");
+                invokeCommand.Add(invokeAdminService);
+                invokeAdminService.Add(new Argument<string>("Query", "The query you want to execute against a collection of clients"));
+
+                //Maybe not good to point against all clients by default !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                invokeAdminService.Add(new Argument<string>("collection-name", "The name of the collection you would like to execute the query against. By default it will be executed against all clients"));
+                invokeAdminService.Handler = CommandHandler.Create(
+                    (string server, string siteCode, string Query, string collectioName) =>
+                    {
+                        //ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);
+                        System.Threading.Tasks.Task task = AdminService.Main(Query);
+                    }); 
 
                 // invoke client-push
                 var invokeClientPush = new Command("client-push", "Force the primary site server to authenticate to an arbitrary destination via NTLM using each configured account and its domain computer account\n" +
