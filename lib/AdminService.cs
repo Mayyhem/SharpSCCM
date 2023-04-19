@@ -1,15 +1,17 @@
+using System;
+using System.Text;
 using System.IO;
 using System.Net;
-using System.Net.Security;
-using System.Security.Cryptography.X509Certificates;
-using Newtonsoft.Json;
-using System.Threading.Tasks;
+using System.Linq;
 using System.Net.Http;
-using System;
+using System.Net.Security;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using System.Threading.Tasks;
 using System.Collections.Generic;
-using System.Text;
+using System.Security.Cryptography;
 using System.Text.RegularExpressions;
+using System.Security.Cryptography.X509Certificates;
 
 namespace SharpSCCM
 {
@@ -17,57 +19,87 @@ namespace SharpSCCM
     public static class AdminService
     {
         //This function handles the inital query to AdminService and returns the Operation Id
-        public static string TriggerMethod(string Query, string CollName)
+        public static string TriggerAdminServiceQuery(string managementPoint, string query, string collectionName, string deviceId)
         {
+
             Console.WriteLine("[+] Sending query to AdminService");
             var operationId = "";
             var trustAllCerts = new TrustAllCertsPolicy();
             ServicePointManager.ServerCertificateValidationCallback = trustAllCerts.ValidateCertificate;
-            var request = (HttpWebRequest)WebRequest.Create($"https://CM1/AdminService/v1.0/Collections('{CollName}')/AdminService.RunCMPivot");
+            string url = null;
+
+            //Prepare query url based on target
+            if (deviceId != null)
+            {
+                url = $"https://{managementPoint}/AdminService/v1.0/Device({deviceId})/AdminService.RunCMPivot";
+            }
+            else if (collectionName != null)
+            {
+                url = $"https://{managementPoint}/AdminService/v1.0/Collections('{collectionName}')/AdminService.RunCMPivot";
+            }
+
+            var request = (HttpWebRequest)WebRequest.Create(url);
             request.Method = "POST";
             request.ContentType = "application/json";
             request.UseDefaultCredentials = true;
-
-            var json = $"{{\"InputQuery\":\"{Query}\"}}";
-
+            var json = $"{{\"InputQuery\":\"{query}\"}}";
             var data = System.Text.Encoding.UTF8.GetBytes(json);
+            
             using (var stream = request.GetRequestStream())
             {
                 stream.Write(data, 0, data.Length);
             }
-
             var response = (HttpWebResponse)request.GetResponse();
             using (var streamReader = new StreamReader(response.GetResponseStream()))
             {
-
                 var jsonResponse = streamReader.ReadToEnd();
-                var jsonObject = JsonConvert.DeserializeObject<JsonResponse>(jsonResponse);
-                operationId = jsonObject.OperationId;
-                System.Diagnostics.Debug.WriteLine(operationId);
-            }
-            //After sending the query we gather the Operation Id for next steps -> Gather operation results
+                var jsonObject = JsonConvert.DeserializeObject<JObject>(jsonResponse);
+                var regex = new Regex("\"OperationId\":\\s*\\d+");
+                var match = regex.Match(jsonObject.ToString());
+
+                if (match.Success)
+                {
+                    var operationIdString = match.Value;
+                    operationId = int.Parse(Regex.Match(operationIdString, "\\d+").Value).ToString();
+                }
+                else
+                {
+                    Console.WriteLine("[!] An operation id was not found in the response received");
+                }
+            } 
             return operationId;
         }
-        
-        //This functions will periodically check the response status we get when looking for operation completition
-        //It will make 5 attempts before exiting
-        public static async Task<string> CheckStatusAsync(string inpt2, string CollName)
+
+
+     //This functions will periodically check the response status we get when looking for operation completition
+     //It will make 5 attempts before exiting this value might need to be modified when working on larger environments
+    public static async Task<string> CheckOperationStatusAsync(string managementPoint, string query, string collectionName, string deviceId)
 
         {
-            var opId = TriggerMethod(inpt2, CollName);
+            var opId = TriggerAdminServiceQuery(managementPoint, query, collectionName, deviceId);
+            string url = null;
+
+            //Prepare result url based on target
+            if (deviceId != null)
+            {
+                url = $"https://{managementPoint}/AdminService/v1.0/Device({deviceId})/AdminService.CMPivotResult(OperationId={opId})";
+            }
+            else if (collectionName != null)
+            {
+                url = $"https://{managementPoint}/AdminService/v1.0/Collections('{collectionName}')/AdminService.CMPivotResult(OperationId={opId})";
+            }
+
+            //var opId = TriggerMethod(inpt2, CollName, DevName);
             var clientHandler = new HttpClientHandler();
             clientHandler.ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true;
             clientHandler.UseDefaultCredentials = true;
 
             //This is the request made to adminService checking for operation results
-            var client = new HttpClient(clientHandler);
-            var url = $"https://CM1/AdminService/v1.0/Collections('{CollName}')/AdminService.CMPivotResult(OperationId={opId})";
+            int counter = 0;
             var status = 0;
-            System.Diagnostics.Debug.WriteLine(status);
+            var client = new HttpClient(clientHandler);
             HttpResponseMessage response = null;
 
-            int counter = 0;
-            
             //Here we try to stop the function that retrieves results from Rest API to loop infinitely by placing a cap after 5 attempts
             while (status != 200 && counter < 5)
             {
@@ -89,39 +121,57 @@ namespace SharpSCCM
             }
             else
             {   //Failure message
-                System.Diagnostics.Debug.WriteLine("[!] Failed to get a response from REST API after 5 attempts");
+                Console.WriteLine("[!] Failed to get a response from REST API after 5 attempts");
             }
 
-
+            //Here we start deserializing the received JSON
             var reqBody = await response.Content.ReadAsStringAsync();
             var jsonBody = reqBody.Replace("\\r\\n\\r\\n", Environment.NewLine);
-            var jsonObject = JsonConvert.DeserializeObject<Dictionary<string, JToken>>(jsonBody);
-            var result = jsonObject["value"][0]["Result"];
-            var output = new StringBuilder();
+            var jsonObject = JsonConvert.DeserializeObject<JToken>(jsonBody);
+            
+            //This section deals with the variation in nesting between single device queries and collection queries
+            JToken result1 = null;
+            JObject jsonObject2 = JObject.Parse(reqBody);
+            int resultIndex = -1; // if "Result" property not found
 
-            int counter2 = 1;
-
-            foreach (var item in result)
+            //Find "Result" within dictionary
+            foreach (JToken token in jsonObject2.Descendants())
             {
-                // Would like to change this for some other word that describes this is an element of the output received describing one row of results. 
-                // Hard to encapsulate all the data we can get with CMPivot though
-                output.AppendLine(string.Format("\r\n\r\n\r\n---------------- CMPivot data {0} ------------------", counter2));
-                // Code to process data goes here
-                counter2++;
+                if (token.Type == JTokenType.Property && ((JProperty)token).Name == "Result")
+                {
+                    JContainer parent = token.Parent;
+                    if (parent is JObject)
+                    {
+                        resultIndex = ((JObject)parent).Properties().ToList().IndexOf((JProperty)token);
+                        result1 = ((JProperty)token).Value;
+                    }
+                    else if (parent is JArray)
+                    {
+                        resultIndex = ((JArray)parent).IndexOf(token);
+                    }
+                    break;
+                }
+            }
 
-                // Here we start parsing the JSON to display it in a command line and make as readabla as possible
+            var output = new StringBuilder();
+            int counter2 = 1;
+            
+            // Here we start parsing the JSON to display it in a command line and make as readable as possible
+            foreach (var item in result1)
+            {
+                output.AppendLine(string.Format("\r\n\r\n\r\n---------------- CMPivot data #{0} ------------------", counter2));
+                counter2++;
+                
                 foreach (JProperty property in item.Children())
                 {
                     output.AppendLine();
                     int numSpaces = 30 - property.Name.Length;
                     string pad1 = new string(' ', numSpaces);
-
                     output.Append(property.Name + pad1 + ": ");
 
                     //When testing against Windows EventLog queries. There is a very long string which contains some nested
-                    //JSON-like key:value pairs mixed with some regular strings. This was difficult to parse but here
-                    //follows my attempt at making presentable
-
+                    //Json-like key:value pairs mixed with some regular strings. This was difficult to parse but here
+                    //follows my attempt at making it presentable in a commandline
                     if (property.Value is JValue jValue)
                     {
                         if (jValue.Type == JTokenType.String && jValue.ToString().Contains(Environment.NewLine))
@@ -129,9 +179,7 @@ namespace SharpSCCM
                             output.AppendLine();
                             
                             //Separating actual JSON from strings that contain mix of key:value pairs and single strings
-                            
                             string[] lines = jValue.ToString().Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
-
                             for (int i = 0; i < lines.Length; i++)
                             {
                                 string _line = lines[i];
@@ -144,6 +192,7 @@ namespace SharpSCCM
 
                             string[] line_string = lines[i].Split(':');
 
+                                //Here we assign padding/indentation according to nesting level
                                 if (line_string.Length > 1)
                                 {
                                     for (int x = 0; x < line_string.Length - 1; x += 2)
@@ -180,12 +229,10 @@ namespace SharpSCCM
         }
 
         // Entry point with arguments provided by user or defaults from command handler
-        public static async Task Main(string inpt3, string CollName)
-        {   
-            var status = await CheckStatusAsync(inpt3, CollName);
-            System.Diagnostics.Debug.WriteLine(status);
-            Console.WriteLine("\r\n\r\n Received Data:" + status);
-
+        public static async Task Main(string managementPoint, string query, string collectionName, string deviceId)
+        {
+            var CMPdata = await CheckOperationStatusAsync(managementPoint, query, collectionName, deviceId);
+            Console.WriteLine("\r\n\r\n Received Data: " + CMPdata);
         }
 
     }
