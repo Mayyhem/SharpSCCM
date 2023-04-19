@@ -547,7 +547,7 @@ namespace SharpSCCM
                 invokeCommand.Add(invokeAdminService);
                 // Will have to modify this description after implementing option to execute against single device
                 invokeAdminService.Add(new Argument<string>("query", "The query you want to execute against a collection of clients"));
-                //I need to make it so it can also be pointed to a single device (IF POSSIBLE???)
+                // Need to make it so it can also be pointed to a single device
                 invokeAdminService.Add(new Option<string>(new[] { "--collection-id", "-i" }, "The collectionID  you would like to execute the CMPivot query against") { Arity = ArgumentArity.ExactlyOne });
                 invokeAdminService.Handler = CommandHandler.Create(
                     async (string server, string siteCode, string Query, string collectionId) =>
