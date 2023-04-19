@@ -99,11 +99,15 @@ namespace SharpSCCM
             var result = jsonObject["value"][0]["Result"];
             var output = new StringBuilder();
 
+            int counter2 = 1;
+
             foreach (var item in result)
             {
                 // Would like to change this for some other word that describes this is an element of the output received describing one row of results. 
                 // Hard to encapsulate all the data we can get with CMPivot though
-                output.AppendLine("\r\n\r\n\r\n---------------- Result ------------------");
+                output.AppendLine(string.Format("\r\n\r\n\r\n---------------- CMPivot data {0} ------------------", counter2));
+                // Code to process data goes here
+                counter2++;
 
                 // Here we start parsing the JSON to display it in a command line and make as readabla as possible
                 foreach (JProperty property in item.Children())
