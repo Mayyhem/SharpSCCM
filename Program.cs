@@ -543,24 +543,29 @@ namespace SharpSCCM
                 rootCommand.Add(invokeCommand);
                  
                  //invoke adminService
-                var invokeAdminService = new Command("adminService", "Invoke an arbitrary query against a collection of clients by using CMPivot via AdminService");
+                var invokeAdminService = new Command("admin-service", "Invoke an arbitrary CMPivot query against a collection of clients or a single client via AdminService");
                 invokeCommand.Add(invokeAdminService);
-                // Will have to modify this description after implementing option to execute against single device
-                invokeAdminService.Add(new Argument<string>("query", "The query you want to execute against a collection of clients"));
-                // Need to make it so it can also be pointed to a single device
-                invokeAdminService.Add(new Option<string>(new[] { "--collection-id", "-i" }, "The collectionID  you would like to execute the CMPivot query against") { Arity = ArgumentArity.ExactlyOne });
+                invokeCommand.AddGlobalOption(new Option<string>(new[] { "--management-point", "-mp" }, "The IP address, FQDN, or NetBIOS name of the management point to connect to") { Arity = ArgumentArity.ExactlyOne });
+                // A device resourceId is needed to direct a query against a single device
+                invokeAdminService.AddOption(new Option<string>(new[] { "--query", "-q" }, "The query you want to execute against a collection of clients or single client") { Arity = ArgumentArity.ExactlyOne});
+                invokeAdminService.AddOption(new Option<string>(new[] { "--collection-id", "-i" }, "The collectionId to point the query to. Example SMS00001") { Arity = ArgumentArity.ExactlyOne });
+                invokeAdminService.AddOption(new Option<string>(new[] { "--device-id", "-d" }, "The deviceId to point the query to. Example 16777210") { Arity = ArgumentArity.ExactlyOne });
                 invokeAdminService.Handler = CommandHandler.Create(
-                    async (string server, string siteCode, string Query, string collectionId) =>
+                    async (string managementPoint, string siteCode, string Query, string collectionId, string deviceId) =>
                     {
-                        if (string.IsNullOrEmpty(collectionId))
+                    if (string.IsNullOrEmpty(managementPoint) && (string.IsNullOrEmpty(collectionId) || string.IsNullOrEmpty(deviceId)))
+                    { 
+                        Console.WriteLine("\r\n[!] Please specify a Management Point, CMPivot query, and CollectionId (-i) or device Name (-d) to execute a query with AdminService\r\n");
+                    }
+                    else if (!string.IsNullOrEmpty(collectionId) && !string.IsNullOrEmpty(deviceId))
+                    {
+                        Console.WriteLine("[!] Please specify either a CollectionId (-i) or a deviceId (-d)");
+                    }
+                    else
                         {
-                            Console.WriteLine("\r\n[!] A device collection or hostname to point the CMPivot query against must be specified. Example use SMS00001 for the all systems device collection\r\n");
+                            await AdminService.Main(managementPoint, Query, collectionId, deviceId);
                         }
-                        else
-                        {
-                            await AdminService.Main(Query, collectionId);
-                        }
-                    }); 
+                    });  
 
                 // invoke client-push
                 var invokeClientPush = new Command("client-push", "Force the primary site server to authenticate to an arbitrary destination via NTLM using each configured account and its domain computer account\n" +
