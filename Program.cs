@@ -542,7 +542,7 @@ namespace SharpSCCM
                 invokeCommand.AddGlobalOption(new Option<string>(new[] { "--site-code", "-sc" }, "The three character site code (e.g., \"PS1\") (default: the site code of the client running SharpSCCM)"));
                 rootCommand.Add(invokeCommand);
                  
-                 //invoke adminService
+                  //invoke adminService
                 var invokeAdminService = new Command("admin-service", "Invoke an arbitrary CMPivot query against a collection of clients or a single client via AdminService");
                 invokeCommand.Add(invokeAdminService);
                 invokeCommand.AddGlobalOption(new Option<string>(new[] { "--management-point", "-mp" }, "The IP address, FQDN, or NetBIOS name of the management point to connect to") { Arity = ArgumentArity.ExactlyOne });
@@ -553,7 +553,7 @@ namespace SharpSCCM
                 invokeAdminService.Handler = CommandHandler.Create(
                     async (string managementPoint, string siteCode, string Query, string collectionId, string deviceId) =>
                     {
-                    if (string.IsNullOrEmpty(managementPoint) && (string.IsNullOrEmpty(collectionId) || string.IsNullOrEmpty(deviceId)))
+                    if ((string.IsNullOrEmpty(managementPoint) || string.IsNullOrEmpty(Query)) || (string.IsNullOrEmpty(collectionId) && string.IsNullOrEmpty(deviceId)))
                     { 
                         Console.WriteLine("\r\n[!] Please specify a Management Point, CMPivot query, and CollectionId (-i) or device Name (-d) to execute a query with AdminService\r\n");
                     }
