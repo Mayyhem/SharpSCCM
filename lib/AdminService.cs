@@ -45,6 +45,7 @@ namespace SharpSCCM
             var json = $"{{\"InputQuery\":\"{query}\"}}";
             var data = System.Text.Encoding.UTF8.GetBytes(json);
             
+            //Extracting the OperationId from the response for future use
             using (var stream = request.GetRequestStream())
             {
                 stream.Write(data, 0, data.Length);
@@ -88,8 +89,7 @@ namespace SharpSCCM
             {
                 url = $"https://{managementPoint}/AdminService/v1.0/Collections('{collectionName}')/AdminService.CMPivotResult(OperationId={opId})";
             }
-
-            //var opId = TriggerMethod(inpt2, CollName, DevName);
+        
             var clientHandler = new HttpClientHandler();
             clientHandler.ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true;
             clientHandler.UseDefaultCredentials = true;
@@ -169,9 +169,8 @@ namespace SharpSCCM
                     string pad1 = new string(' ', numSpaces);
                     output.Append(property.Name + pad1 + ": ");
 
-                    //When testing against Windows EventLog queries. There is a very long string which contains some nested
-                    //Json-like key:value pairs mixed with some regular strings. This was difficult to parse but here
-                    //follows my attempt at making it presentable in a commandline
+                    //When testing against Windows EventLog queries. The EventLog message contains very long string which contains a mix of nested
+                    //Json-like key:value pairs and some regular strings. This was difficult to parse but here follows my attempt at making it presentable in a commandline
                     if (property.Value is JValue jValue)
                     {
                         if (jValue.Type == JTokenType.String && jValue.ToString().Contains(Environment.NewLine))
