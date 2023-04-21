@@ -543,29 +543,62 @@ namespace SharpSCCM
                 rootCommand.Add(invokeCommand);
                  
                   //invoke adminService
-                var invokeAdminService = new Command("admin-service", "Invoke an arbitrary CMPivot query against a collection of clients or a single client via AdminService");
+                 //invoke adminService
+                var invokeAdminService = new Command("admin-service", "Invoke an arbitrary CMPivot query against a collection of clients or a single client via AdminService\n" +
+                    "  Requirements:\n" +
+                    "    - Full administrator\n" +
+                    "    Examples:\n" +
+                    "       - SharpSCCM_merged.exe invoke admin-service -q \"Device\" -r 16777211\n" +
+                    "       - SharpSCCM_merged.exe invoke admin-service -q \"Device\" -i SMS00001\n" +
+                    "       - SharpSCCM_merged.exe invoke admin-service -q \"OS | where (Version like '10%')\" -r 16777211\n" +
+                    "       - SharpSCCM_merged.exe invoke admin-service -q \"InstalledSoftware\" -r 16777211\n" +
+                    "       - SharpSCCM_merged.exe invoke admin-service -q \"EventLog('System') | order by DateTime desc\" -i SMS00001\n" +
+                    "    Resources:\n" +
+                    "       - https://learn.microsoft.com/en-us/mem/configmgr/core/understand/fundamentals-of-role-based-administration\n");
                 invokeCommand.Add(invokeAdminService);
-                invokeCommand.AddGlobalOption(new Option<string>(new[] { "--management-point", "-mp" }, "The IP address, FQDN, or NetBIOS name of the management point to connect to") { Arity = ArgumentArity.ExactlyOne });
-                // A device resourceId is needed to direct a query against a single device
-                invokeAdminService.AddOption(new Option<string>(new[] { "--query", "-q" }, "The query you want to execute against a collection of clients or single client") { Arity = ArgumentArity.ExactlyOne});
-                invokeAdminService.AddOption(new Option<string>(new[] { "--collection-id", "-i" }, "The collectionId to point the query to. Example SMS00001") { Arity = ArgumentArity.ExactlyOne });
-                invokeAdminService.AddOption(new Option<string>(new[] { "--device-id", "-d" }, "The deviceId to point the query to. Example 16777210") { Arity = ArgumentArity.ExactlyOne });
+                invokeAdminService.AddOption(new Option<string>(new[] { "--query", "-q" }, "The query you want to execute against a collection of clients or single client (e.g., --query \"IPConfig\")") { Arity = ArgumentArity.ExactlyOne});
+                invokeAdminService.AddOption(new Option<string>(new[] { "--collection-id", "-i" }, "The collectionId to point the query to. (e.g., SMS00001 for all systems collection)") { Arity = ArgumentArity.ExactlyOne });
+                invokeAdminService.Add(new Option<string>(new[] { "--resource-id", "-r" }, "The unique ResourceID of the device to point the query to") { Arity = ArgumentArity.ExactlyOne });
+                invokeAdminService.Add(new Option<string>(new[] { "--delay-timeout", "-dt" }, "A comma separatted value for delay, and timeout (e.g., --delay-timeout 5,5).\n" +
+                    "The 'delay' is the amount of seconds between requests when checking for results from the API," + 
+                    "and 'timeout' is the total number of requests before a timeout is thrown.\n" + 
+                    "(default: requests are made every 5 seconds with a timeout value of 25 seconds => --delay-timeout 5,5)"));
+                invokeAdminService.Add(new Option<bool>(new[] { "--json", "-j" }, "Get JSON output"));
                 invokeAdminService.Handler = CommandHandler.Create(
-                    async (string managementPoint, string siteCode, string Query, string collectionId, string deviceId) =>
+                    async (string managementPoint, string siteCode, string query, string collectionId, string resourceId, string delayTimeout, bool json) =>
                     {
-                    if ((string.IsNullOrEmpty(managementPoint) || string.IsNullOrEmpty(Query)) || (string.IsNullOrEmpty(collectionId) && string.IsNullOrEmpty(deviceId)))
+                        
+                        string[] delayTimeoutValues = new string[] {"5","5"};
+
+                        //Adding default Management Point
+                        if (managementPoint == null)
+                        {
+                            (managementPoint, _) = ClientWmi.GetCurrentManagementPointAndSiteCode();
+                        }
+
+                        if (delayTimeout != null)
+                        {
+                            delayTimeoutValues = delayTimeout.Split(',');
+                            if (delayTimeoutValues.Length != 2 || (!uint.TryParse(delayTimeoutValues[0], out uint value) || !uint.TryParse(delayTimeoutValues[1], out value)))
+                            {
+                                Console.WriteLine("\r\n[!] Please check your syntax for --delay-timeout parameter \r\n[!] Example --timeout 5,2 for a 5 second delay between requests and a timeout after 10 seconds \r\n[!] Or leave blank for default 25 seconds timeout (5,5)");
+                                return;
+                            }
+                        }
+                        
+                        if ((string.IsNullOrEmpty(managementPoint) || string.IsNullOrEmpty(query)) || (string.IsNullOrEmpty(collectionId) && string.IsNullOrEmpty(resourceId)))
                     { 
-                        Console.WriteLine("\r\n[!] Please specify a Management Point, CMPivot query, and CollectionId (-i) or device Name (-d) to execute a query with AdminService\r\n");
+                        Console.WriteLine("\r\n[!] Please specify a query (-q), and CollectionID (-i) or ResourceID (-r) to execute an AdminService query\r\n");
                     }
-                    else if (!string.IsNullOrEmpty(collectionId) && !string.IsNullOrEmpty(deviceId))
+                    else if (!string.IsNullOrEmpty(collectionId) && !string.IsNullOrEmpty(resourceId))
                     {
-                        Console.WriteLine("[!] Please specify either a CollectionId (-i) or a deviceId (-d)");
+                        Console.WriteLine("[!] Please specify either a CollectionID (-i) or a ResourceID (-r)");
                     }
                     else
                         {
-                            await AdminService.Main(managementPoint, Query, collectionId, deviceId);
+                            await AdminService.Main(managementPoint, query, collectionId, resourceId, delayTimeoutValues, json);
                         }
-                    });  
+                    });    
 
                 // invoke client-push
                 var invokeClientPush = new Command("client-push", "Force the primary site server to authenticate to an arbitrary destination via NTLM using each configured account and its domain computer account\n" +
