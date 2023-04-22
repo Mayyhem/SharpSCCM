@@ -432,6 +432,54 @@ namespace SharpSCCM
             }
             return userDevices;
         }
+        
+        public static string GetResourceIDForDeviceOrUser(ManagementScope wmiConnection, string user, string device)
+        {
+            // Escape backslashes (e.g., "DOMAIN\username") for WQL
+            user = !string.IsNullOrEmpty(user) ? Helpers.EscapeBackslashes(user) : null;
+
+            string[] classes = { "SMS_R_System", "SMS_R_User" };
+            string whereCondition = null;
+
+            if (!string.IsNullOrEmpty(device))
+            {
+                whereCondition = $"Name='{device}'";
+            }
+            else if (!string.IsNullOrEmpty(user))
+            {
+                whereCondition = $"UniqueUserName='{user}'";
+            }
+            
+            string target = "";
+
+            foreach (string className in classes)
+            {
+                // Skip searches for devices in the users class and vice versa
+                if ((className == "SMS_R_System" && string.IsNullOrEmpty(user)) ||
+                    (className == "SMS_R_User" && string.IsNullOrEmpty(device)))
+                {
+                    ManagementObjectCollection matchingResources = MgmtUtil.GetClassInstances(wmiConnection, className, whereCondition: whereCondition);
+                    if (matchingResources.Count == 1)
+                    {
+                        string matches = matchingResources.OfType<ManagementObject>().First()["ResourceID"].ToString();
+                        if (!string.IsNullOrEmpty(user))
+                            {
+                            target = user;
+                            }
+                        else
+                        {
+                            target = device;
+                        }
+                        Console.WriteLine($"\r\n[+] Found resourceID for {target}: {matches}\r\n");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"\r\n[+] A resourceID for {target} could not be found");
+                    }
+                }
+            }
+            return null;
+        }
 
         public static ManagementObject GetDeviceOrUserFromResourceId(ManagementScope wmiConnection, string resourceId)
         {
