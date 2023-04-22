@@ -535,6 +535,22 @@ namespace SharpSCCM
                             MgmtUtil.GetClassInstances(wmiConnection, "SMS_R_User", null, count, properties, whereCondition, orderBy, dryRun, verbose, true, true);
                         }
                     });
+                 
+                 //Resolve a ResourceID for a user or device
+                 var getResourceID = new Command("resourceId", "Get the resouceID for a username or device");
+                getCommand.Add(getResourceID);
+                getResourceID.Add(new Option<string>(new[] { "--user", "-u" }, "A username to retrieve the ResourceID for (e.g., --user CORP\\Labadmin)") { Arity = ArgumentArity.ExactlyOne });
+                getResourceID.Add(new Option<string>(new[] { "--device", "-d" }, "A device NETBIOS name to retrieve the ResourceID for (e.g., --device WORKSTATION1)") { Arity = ArgumentArity.ExactlyOne });
+                getResourceID.Handler = CommandHandler.Create(
+                    (string managementPoint, string siteCode, string user, string device) =>
+                    {
+                        ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(managementPoint, null, siteCode);
+                        
+                        if (wmiConnection != null && wmiConnection.IsConnected)
+                        {
+                            MgmtPointWmi.GetResourceIDForDeviceOrUser(wmiConnection, user, device);
+                        }
+                    });
 
                 // invoke
                 //invoke adminService//invoke adminService
