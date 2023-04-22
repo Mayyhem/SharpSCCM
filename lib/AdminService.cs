@@ -23,7 +23,7 @@ namespace SharpSCCM
         public static string TriggerAdminServiceQuery(string managementPoint, string query, string collectionName, string deviceId)
         {
 
-            Console.WriteLine("[+] Sending query to AdminService");
+            Console.WriteLine("\r\n[+] Sending query to AdminService");
             var operationId = "";
             var trustAllCerts = new TrustAllCertsPolicy();
             ServicePointManager.ServerCertificateValidationCallback = trustAllCerts.ValidateCertificate;
@@ -39,6 +39,7 @@ namespace SharpSCCM
                 url = $"https://{managementPoint}/AdminService/v1.0/Collections('{collectionName}')/AdminService.RunCMPivot";
             }
 
+            Console.WriteLine($"[+] URL: \"{url}\"");
             var request = (HttpWebRequest)WebRequest.Create(url);
             request.Method = "POST";
             request.ContentType = "application/json";
@@ -68,7 +69,7 @@ namespace SharpSCCM
                         {
                             var operationIdString = match.Value;
                             operationId = int.Parse(Regex.Match(operationIdString, "\\d+").Value).ToString();
-                            Console.WriteLine($"[+] OperationId: {operationId}");
+                            Console.WriteLine($"[+] OperationId found: {operationId}");
                         }
                         else
                         {
@@ -155,7 +156,7 @@ namespace SharpSCCM
 
 
                 //Here we try to stop the function that retrieves results from Rest API to loop infinitely by placing a cap after 5 attempts. Value can be modified with the --delay-timeout flag
-                while (status != 200 && counter < int.Parse(timeoutValues[1]))
+                while (status != 200 && counter <= int.Parse(timeoutValues[1]))
                 {
                     response = await client.GetAsync(url);
                     status = (int)response.StatusCode;
@@ -163,7 +164,7 @@ namespace SharpSCCM
                     if (status != 200)
                     {
                         counter++;
-                        Console.WriteLine($"[+] Attempt {counter}: Checking for query operation to complete");
+                        Console.WriteLine($"\r\n[+] Attempt {counter} of {timeoutValues[1]}: Checking for query operation to complete\r\n[+] URL: \"{url}\"\r\n[+] {timeoutValues[0]} seconds until next attempt");
                         await Task.Delay(TimeSpan.FromSeconds(int.Parse(timeoutValues[0])));
                     }
                 }
@@ -300,7 +301,12 @@ namespace SharpSCCM
             public static async Task Main(string managementPoint, string query, string collectionName, string deviceId, string[] timeoutValues, bool json)
             {
                 var CMPdata = await CheckOperationStatusAsync(managementPoint, query, collectionName, deviceId, timeoutValues, json);
+            if (!string.IsNullOrWhiteSpace(CMPdata))
+            {
                 Console.WriteLine("\r\n\r\n" + CMPdata + "\r\n\r\n");
+
+            }
+           // Console.WriteLine("\r\n\r\n" + CMPdata + "\r\n\r\n");
             }
 
         }
