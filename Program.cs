@@ -567,10 +567,10 @@ namespace SharpSCCM
                     "       - https://learn.microsoft.com/en-us/mem/configmgr/core/understand/fundamentals-of-role-based-administration\n");
                 invokeCommand.Add(invokeAdminService);
                 invokeAdminService.AddOption(new Option<string>(new[] { "--query", "-q" }, "The query you want to execute against a collection of clients or single client (e.g., --query \"IPConfig\")") { Arity = ArgumentArity.ExactlyOne });
-                invokeAdminService.AddOption(new Option<string>(new[] { "--collection-id", "-i" }, "The collectionId to point the query to. (e.g., SMS00001 for all systems collection)") { Arity = ArgumentArity.ExactlyOne });
-                invokeAdminService.Add(new Option<string>(new[] { "--resource-id", "-r" }, "The unique ResourceID of the device to point the query to") { Arity = ArgumentArity.ExactlyOne });
-                invokeAdminService.Add(new Option<string>(new[] { "--delay", "-d" }, "Seconds between requests when checking for results from the API,(e.g., --delay 5) (default: requests are made every 5 seconds)"));
-                invokeAdminService.Add(new Option<string>(new[] { "--retries", "-re" }, "The total number of attempts to check for results from the API before a timeout is thrown.\n (e.g., --timeout 5) (default: 5 attempts will be made before a timeout"));
+                invokeAdminService.AddOption(new Option<string>(new[] { "--collection-id", "-i" }, "The collectionId to point the query to (e.g., SMS00001 for all systems collection)") { Arity = ArgumentArity.ExactlyOne });
+                invokeAdminService.Add(new Option<string>(new[] { "--resource-id", "-r" }, "The unique ResourceID of the device to point the query to. Please see command \"get resource-id\" to retrieve the ResourceId for user or device") { Arity = ArgumentArity.ExactlyOne });
+                invokeAdminService.Add(new Option<string>(new[] { "--delay", "-d" }, "The amount of seconds between requests when checking for results from the API (e.g., --delay 5) (default: requests are made every 5 seconds)"));
+                invokeAdminService.Add(new Option<string>(new[] { "--retries", "-re" }, "The total number of attempts to check for results from the API before a timeout is thrown.\n (e.g., --timeout 5) (default: 5 attempts will be made before a timeout)"));
                 invokeAdminService.Add(new Option<bool>(new[] { "--json", "-j" }, "Get JSON output"));
                 invokeAdminService.Handler = CommandHandler.Create(
                     async (string managementPoint, string siteCode, string query, string collectionId, string resourceId, string delay, string retries, bool json) =>
@@ -609,7 +609,7 @@ namespace SharpSCCM
                         }
                         if ((string.IsNullOrEmpty(managementPoint) || string.IsNullOrEmpty(query)) || (string.IsNullOrEmpty(collectionId) && string.IsNullOrEmpty(resourceId)))
                         {
-                            Console.WriteLine("\r\n[!] Please specify a query (-q), and CollectionID (-i) or ResourceID (-r) to execute an AdminService query\r\n");
+                            Console.WriteLine("\r\n[!] Please specify a query (-q), and CollectionID (-i) or ResourceID (-r) to execute an AdminService query or use (-h) for usage\r\n");
                         }
                         else if (!string.IsNullOrEmpty(collectionId) && !string.IsNullOrEmpty(resourceId))
                         {
