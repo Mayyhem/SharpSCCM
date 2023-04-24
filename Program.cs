@@ -553,6 +553,11 @@ namespace SharpSCCM
                     });
 
                 // invoke
+                var invokeCommand = new Command("invoke", "A group of commands that execute actions on a management point");
+                invokeCommand.AddGlobalOption(new Option<string>(new[] { "--management-point", "-mp" }, "The IP address, FQDN, or NetBIOS name of the management point to connect to (default: the current management point of the client running SharpSCCM)"));
+                invokeCommand.AddGlobalOption(new Option<string>(new[] { "--site-code", "-sc" }, "The three character site code (e.g., \"PS1\") (default: the site code of the client running SharpSCCM)"));
+                rootCommand.Add(invokeCommand);
+                 
                 //invoke adminService//invoke adminService
                 var invokeAdminService = new Command("admin-service", "Invoke an arbitrary CMPivot query against a collection of clients or a single client via AdminService\n" +
                     "  Requirements:\n" +
