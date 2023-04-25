@@ -23,7 +23,7 @@ namespace SharpSCCM
         public static string TriggerAdminServiceQuery(string managementPoint, string query, string collectionName, string deviceId)
         {
 
-            Console.WriteLine("\r\n[+] Sending query to AdminService");
+            Console.WriteLine("[+] Sending query to AdminService");
             var operationId = "";
             var trustAllCerts = new TrustAllCertsPolicy();
             ServicePointManager.ServerCertificateValidationCallback = trustAllCerts.ValidateCertificate;
@@ -164,7 +164,7 @@ namespace SharpSCCM
                     if (status != 200)
                     {
                         counter++;
-                        Console.WriteLine($"\r\n[+] Attempt {counter} of {timeoutValues[1]}: Checking for query operation to complete\r\n[+] URL: \"{url}\"\r\n[+] {timeoutValues[0]} seconds until next attempt");
+                        Console.WriteLine($"[+] Attempt {counter} of {timeoutValues[1]}: Checking for query operation to complete\r\n[+] URL: \"{url}\"\r\n[+] {timeoutValues[0]} seconds until next attempt");
                         await Task.Delay(TimeSpan.FromSeconds(int.Parse(timeoutValues[0])));
                     }
                 }
@@ -172,7 +172,7 @@ namespace SharpSCCM
                 if (status == 200)
                 {
                     //Success message after retrieving operation results data
-                    Console.WriteLine("[+] Successfully retrieved results from AdminService");
+                    Console.WriteLine("[+] Successfully retrieved results from AdminService\r\n");
 
                     //Here we start deserializing the received JSON
                     var reqBody = await response.Content.ReadAsStringAsync();
@@ -182,7 +182,7 @@ namespace SharpSCCM
                     if (json)
                     {
                         // Here we display the output as JSON after the user supplies the required flag
-                        Console.WriteLine($"\r\n\r\n----------------  CMPivot data  ------------------\r\n");
+                        Console.WriteLine($"\r----------------  CMPivot data  ------------------\r");
                         return jsonObject.ToString();
                     }
 
@@ -217,7 +217,7 @@ namespace SharpSCCM
                     // Here we start parsing the JSON to display it in a command line and make it as readable as possible
                     foreach (var item in result1)
                     {
-                        header = $"\r\n\r\n---------------- CMPivot data #{counter2} ------------------";
+                        header = $"---------------- CMPivot data #{counter2} ------------------";
                         output.AppendLine(string.Format(header));
                         counter2++;
 
@@ -281,7 +281,7 @@ namespace SharpSCCM
                                     output.AppendLine(jValue.ToString());
                                 }
                             }
-                        } output.AppendLine("--------------------------------------------");
+                        } output.AppendLine("\n--------------------------------------------");
                     }
                     return output.ToString();
                 }
@@ -301,12 +301,10 @@ namespace SharpSCCM
             public static async Task Main(string managementPoint, string query, string collectionName, string deviceId, string[] timeoutValues, bool json)
             {
                 var CMPdata = await CheckOperationStatusAsync(managementPoint, query, collectionName, deviceId, timeoutValues, json);
-            if (!string.IsNullOrWhiteSpace(CMPdata))
-            {
-                Console.WriteLine("\r\n\r\n" + CMPdata + "\r\n\r\n");
-
-            }
-           // Console.WriteLine("\r\n\r\n" + CMPdata + "\r\n\r\n");
+                if (!string.IsNullOrWhiteSpace(CMPdata))
+                    {
+                        Console.WriteLine("\r" + CMPdata + "\r");
+                    }
             }
 
         }
