@@ -383,28 +383,7 @@ namespace SharpSCCM
                         }
                     });
                
-                //get ResourceID
-                var getResourceID = new Command("resource-id", "Get the resouceID for a username or device");
-                getCommand.Add(getResourceID);
-                getResourceID.Add(new Option<string>(new[] { "--user", "-u" }, "The UniqueUserName of the user to get a ResourceID for (e.g., --user CORP\\Labadmin)") { Arity = ArgumentArity.ExactlyOne });
-                getResourceID.Add(new Option<string>(new[] { "--device", "-d" }, "The name of the device to get the ResourceID for (e.g., --device WORKSTATION1)") { Arity = ArgumentArity.ExactlyOne });
-                getResourceID.Handler = CommandHandler.Create(
-                    (string managementPoint, string siteCode, string user, string device) =>
-                    {
-                        if (string.IsNullOrEmpty(user) && string.IsNullOrEmpty(device))
-                        {
-                            Console.WriteLine("[!] Please specify a UniqueUserName (-u) or a device Name (-d) to retrieve the ResourceID for");
-                        }
-                        else
-                        {
-                            ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(managementPoint, null, siteCode);
-                            if (wmiConnection != null && wmiConnection.IsConnected)
-                            {
-                                MgmtPointWmi.GetResourceIDForDeviceOrUser(wmiConnection, user, device);
-                            }
-                        }
-                    });
-                 
+                
                 // get primary-users
                 var getPrimaryUser = new Command("primary-users", "Get information on primary users set for devices from a management point via WMI\n" +
                     "  Permitted security roles:\n" +
@@ -442,6 +421,27 @@ namespace SharpSCCM
                         {
                             // Don't get lazy props for this function. ResourceName won't populate.
                             MgmtUtil.GetClassInstances(wmiConnection, "SMS_UserMachineRelationship", null, count, properties, whereCondition, orderBy, dryRun, verbose, false, true);
+                        }
+                    });
+                 
+                 var getResourceID = new Command("resource-id", "Get the resouceID for a username or device");
+                getCommand.Add(getResourceID);
+                getResourceID.Add(new Option<string>(new[] { "--user", "-u" }, "The UniqueUserName of the user to get a ResourceID for (e.g., --user CORP\\Labadmin)") { Arity = ArgumentArity.ExactlyOne });
+                getResourceID.Add(new Option<string>(new[] { "--device", "-d" }, "The name of the device to get the ResourceID for (e.g., --device WORKSTATION1)") { Arity = ArgumentArity.ExactlyOne });
+                getResourceID.Handler = CommandHandler.Create(
+                    (string managementPoint, string siteCode, string user, string device) =>
+                    {
+                        if (string.IsNullOrEmpty(user) && string.IsNullOrEmpty(device))
+                        {
+                            Console.WriteLine("[!] Please specify a UniqueUserName (-u) or a device Name (-d) to retrieve the ResourceID for");
+                        }
+                        else
+                        {
+                            ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(managementPoint, null, siteCode);
+                            if (wmiConnection != null && wmiConnection.IsConnected)
+                            {
+                                MgmtPointWmi.GetResourceIDForDeviceOrUser(wmiConnection, user, device);
+                            }
                         }
                     });
 
@@ -558,22 +558,6 @@ namespace SharpSCCM
                         }
                     });
                  
-                 //Resolve a ResourceID for a user or device
-                 var getResourceID = new Command("resourceId", "Get the resouceID for a username or device");
-                getCommand.Add(getResourceID);
-                getResourceID.Add(new Option<string>(new[] { "--user", "-u" }, "A username to retrieve the ResourceID for (e.g., --user CORP\\Labadmin)") { Arity = ArgumentArity.ExactlyOne });
-                getResourceID.Add(new Option<string>(new[] { "--device", "-d" }, "A device NETBIOS name to retrieve the ResourceID for (e.g., --device WORKSTATION1)") { Arity = ArgumentArity.ExactlyOne });
-                getResourceID.Handler = CommandHandler.Create(
-                    (string managementPoint, string siteCode, string user, string device) =>
-                    {
-                        ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(managementPoint, null, siteCode);
-                        
-                        if (wmiConnection != null && wmiConnection.IsConnected)
-                        {
-                            MgmtPointWmi.GetResourceIDForDeviceOrUser(wmiConnection, user, device);
-                        }
-                    });
-
                 // invoke
                 var invokeCommand = new Command("invoke", "A group of commands that execute actions on a management point");
                 invokeCommand.AddGlobalOption(new Option<string>(new[] { "--management-point", "-mp" }, "The IP address, FQDN, or NetBIOS name of the management point to connect to (default: the current management point of the client running SharpSCCM)"));
