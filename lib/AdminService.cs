@@ -121,7 +121,7 @@ namespace SharpSCCM
             }
         }
 
-            //This functions will periodically check the response status we get when check that an operation has completed
+            //This function will periodically check the response status we get when check that an operation has completed
             //By default it will make 5 attempts before exiting this value might need to be modified when working on larger environments
             public static async Task<string> CheckOperationStatusAsync(string managementPoint, string query, string collectionName, string deviceId, string[] timeoutValues, bool json)
 
@@ -156,7 +156,7 @@ namespace SharpSCCM
 
 
                 //Here we try to stop the function that retrieves results from Rest API to loop infinitely by placing a cap after 5 attempts. Value can be modified with the --delay-timeout flag
-                while (status != 200 && counter <= int.Parse(timeoutValues[1]))
+                while (status != 200 && counter < int.Parse(timeoutValues[1]))
                 {
                     response = await client.GetAsync(url);
                     status = (int)response.StatusCode;
