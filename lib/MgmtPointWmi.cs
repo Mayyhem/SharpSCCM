@@ -495,6 +495,8 @@ namespace SharpSCCM
 
             if (!string.IsNullOrEmpty(device))
             {
+                // Used this for testing duplicate device instances or more:
+                //whereCondition = $"Name='{device}' OR Name='APP1'";
                 whereCondition = $"Name='{device}'";
                 target = device;
             }
@@ -511,10 +513,13 @@ namespace SharpSCCM
                     (className == "SMS_R_User" && string.IsNullOrEmpty(device)))
                 {
                     ManagementObjectCollection matchingResources = MgmtUtil.GetClassInstances(wmiConnection, className, whereCondition: whereCondition);
-                    if (matchingResources.Count == 1)
+                    if (matchingResources.Count > 0)
                     {
-                        string matches = matchingResources.OfType<ManagementObject>().First()["ResourceID"].ToString();
-                        Console.WriteLine($"[+] Found resourceID for {target}: {matches}");
+                        foreach (ManagementObject obj in matchingResources)
+                        {
+                            string resourceId = obj["ResourceID"].ToString();
+                            Console.WriteLine($"[+] Found resourceID for {target}: {resourceId}");
+                        }
                     }
                     else
                     {
