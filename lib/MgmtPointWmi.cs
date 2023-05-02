@@ -405,34 +405,6 @@ namespace SharpSCCM
             }
         }
 
-        public static ManagementObjectCollection GetPrimaryDeviceForUser(ManagementScope wmiConnection, string resourceId = null, string userName = null)
-        {
-            userName = !string.IsNullOrEmpty(resourceId) ? (string)GetDeviceOrUser(wmiConnection, resourceId: resourceId)["UniqueUserName"] : userName;
-            // Escape backslash for WQL query
-            string whereCondition = $"UniqueUserName='{userName.Replace("\\", "\\\\")}'";
-            // Get the device associated with the user
-            ManagementObjectCollection userDevices = MgmtUtil.GetClassInstances(wmiConnection, "SMS_UserMachineRelationship", whereCondition: whereCondition);
-            if (userDevices.Count == 1)
-            {
-                Console.WriteLine($"[+] {userName} is the primary user of {userDevices.OfType<ManagementObject>().First()["ResourceName"]}");
-            }
-            else if (userDevices.Count > 1)
-            {
-                Console.WriteLine($"[!] Found multiple devices where {userName} is the primary user:\n");
-                foreach (ManagementObject userDevice in userDevices)
-                {
-                    Console.WriteLine($"    {userDevice["ResourceName"]}");
-                }
-                Console.WriteLine();
-                Console.WriteLine("[!] Try again using the device Name (-d) or ResourceID (-r)");
-            }
-            else
-            {
-                Console.WriteLine($"[!] Could not find any devices where {userName} is the primary user");
-            }
-            return userDevices;
-        }
-
         public static ManagementObject GetDeviceOrUserFromResourceId(ManagementScope wmiConnection, string resourceId)
         {
             ManagementObject resource = null;
@@ -484,6 +456,80 @@ namespace SharpSCCM
             return resource;
         }
 
+        public static ManagementObjectCollection GetPrimaryDeviceForUser(ManagementScope wmiConnection, string resourceId = null, string userName = null)
+        {
+            userName = !string.IsNullOrEmpty(resourceId) ? (string)GetDeviceOrUser(wmiConnection, resourceId: resourceId)["UniqueUserName"] : userName;
+            // Escape backslash for WQL query
+            string whereCondition = $"UniqueUserName='{userName.Replace("\\", "\\\\")}'";
+            // Get the device associated with the user
+            ManagementObjectCollection userDevices = MgmtUtil.GetClassInstances(wmiConnection, "SMS_UserMachineRelationship", whereCondition: whereCondition);
+            if (userDevices.Count == 1)
+            {
+                Console.WriteLine($"[+] {userName} is the primary user of {userDevices.OfType<ManagementObject>().First()["ResourceName"]}");
+            }
+            else if (userDevices.Count > 1)
+            {
+                Console.WriteLine($"[!] Found multiple devices where {userName} is the primary user:\n");
+                foreach (ManagementObject userDevice in userDevices)
+                {
+                    Console.WriteLine($"    {userDevice["ResourceName"]}");
+                }
+                Console.WriteLine();
+                Console.WriteLine("[!] Try again using the device Name (-d) or ResourceID (-r)");
+            }
+            else
+            {
+                Console.WriteLine($"[!] Could not find any devices where {userName} is the primary user");
+            }
+            return userDevices;
+        }
+        
+        public static string GetResourceIDForDeviceOrUser(ManagementScope wmiConnection, string user, string device)
+        {
+            // Escape backslashes (e.g., "DOMAIN\username") for WQL
+            user = !string.IsNullOrEmpty(user) ? Helpers.EscapeBackslashes(user) : null;
+
+            string[] classes = { "SMS_R_System", "SMS_R_User" };
+            string whereCondition = null;
+            string target = "";
+
+            if (!string.IsNullOrEmpty(device))
+            {
+                // Used this for testing duplicate device instances or more:
+                //whereCondition = $"Name='{device}' OR Name='APP1'";
+                whereCondition = $"Name='{device}'";
+                target = device;
+            }
+            else if (!string.IsNullOrEmpty(user))
+            {
+                target = user.Replace("\\\\", "\\");
+                whereCondition = $"UniqueUserName='{user}'";
+            }
+
+            foreach (string className in classes)
+            {
+                // Skip searches for devices in the users class and vice versa
+                if ((className == "SMS_R_System" && string.IsNullOrEmpty(user)) ||
+                    (className == "SMS_R_User" && string.IsNullOrEmpty(device)))
+                {
+                    ManagementObjectCollection matchingResources = MgmtUtil.GetClassInstances(wmiConnection, className, whereCondition: whereCondition);
+                    if (matchingResources.Count > 0)
+                    {
+                        foreach (ManagementObject obj in matchingResources)
+                        {
+                            string resourceId = obj["ResourceID"].ToString();
+                            Console.WriteLine($"[+] Found resourceID for {target}: {resourceId}");
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[+] A resourceID for {target} could not be found");
+                    }
+                }
+            }
+            return null;
+        }
+        
         public static void GetSitePushSettings(ManagementScope wmiConnection = null)
         {
             ManagementObjectSearcher searcher = new ManagementObjectSearcher(wmiConnection, new ObjectQuery($"SELECT PropertyName, Value, Value1 FROM SMS_SCI_SCProperty WHERE ItemType='SMS_DISCOVERY_DATA_MANAGER' AND (PropertyName='ENABLEKERBEROSCHECK' OR PropertyName='FILTERS' OR PropertyName='SETTINGS')"));

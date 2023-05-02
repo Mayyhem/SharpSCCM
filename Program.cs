@@ -382,7 +382,8 @@ namespace SharpSCCM
                             MgmtUtil.GetClassInstances(wmiConnection, "SMS_R_System", null, count, properties, whereCondition, orderBy, dryRun, verbose, printOutput: true);
                         }
                     });
-
+               
+                
                 // get primary-users
                 var getPrimaryUser = new Command("primary-users", "Get information on primary users set for devices from a management point via WMI\n" +
                     "  Permitted security roles:\n" +
@@ -420,6 +421,27 @@ namespace SharpSCCM
                         {
                             // Don't get lazy props for this function. ResourceName won't populate.
                             MgmtUtil.GetClassInstances(wmiConnection, "SMS_UserMachineRelationship", null, count, properties, whereCondition, orderBy, dryRun, verbose, false, true);
+                        }
+                    });
+                 
+                 var getResourceID = new Command("resource-id", "Get the resouceID for a username or device");
+                getCommand.Add(getResourceID);
+                getResourceID.Add(new Option<string>(new[] { "--user", "-u" }, "The UniqueUserName of the user to get a ResourceID for (e.g., --user CORP\\Labadmin)") { Arity = ArgumentArity.ExactlyOne });
+                getResourceID.Add(new Option<string>(new[] { "--device", "-d" }, "The name of the device to get the ResourceID for (e.g., --device WORKSTATION1)") { Arity = ArgumentArity.ExactlyOne });
+                getResourceID.Handler = CommandHandler.Create(
+                    (string managementPoint, string siteCode, string user, string device) =>
+                    {
+                        if (string.IsNullOrEmpty(user) && string.IsNullOrEmpty(device))
+                        {
+                            Console.WriteLine("[!] Please specify a UniqueUserName (-u) or a device Name (-d) to retrieve the ResourceID for");
+                        }
+                        else
+                        {
+                            ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(managementPoint, null, siteCode);
+                            if (wmiConnection != null && wmiConnection.IsConnected)
+                            {
+                                MgmtPointWmi.GetResourceIDForDeviceOrUser(wmiConnection, user, device);
+                            }
                         }
                     });
 
@@ -535,13 +557,86 @@ namespace SharpSCCM
                             MgmtUtil.GetClassInstances(wmiConnection, "SMS_R_User", null, count, properties, whereCondition, orderBy, dryRun, verbose, true, true);
                         }
                     });
-
+                 
                 // invoke
                 var invokeCommand = new Command("invoke", "A group of commands that execute actions on a management point");
                 invokeCommand.AddGlobalOption(new Option<string>(new[] { "--management-point", "-mp" }, "The IP address, FQDN, or NetBIOS name of the management point to connect to (default: the current management point of the client running SharpSCCM)"));
                 invokeCommand.AddGlobalOption(new Option<string>(new[] { "--site-code", "-sc" }, "The three character site code (e.g., \"PS1\") (default: the site code of the client running SharpSCCM)"));
                 rootCommand.Add(invokeCommand);
+                 
+                //invoke adminService
+                var invokeAdminService = new Command("admin-service", "Invoke an arbitrary CMPivot query against a collection of clients or a single client via AdminService\n" +
+                    "  Requirements:\n" +
+                    "    - Full Administrator\n" +
+                    "    - https://learn.microsoft.com/en-us/mem/configmgr/core/servers/manage/cmpivot#permissions\n" +
+                    "    Examples:\n" +
+                    "       - SharpSCCM_merged.exe invoke admin-service -q \"Device\" -r 16777211\n" +
+                    "       - SharpSCCM_merged.exe invoke admin-service -q \"OS | where (Version like '10%')\" -r 16777211\n" +
+                    "       - SharpSCCM_merged.exe invoke admin-service -q \"InstalledSoftware\" -r 16777211\n" +
+                    "       - SharpSCCM_merged.exe invoke admin-service -q \"EventLog('System') | order by DateTime desc\" -r 16777211\n" +
+                    "    Resources:\n" +
+                    "       - https://gist.github.com/merlinfrombelgium/008cca8576cf34814022c438b33a4562");
+                invokeCommand.Add(invokeAdminService);
+                invokeAdminService.AddOption(new Option<string>(new[] { "--query", "-q" }, "The query you want to execute against a collection of clients or single client (e.g., --query \"IPConfig\")") { Arity = ArgumentArity.ExactlyOne });
+                invokeAdminService.AddOption(new Option<string>(new[] { "--collection-id", "-i" }, "The collectionId to point the query to. (e.g., SMS00001 for all systems collection)") { Arity = ArgumentArity.ExactlyOne });
+                invokeAdminService.Add(new Option<string>(new[] { "--resource-id", "-r" }, "The unique ResourceID of the device to point the query to. Please see command \"get resourceId\" to retrieve the ResourceID for a user or device") { Arity = ArgumentArity.ExactlyOne });
+                invokeAdminService.Add(new Option<string>(new[] { "--delay", "-d" }, "Seconds between requests when checking for results from the API,(e.g., --delay 5) (default: requests are made every 5 seconds)"));
+                invokeAdminService.Add(new Option<string>(new[] { "--retries", "-re" }, "The total number of attempts to check for results from the API before a timeout is thrown.\n (e.g., --timeout 5) (default: 5 attempts will be made before a timeout"));
+                invokeAdminService.Add(new Option<bool>(new[] { "--json", "-j" }, "Get JSON output"));
+                invokeAdminService.Handler = CommandHandler.Create(
+                    async (string managementPoint, string siteCode, string query, string collectionId, string resourceId, string delay, string retries, bool json) =>
+                    {
 
+                        string[] delayTimeoutValues = new string[] { "5", "5" };
+
+                        
+
+                        if (delay != null)
+                        {
+                            if (delay.Length < 1 || !uint.TryParse(delay, out uint value) || value == 0)
+                            {
+                                Console.WriteLine("\r\n[!] Please check your syntax for the --delay parameter (e.g., --delay 5)\r\n[!] Leave blank for the default 5 seconds wait before each attempt to retrieve results");
+                                return;
+                            }
+                            else
+                            {
+                                delayTimeoutValues[0] = delay;
+                            }
+                        }
+                        if (retries != null)
+                        {
+                            if (retries.Length != 1 || !uint.TryParse(retries, out uint value) || retries == "0")
+                            {
+                                Console.WriteLine("\r\n[!] Please check your syntax for the --retries parameter (e.g., --retries 5)\r\n[!] Leave blank for a default of 5 retries before reaching a timeout");
+                                return;
+                            }
+                            else
+                            {
+                                delayTimeoutValues[1] = retries;
+                            }
+                        }
+                        if ((string.IsNullOrEmpty(query)) || (string.IsNullOrEmpty(collectionId) && string.IsNullOrEmpty(resourceId)))
+                        {
+                            Console.WriteLine("\r\n[!] Please specify a query (-q), and CollectionID (-i) or ResourceID (-r) to execute an AdminService query\r\n");
+                        }
+                        else if (!string.IsNullOrEmpty(collectionId) && !string.IsNullOrEmpty(resourceId))
+                        {
+                            Console.WriteLine("[!] Please specify either a CollectionID (-i) or a ResourceID (-r)");
+                        }
+
+                        //Adding default Management Point
+                        else
+                        { 
+                            if (managementPoint == null)
+                            {
+                                (managementPoint, _) = ClientWmi.GetCurrentManagementPointAndSiteCode();
+
+                            }
+                            
+                            await AdminService.Main(managementPoint, query, collectionId, resourceId, delayTimeoutValues, json);
+                        }
+                    });
+                 
                 // invoke client-push
                 var invokeClientPush = new Command("client-push", "Force the primary site server to authenticate to an arbitrary destination via NTLM using each configured account and its domain computer account\n" +
                     "  Requirements:\n" +
