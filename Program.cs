@@ -571,10 +571,9 @@ namespace SharpSCCM
                     "    - https://learn.microsoft.com/en-us/mem/configmgr/core/servers/manage/cmpivot#permissions\n" +
                     "    Examples:\n" +
                     "       - SharpSCCM_merged.exe invoke admin-service -q \"Device\" -r 16777211\n" +
-                    "       - SharpSCCM_merged.exe invoke admin-service -q \"Device\" -i SMS00001\n" +
                     "       - SharpSCCM_merged.exe invoke admin-service -q \"OS | where (Version like '10%')\" -r 16777211\n" +
                     "       - SharpSCCM_merged.exe invoke admin-service -q \"InstalledSoftware\" -r 16777211\n" +
-                    "       - SharpSCCM_merged.exe invoke admin-service -q \"EventLog('System') | order by DateTime desc\" -i SMS00001\n" +
+                    "       - SharpSCCM_merged.exe invoke admin-service -q \"EventLog('System') | order by DateTime desc\" -r 16777211\n" +
                     "    Resources:\n" +
                     "       - https://gist.github.com/merlinfrombelgium/008cca8576cf34814022c438b33a4562");
                 invokeCommand.Add(invokeAdminService);
