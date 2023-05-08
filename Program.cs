@@ -617,7 +617,7 @@ namespace SharpSCCM
                         }
                         if ((string.IsNullOrEmpty(query)) || (string.IsNullOrEmpty(collectionId) && string.IsNullOrEmpty(resourceId)))
                         {
-                            Console.WriteLine("\r\n[!] Please specify a query (-q), and CollectionID (-i) or ResourceID (-r) to execute an AdminService query\r\n");
+                            Console.WriteLine("\r\n[!] Please specify a query (-q), and CollectionID (-i) or ResourceID (-r) to execute an AdminService query or add -h for help\r\n");
                         }
                         else if (!string.IsNullOrEmpty(collectionId) && !string.IsNullOrEmpty(resourceId))
                         {
@@ -633,7 +633,7 @@ namespace SharpSCCM
 
                             }
                             
-                            await AdminService.Main(managementPoint, query, collectionId, resourceId, delayTimeoutValues, json);
+                            await AdminService.Main(managementPoint, siteCode, query, collectionId, resourceId, delayTimeoutValues, json);
                         }
                     });
                  
