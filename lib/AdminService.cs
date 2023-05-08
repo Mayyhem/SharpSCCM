@@ -90,7 +90,7 @@ namespace SharpSCCM
                     switch (response.StatusCode)
                     {
                         case HttpStatusCode.BadRequest:
-                            //Handle 400 Error
+                            //Handle 400 Error and fall back to SMS Provider method call to insure query is valid
                             query = !string.IsNullOrEmpty(query) ? Helpers.EscapeBackslashes(query) : null;
                             Console.WriteLine("[!] Received a 400 ('Bad request') response from the API. Falling back to SMS Provider method ");
                             var best = InitiateClientOperationExMethodCall(query, managementPoint, sitecode, collectionName, deviceId);
@@ -144,7 +144,6 @@ namespace SharpSCCM
                 return opId;
             }
 
-
             //Prepare result url based on target
             if (deviceId != null)
             {
@@ -189,8 +188,6 @@ namespace SharpSCCM
                 var reqBody = await response.Content.ReadAsStringAsync();
                 var jsonBody = reqBody.Replace("\\r\\n\\r\\n", Environment.NewLine);
                 var jsonObject = JsonConvert.DeserializeObject<JToken>(jsonBody);
-
-
 
                 if (json)
                 {
@@ -383,13 +380,13 @@ namespace SharpSCCM
                 }
                 else
                 {
-                    System.Diagnostics.Debug.WriteLine("[!] Method call failed with error code {0}.", returnValue);
+                    Console.WriteLine("[!] Method call failed with error code {0}.", returnValue);
                     return 0;
                 }
             }
             catch (ManagementException e)
             {
-                System.Diagnostics.Debug.WriteLine("[!] An error occurred while attempting to call the SMS Provider: " + e.Message);
+                Console.WriteLine("[!] An error occurred while attempting to call the SMS Provider: " + e.Message);
                 return 0;
             }
         }
