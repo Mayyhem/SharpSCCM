@@ -93,10 +93,10 @@ namespace SharpSCCM
                             //Handle 400 Error and fall back to SMS Provider method call to insure query is valid
                             query = !string.IsNullOrEmpty(query) ? Helpers.EscapeBackslashes(query) : null;
                             Console.WriteLine("[!] Received a 400 ('Bad request') response from the API. Falling back to SMS Provider method ");
-                            var best = InitiateClientOperationExMethodCall(query, managementPoint, sitecode, collectionName, deviceId);
-                            if (best != 0)
+                            var SMS_OperationId = InitiateClientOperationExMethodCall(query, managementPoint, sitecode, collectionName, deviceId);
+                            if (SMS_OperationId != 0)
                             {
-                                return best.ToString();
+                                return SMS_OperationId.ToString();
                             }
                             fail = $"[!] The call to SMS Provider method failed. Please make sure your query has the correct syntax. Example --query \"OS | where (OSArchitecture == '64-bit')\"";
                             break;
