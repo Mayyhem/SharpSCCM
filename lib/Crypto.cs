@@ -196,5 +196,71 @@ namespace SharpSCCM
 
             return plaintext;
         }
+
+
+        // Based on https://github.com/Mayyhem/SharpSCCM/blob/main/DeobfuscateSecretString/DeobfuscateSecretString.cpp
+        // Ported to C#
+        public static bool DecryptDESBuffer(byte[] key, DESEncGarbledDataTHeaderInfo header, byte[] encryptedData, out byte[] plainData)
+        {
+            bool bSuccess = false;
+            IntPtr hProv = IntPtr.Zero;
+            IntPtr hHash = IntPtr.Zero;
+            IntPtr hKey = IntPtr.Zero;
+            plainData = new byte[0];
+            try
+            {
+                const int PROV_RSA_AES = 24; // https://learn.microsoft.com/en-us/windows/win32/seccrypto/prov-rsa-aes
+                const uint CRYPT_VERIFYCONTEXT = 0xF0000000; // https://learn.microsoft.com/en-us/windows/win32/api/wincrypt/nf-wincrypt-cryptacquirecontexta
+                //public const int CALG_SHA = 32772;
+                if (Interop.CryptAcquireContext(out hProv, null, null, PROV_RSA_AES, CRYPT_VERIFYCONTEXT))
+                {
+                    if (Interop.CryptCreateHash(hProv, (uint)Interop.CryptAlg.CALG_SHA, IntPtr.Zero, 0, out hHash))
+                    {
+                        if (Interop.CryptHashData(hHash, key, (uint)key.Length, 0))
+                        {
+                            // In our testing header.nAlgorithm was CALG_3DES (e.g. 0x6603)
+                            if (Interop.CryptDeriveKey(hProv, (uint)header.nAlgorithm, hHash, (uint)header.nFlag, out hKey))
+                            {
+                                IntPtr pData = System.Runtime.InteropServices.Marshal.AllocHGlobal(encryptedData.Length);
+                                //IntPtr ptrPlainData = Marshal.AllocHGlobal(100000);
+                                System.Runtime.InteropServices.Marshal.Copy(encryptedData, 0, pData, encryptedData.Length);
+                                uint dwDecryptedLen = (uint)header.nPlainSize;
+                                plainData = new byte[dwDecryptedLen];
+                                if (Interop.CryptDecrypt(hKey, IntPtr.Zero, true, 0, pData, ref dwDecryptedLen))
+                                {
+                                    System.Runtime.InteropServices.Marshal.Copy(pData, plainData, 0, (int)dwDecryptedLen);
+                                    bSuccess = true;
+                                }
+                                Interop.CryptDestroyKey(hKey);
+                                System.Runtime.InteropServices.Marshal.FreeHGlobal(pData);
+                            }
+                        }
+                        Interop.CryptDestroyHash(hHash);
+                    }
+                    Interop.CryptReleaseContext(hProv, 0);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Handle any exceptions here
+            }
+            finally
+            {
+                if (hKey != IntPtr.Zero)
+                {
+                    Interop.CryptDestroyKey(hKey);
+                }
+                if (hHash != IntPtr.Zero)
+                {
+                    Interop.CryptDestroyHash(hHash);
+                }
+                if (hProv != IntPtr.Zero)
+                {
+                    Interop.CryptReleaseContext(hProv, 0);
+                }
+            }
+
+            return bSuccess;
+        }
     }
 }

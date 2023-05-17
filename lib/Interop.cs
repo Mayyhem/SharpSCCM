@@ -2,6 +2,37 @@
 using System.Runtime.InteropServices;
 using System.Text;
 
+
+// Based on: https://github.com/Mayyhem/SharpSCCM/blob/main/DeobfuscateSecretString/DeobfuscateSecretString.cpp
+// Ported to C#
+[StructLayout(LayoutKind.Sequential)]
+public struct DESEncGarbledData
+{
+    [MarshalAs(UnmanagedType.U4, SizeConst = 4)]
+    public uint dwVersion;
+    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 40)]
+    public byte[] key;
+    [MarshalAs(UnmanagedType.Struct, SizeConst = 20)]
+    public DESEncGarbledDataTHeaderInfo header;
+    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 1)]
+    public byte[] pData;
+};
+
+[StructLayout(LayoutKind.Sequential, Size = 20)]
+public struct DESEncGarbledDataTHeaderInfo
+{
+    [MarshalAs(UnmanagedType.U4)]
+    public uint nHeaderLength;
+    [MarshalAs(UnmanagedType.U4)]
+    public uint nEncryptedSize;
+    [MarshalAs(UnmanagedType.U4)]
+    public uint nPlainSize;
+    [MarshalAs(UnmanagedType.U4)]
+    public uint nAlgorithm;
+    [MarshalAs(UnmanagedType.U4)]
+    public uint nFlag;
+}
+
 namespace SharpSCCM
 {
     public class Interop
@@ -242,5 +273,61 @@ namespace SharpSCCM
         public static extern int RegCloseKey(
             IntPtr hKey
         );
+
+
+        [DllImport("advapi32.dll", SetLastError = true)]
+        public static extern bool CryptAcquireContext(out IntPtr hProv, string container, string provider, uint providerType, uint flags);
+        [DllImport("advapi32.dll", SetLastError = true)]
+        public static extern bool CryptCreateHash(IntPtr hProv, uint algId, IntPtr hKey, uint dwFlags, out IntPtr phHash);
+        [DllImport("advapi32.dll", SetLastError = true)]
+        public static extern bool CryptHashData(IntPtr hHash, byte[] pbData, uint dataLen, uint flags);
+        [DllImport("advapi32.dll", SetLastError = true)]
+        public static extern bool CryptDeriveKey(IntPtr hProv, uint algId, IntPtr hHash, uint flags, out IntPtr phKey);
+        [DllImport("advapi32.dll", SetLastError = true)]
+        public static extern bool CryptDecrypt(IntPtr hKey, IntPtr hHash, bool final, uint flags, IntPtr pbData, ref uint pdwDataLen);
+        [DllImport("advapi32.dll", SetLastError = true)]
+        public static extern bool CryptDestroyKey(IntPtr hKey);
+        [DllImport("advapi32.dll", SetLastError = true)]
+        public static extern bool CryptDestroyHash(IntPtr hHash);
+        [DllImport("advapi32.dll", SetLastError = true)]
+        public static extern bool CryptReleaseContext(IntPtr hProv, uint flags);
+
+        [DllImport("crypt32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool CryptStringToBinaryW(
+            [MarshalAs(UnmanagedType.LPWStr)] string pszString,
+            int cchString,
+            CryptStringToBinaryFlags dwFlags,
+            [Out] byte[] pbBinary,
+            out int pcbBinary,
+            IntPtr pdwSkip,
+            IntPtr pdwFlags
+        );
+
+        [Flags]
+        public enum CryptStringToBinaryFlags
+        {
+            None = 0x00000000,
+            Base64Header = 0x00000000,
+            Base64 = 0x00000001,
+            Binary = 0x00000002,
+            Base64RequestHeader = 0x00000003,
+            Hex = 0x00000004,
+            HexAddr = 0x00000008,
+            NoCRLF = 0x00000010,
+            Base64Any = 0x00000020,
+            Any = 0x00000030,
+            HexAny = 0x00000040,
+            Base64X509CrlHeader = 0x00000050,
+            HexX509CrlHeader = 0x00000060,
+            Base64X509CertHeader = 0x00000070,
+            HexX509CertHeader = 0x00000080,
+            HexAscii = 0x00000200,
+            Base64Unicode = 0x00000400,
+            Base64Url = 0x00001000,
+            Base64UrlNoPadding = 0x00002000,
+            NoTrailing = 0x00004000
+        }
+
     }
 }
