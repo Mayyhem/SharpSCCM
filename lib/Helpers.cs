@@ -57,7 +57,7 @@ namespace SharpSCCM
             {
                 theString = theString.Replace(@"\", @"\\");
             }
-            return theString; 
+            return theString;
         }
 
         static bool IsEmptyLocate<T>(T[] array, T[] candidate)
@@ -313,6 +313,109 @@ namespace SharpSCCM
             Interop.RegCloseKey(hKey);
 
             return data;
+        }
+
+        public static void DecompressXMLNodes(System.Xml.XmlNode xmlNode)
+        {
+            System.Xml.XmlNodeList compressionNodesList = xmlNode.SelectNodes("*[@Compression]");
+            if (compressionNodesList != null)
+            {
+                foreach (System.Xml.XmlNode compressionNode in compressionNodesList)
+                {
+                    if (compressionNode.Attributes["Compression"].Value == "zlib")
+                    {
+                        string compressedData = compressionNode.InnerText;
+                        byte[] compressedDataBytes = Helpers.StringToByteArray(compressedData);
+                        byte[] decompressedBytes;
+                        using (MemoryStream outputStream = new MemoryStream())
+                        {
+                            using (MemoryStream inputStream = new MemoryStream(compressedDataBytes))
+                            {
+                                using (var decompressionStream = new System.IO.Compression.GZipStream(inputStream, System.IO.Compression.CompressionMode.Decompress))
+                                {
+                                    decompressionStream.CopyTo(outputStream);
+                                }
+                            }
+                            decompressedBytes = outputStream.ToArray();
+                        }
+                        string szDecompressedStr = "";
+
+                        //bool isUnicode = Helpers.IsUnicode(decompressedBytes);
+                        if (decompressedBytes[0] == 0xFF && decompressedBytes[1] == 0xFE)
+                        {
+                            byte[] decompressedXMLBytes = new byte[decompressedBytes.Length - 2];
+                            Array.Copy(decompressedBytes, 2, decompressedXMLBytes, 0, decompressedBytes.Length - 2);
+                            szDecompressedStr = System.Text.Encoding.Unicode.GetString(decompressedXMLBytes);
+                        }
+                        // Update node content
+                        if (szDecompressedStr.Length > 0)
+                        {
+                            // remove "\r", "\n", "\t", etc.
+                            string szCleanedXmlStr = new string(szDecompressedStr.Where(c => !char.IsControl(c)).ToArray());
+                            compressionNode.InnerXml = szCleanedXmlStr;
+                            // Recursive decompress
+                            foreach (System.Xml.XmlNode childNode in compressionNode.ChildNodes)
+                            {
+                                Helpers.DecompressXMLNodes(childNode);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        public static bool DecryptDESSecret(string szEncData, out string szDecData)
+        {
+            bool bSuccess = false;
+            int iEncBytesSize;
+            byte[] abyEncBytes;
+            szDecData = "";
+            try
+            {
+                // Convert string to byte array
+                Interop.CryptStringToBinaryW(szEncData, szEncData.Length, Interop.CryptStringToBinaryFlags.Hex, null, out iEncBytesSize, IntPtr.Zero, IntPtr.Zero);
+                abyEncBytes = new byte[iEncBytesSize];
+                Interop.CryptStringToBinaryW(szEncData, szEncData.Length, Interop.CryptStringToBinaryFlags.Hex, abyEncBytes, out iEncBytesSize, IntPtr.Zero, IntPtr.Zero);
+
+                // This would also work, but the interop might be safer
+                //byte[] abyEncBytes = Helper.StringToByteArray(szEncData);
+            }
+            catch (Exception ex)
+            {
+                // catch exception
+                return false;
+            }
+
+
+            IntPtr pGarbledPtr = Marshal.AllocHGlobal(iEncBytesSize);
+            byte[] abyDecData;
+            try
+            {
+                // Copy the memory buffer to pGarbledPtr and marshal
+                Marshal.Copy(abyEncBytes, 0, pGarbledPtr, abyEncBytes.Length);
+                DESEncGarbledData garbledData = Marshal.PtrToStructure<DESEncGarbledData>(pGarbledPtr);
+
+                // Workaround to solve marshalling of unknown size array
+                // iSizeOfGarbledData= iSizeOfGarbledData - sizeOf(GarbledData.dwVersion) - sizeOf(GarbledData.key) - sizeOf(GarbledData.THeaderInfo)
+                int iPDataOffset = 4 + 40 + 20;
+                byte[] pDataArray = new byte[iEncBytesSize - iPDataOffset];
+                Array.Copy(abyEncBytes, iPDataOffset, pDataArray, 0, pDataArray.Length);
+                garbledData.pData = pDataArray;
+
+                // decrypt
+                bool decryptSucc = Crypto.DecryptDESBuffer(garbledData.key, garbledData.header, garbledData.pData, out abyDecData);
+                if (decryptSucc)
+                {
+                    szDecData = System.Text.Encoding.Unicode.GetString(abyDecData).Trim();
+                    bSuccess = true;
+                }
+            }
+            finally
+            {
+                // Free the allocated memory
+                Marshal.FreeHGlobal(pGarbledPtr);
+            }
+            return bSuccess;
         }
     }
 }

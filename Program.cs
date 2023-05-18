@@ -447,21 +447,25 @@ namespace SharpSCCM
 
                 // get secrets
                 var getSecretsFromPolicy = new Command("secrets", "Request the machine policy from a management point via HTTP to obtain credentials for network access accounts, collection variables, and task sequences\n" +
-                    "  Requirements:\n" +
+                   "  Requirements:\n" +
                     "    - Domain computer account credentials\n" +
                     "        OR\n" +
-                    "    - Local Administrators group membership on a client");
+                    "    - Local Administrators group membership on a client\n" +
+                    "        OR\n" +
+                    "    - PXE certificate and media GUID (use -c and -m)");
                 // get naa alias for backward compatibility
                 getSecretsFromPolicy.AddAlias("naa");
                 getCommand.Add(getSecretsFromPolicy);
                 getSecretsFromPolicy.Add(new Option<string>(new[] { "--certificate", "-c" }, "The encoded X509 certificate blob to use that corresponds to a previously registered device"));
                 getSecretsFromPolicy.Add(new Option<string>(new[] { "--client-id", "-i" }, "The SMS client GUID to use that corresponds to a previously registered device and certificate"));
+                getSecretsFromPolicy.Add(new Option<string>(new[] { "--media-id", "-m" }, "The media GUID that corresponds to a specific package (e.g. PXE images), which is used decrypt the provided certificate and to sign policy requests"));
                 getSecretsFromPolicy.Add(new Option<string>(new[] { "--output-file", "-o" }, "The path where the policy XML will be written to"));
                 getSecretsFromPolicy.Add(new Option<string>(new[] { "--password", "-p" }, "The password for the specified computer account"));
                 getSecretsFromPolicy.Add(new Option<string>(new[] { "--register-client", "-r" }, "The name of the device to register as a new client (required when user is not a local administrator)"));
                 getSecretsFromPolicy.Add(new Option<string>(new[] { "--username", "-u" }, "The name of the computer account to register the new device record with, including the trailing \"$\""));
+
                 getSecretsFromPolicy.Handler = CommandHandler.Create(
-                    (string managementPoint, string siteCode, string certificate, string clientId, string outputFile, string password, string registerClient, string username) =>
+                    (string managementPoint, string siteCode, string certificate, string clientId, string mediaId, string outputFile, string password, string registerClient, string username) =>
                     {
                         if (managementPoint == null || siteCode == null)
                         {
@@ -469,9 +473,14 @@ namespace SharpSCCM
                         }
                         if (!string.IsNullOrEmpty(managementPoint) && !string.IsNullOrEmpty(siteCode))
                         {
-                            if (!string.IsNullOrEmpty(certificate) && !string.IsNullOrEmpty(clientId))
+                            if (!string.IsNullOrEmpty(certificate) && !string.IsNullOrEmpty(mediaId))
                             {
-                                MgmtPointMessaging.GetSecretsFromPolicy(managementPoint, siteCode, certificate, clientId, null, null, null, outputFile);
+                                string szHTTPProxyAddress = null;
+                                MgmtPointMessaging.SendPolicyAssignmentRequestWithExplicitData(clientId, mediaId, certificate, managementPoint, siteCode, szHTTPProxyAddress);
+                            }
+                            else if (!string.IsNullOrEmpty(certificate) && !string.IsNullOrEmpty(clientId))
+                            {
+                                MgmtPointMessaging.GetSecretsFromPolicies(managementPoint, siteCode, certificate, clientId, null, null, null, outputFile);
                             }
                             else if (!string.IsNullOrEmpty(certificate) && string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(certificate) && !string.IsNullOrEmpty(clientId))
                             {
@@ -479,7 +488,7 @@ namespace SharpSCCM
                             }
                             else if (!string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(password) && !string.IsNullOrEmpty(registerClient))
                             {
-                                MgmtPointMessaging.GetSecretsFromPolicy(managementPoint, siteCode, null, null, username, password, registerClient, outputFile);
+                                MgmtPointMessaging.GetSecretsFromPolicies(managementPoint, siteCode, null, null, username, password, registerClient, outputFile);
                             }
                             else if (!string.IsNullOrEmpty(registerClient) && (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password)))
                             {
@@ -487,7 +496,7 @@ namespace SharpSCCM
                             }
                             else if (Helpers.IsHighIntegrity())
                             {
-                                MgmtPointMessaging.GetSecretsFromPolicy(managementPoint, siteCode, certificate, clientId, username, password, registerClient, outputFile);
+                                MgmtPointMessaging.GetSecretsFromPolicies(managementPoint, siteCode, certificate, clientId, username, password, registerClient, outputFile);
                             }
                             else
                             {

