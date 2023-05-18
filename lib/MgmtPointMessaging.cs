@@ -521,7 +521,7 @@ namespace SharpSCCM
             }
             HttpClient httpClient = new HttpClient(httpClientHandler);
             //
-            // Preapre Arguments
+            // Prepare Arguments
             //
             if (machineGUID == null)
             {
@@ -609,7 +609,7 @@ namespace SharpSCCM
             httpClient.DefaultRequestHeaders.Add("User-Agent", "ConfigMgr Messaging HTTP Sender");
             httpClient.DefaultRequestHeaders.ExpectContinue = false;
 
-            var requestNew = new HttpRequestMessage(new HttpMethod("CCM_POST"), "http://sa-sccm-1.safealliance.local/ccm_system/request");
+            var requestNew = new HttpRequestMessage(new HttpMethod("CCM_POST"), $"http://{szMPHostname}/ccm_system/request");
 
             // Set the content type header
             System.Net.Http.Headers.MediaTypeHeaderValue contentType = new System.Net.Http.Headers.MediaTypeHeaderValue("multipart/mixed");
@@ -701,7 +701,7 @@ namespace SharpSCCM
             {
                 if (assignmentResponse.Content.Headers.ContentLength == 0)
                 {
-                    Console.WriteLine("[-] Empty server response This usually means the ClientID or signature is invalid (invalid/wrong certificate).");
+                    Console.WriteLine("[-] Empty server response. This usually means the ClientID or signature is invalid (invalid/wrong certificate).");
                     return;
                 }
                 XmlNodeList policyAssignmentNodeList = null;
@@ -715,7 +715,7 @@ namespace SharpSCCM
                     XmlDocument policyAssignmentsXmlDoc = new XmlDocument();
                     policyAssignmentsXmlDoc.LoadXml(multiPart1StrContents.Trim());
                     policyAssignmentNodeList = policyAssignmentsXmlDoc.GetElementsByTagName("PolicyAssignment");
-                    Console.WriteLine($"[+] Found '{policyAssignmentNodeList.Count}' PolicyAssignment!");
+                    Console.WriteLine($"[+] Found {policyAssignmentNodeList.Count} Policy Assignments!");
 
                 }
                 catch (Exception ex)
@@ -728,9 +728,9 @@ namespace SharpSCCM
                 }
                 if (policyAssignmentNodeList != null)
                 {
-                    foreach (XmlNode polcyAssignmentNode in policyAssignmentNodeList)
+                    foreach (XmlNode policyAssignmentNode in policyAssignmentNodeList)
                     {
-                        XmlNodeList policyNodeList = polcyAssignmentNode.SelectNodes("Policy");
+                        XmlNodeList policyNodeList = policyAssignmentNode.SelectNodes("Policy");
                         foreach (XmlNode policyNode in policyNodeList)
                         {
                             //XmlAttributeCollection nodeAttributes = policyNode.Attributes;
