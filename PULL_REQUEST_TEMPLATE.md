@@ -10,14 +10,14 @@ Please summarize the change, which issue is fixed, and any dependencies required
 
 ### Testing
 
-Please describe the tests that you ran to verify your changes and confirm that no regressions were introduced and describe the results you observed. Provide instructions so we can reproduce and list any relevant details for your test configuration.
+Please describe the tests that you ran using the ILMerged binary (SharpSCCM_merged.exe)to verify your changes and confirm that no regressions were introduced and describe the results you observed. Provide instructions so we can reproduce and list any relevant details for your test configuration.
 
 - Test A
 - Test B
 
 **Test Configuration**:
 * SCCM Site Version (result of`.\SharpSCCM.exe get class-instances SMS_Site -p Version`):
-* SCCM Client Version (result of `.\SharpSCCM_merged.exe local class-instances SMS_Client`):
+* SCCM Client Version (result of `.\SharpSCCM.exe local class-instances SMS_Client`):
 
 ### Bonus Points:
 

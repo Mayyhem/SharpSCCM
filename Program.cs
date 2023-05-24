@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.IO.Ports;
 using System.Linq;
 using System.Management;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
@@ -37,15 +38,19 @@ namespace SharpSCCM
             // Command line options
             try
             {
-                Console.WriteLine();
-                Console.WriteLine("  _______ _     _ _______  ______  _____  _______ _______ _______ _______");
-                Console.WriteLine("  |______ |_____| |_____| |_____/ |_____] |______ |       |       |  |  |");
-                Console.WriteLine("  ______| |     | |     | |    \\_ |       ______| |______ |______ |  |  |");
+                if (!args.Contains("--no-banner"))
+                {
+                    Console.WriteLine();
+                    Console.WriteLine("  _______ _     _ _______  ______  _____  _______ _______ _______ _______");
+                    Console.WriteLine($"  |______ |_____| |_____| |_____/ |_____] |______ |       |       |  |  |    v{Assembly.GetEntryAssembly().GetName().Version}");
+                    Console.WriteLine("  ______| |     | |     | |    \\_ |       ______| |______ |______ |  |  |    @_Mayyhem ");
+                }
                 Console.WriteLine();
 
                 // Gather required arguments
                 var rootCommand = new RootCommand("A C# utility for interacting with SCCM (now Microsoft Endpoint Configuration Manager) by Chris Thompson (@_Mayyhem)");
                 rootCommand.AddGlobalOption(new Option<bool>("--debug", "Print debug messages for troubleshooting"));
+                rootCommand.AddGlobalOption(new Option<bool>(new[] { "--no-banner" }, "Do not display banner in command output"));
 
                 //
                 // Subcommands
@@ -424,7 +429,7 @@ namespace SharpSCCM
                         }
                     });
                  
-                 var getResourceID = new Command("resource-id", "Get the resouceID for a username or device");
+                var getResourceID = new Command("resource-id", "Get the resouceID for a username or device");
                 getCommand.Add(getResourceID);
                 getResourceID.Add(new Option<string>(new[] { "--user", "-u" }, "The UniqueUserName of the user to get a ResourceID for (e.g., --user CORP\\Labadmin)") { Arity = ArgumentArity.ExactlyOne });
                 getResourceID.Add(new Option<string>(new[] { "--device", "-d" }, "The name of the device to get the ResourceID for (e.g., --device WORKSTATION1)") { Arity = ArgumentArity.ExactlyOne });
@@ -502,6 +507,22 @@ namespace SharpSCCM
                             {
                                 Console.WriteLine("[!] A client name to register (-r), computer account name (-u), and computer account password (-p) must be specified when the user is not a local administrator");
                             }
+                        }
+                    });
+
+                var getSiteInfo = new Command("site-info", "Get information about the site, including the site server name, from a domain controller via LDAP");
+                getCommand.Add(getSiteInfo);
+                getSiteInfo.Add(new Option<string>(new[] { "--domain", "-d" }, "The FQDN of the Active Directory domain to get information from (e.g., \"aperture.local\")"));
+                getSiteInfo.Handler = CommandHandler.Create(
+                    (string domain) =>
+                    {
+                        if (string.IsNullOrEmpty(domain))
+                        {
+                            Console.WriteLine("[!] Please specify a domain (-d) to retrieve information from");
+                        }
+                        else
+                        {
+                            LDAP.GetSiteServersFromAD(domain);
                         }
                     });
 

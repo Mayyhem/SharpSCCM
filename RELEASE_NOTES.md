@@ -1,5 +1,14 @@
 # SharpSCCM Release Notes
 
+### Version 2.0.1 (May 24, 2023)
+##### New Commands
+- invoke admin-service (CMPivot queries)
+- get site-info (retrieve site server names via LDAP)
+##### Additions
+- Added inline decryption of secrets
+- Added secret retrieval using PXE cert and GUID
+- Added --no-banner option
+
 ### Version 2.0.0 (February 17, 2023)
 ##### New Commands
 - exec (deploy to user primary devices and collections, PowerShell examples)
