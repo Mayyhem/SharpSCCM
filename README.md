@@ -1,3 +1,6 @@
+[![Sponsored by SpecterOps](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fspecterops%2F.github%2Fmain%2Fconfig%2Fshield.json)](https://github.com/specterops#SharpSCCM)
+[![Black Hat USA Arsenal](https://img.shields.io/badge/Black%20Hat%20USA%20Arsenal-2022-brightgreen?style=plastic)](https://www.blackhat.com/us-22/arsenal/schedule/#sharpsccm-27886)
+
 # Tool Overview
 SharpSCCM is a post-exploitation tool designed to leverage Microsoft Endpoint Configuration Manager (a.k.a. ConfigMgr, formerly SCCM) for lateral movement and credential gathering without requiring access to the SCCM administration console GUI. 
 
