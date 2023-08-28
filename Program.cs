@@ -42,7 +42,7 @@ namespace SharpSCCM
                 {
                     Console.WriteLine();
                     Console.WriteLine("  _______ _     _ _______  ______  _____  _______ _______ _______ _______");
-                    Console.WriteLine($"  |______ |_____| |_____| |_____/ |_____] |______ |       |       |  |  |    v{Assembly.GetEntryAssembly().GetName().Version}");
+                    Console.WriteLine("  |______ |_____| |_____| |_____/ |_____] |______ |       |       |  |  |");
                     Console.WriteLine("  ______| |     | |     | |    \\_ |       ______| |______ |______ |  |  |    @_Mayyhem ");
                 }
                 Console.WriteLine();
