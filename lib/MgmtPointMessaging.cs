@@ -68,9 +68,9 @@ namespace SharpSCCM
                 string decryptedPolicyBody = Encoding.ASCII.GetString(pkcs7EnvelopedCms.ContentInfo.Content).Replace("\0", string.Empty);
                 return decryptedPolicyBody;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                Console.WriteLine("[!] Could not decrypt the secret policy");
+                Console.WriteLine($"[!] An exception occurred while trying to decrypt policy response: {ex.Message}");
                 return null;
             }
         }
@@ -202,9 +202,9 @@ namespace SharpSCCM
                     byte[] policyDownloadResponseBytes = await policyDownloadResponse.Content.ReadAsByteArrayAsync();
                     Console.WriteLine($"[+] Received encoded response from server for policy {policyAssignment.Policy.Id}");
                 }
-                catch
+                catch (Exception ex)
                 {
-                    Console.WriteLine($"      Failed to download :/");
+                    Console.WriteLine($"[!] An exception occurred while trying to download policy: {ex.Message}");
                     return;
                 }
                 if (policyDownloadResponse != null)
@@ -214,9 +214,9 @@ namespace SharpSCCM
                     {
                         decryptedPolicyBody = DecryptPolicyBody(policyDownloadResponseBytes, encryptionCertificate);
                     }
-                    catch
+                    catch (Exception ex)
                     {
-                        Console.WriteLine($"[-] Error while trying to decrypt policy response :/...");
+                        Console.WriteLine($"[!] An exception occurred while trying to decrypt policy response: {ex.Message}");
                     }
                 }
                 if (decryptedPolicyBody != null)
