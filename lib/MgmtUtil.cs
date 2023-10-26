@@ -143,7 +143,7 @@ namespace SharpSCCM
                     // siteCode should now be populated
                     if (!string.IsNullOrEmpty(siteCode))
                     {
-                        Console.WriteLine($"[+] Using provided management point: {server}");
+                        Console.WriteLine($"[+] Using WMI provider: {server}");
                     }
                 }
                 // server and sitecode should now be populated unless there are errors querying the local WMI repository
@@ -211,7 +211,7 @@ namespace SharpSCCM
                 {
                     Console.WriteLine(
                         "[!] The SCCM client may not be installed on this machine\n" +
-                        "[!] Try specifying a management point (-mp) and site code (-sc)"
+                        "[!] Try specifying an SMS Provider (-sms) and site code (-sc)"
                         );
                 }
             }
