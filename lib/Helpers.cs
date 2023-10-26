@@ -380,7 +380,7 @@ namespace SharpSCCM
                 // This would also work, but the interop might be safer
                 //byte[] abyEncBytes = Helper.StringToByteArray(szEncData);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 // catch exception
                 return false;

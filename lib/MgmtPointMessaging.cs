@@ -7,7 +7,6 @@ using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Xml;
-using System.Runtime.InteropServices;
 
 // Configuration Manager SDK
 using Microsoft.ConfigurationManagement.Messaging.Framework;
@@ -160,7 +159,7 @@ namespace SharpSCCM
             return (signingCertificate, encryptionCertificate, clientId);
         }
 
-        public static async void GetSecretsFromPolicies(string managementPoint, string siteCode, string encodedCertificate = null, string providedClientId = null, string username = null, string password = null, string registerClient = null, string outputPath = null)
+        public static void GetSecretsFromPolicies(string managementPoint, string siteCode, string encodedCertificate = null, string providedClientId = null, string username = null, string password = null, string registerClient = null, string outputPath = null)
         {
             // Thanks to Adam Chester(@_xpn_) for figuring this out! https://blog.xpnsec.com/unobfuscating-network-access-accounts/
             // Register a new client using NTLM authentication for the specified machine account to automatically approve the new device record, allowing secret policy retrieval
@@ -718,7 +717,7 @@ namespace SharpSCCM
                     Console.WriteLine($"[+] Found {policyAssignmentNodeList.Count} Policy Assignments!");
 
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     string response = $"{assignmentResponse.Headers}\n\n{assignmentResponse.Content.ReadAsStringAsync().Result}";
                     Console.WriteLine("[-] Reply does not contain Policy Assignments. Received the following:");
