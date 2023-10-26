@@ -1,19 +1,17 @@
-using System;
-using System.Text;
-using System.IO;
-using System.Net;
-using System.Linq;
-using System.Net.Http;
-using System.Net.Security;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using System.Threading.Tasks;
-using System.Collections.Generic;
-using System.Security.Cryptography;
-using System.Text.RegularExpressions;
-using System.Security.Cryptography.X509Certificates;
-using Microsoft.ConfigurationManagement.Messaging.StatusMessages;
+using System;
+using System.IO;
+using System.Linq;
 using System.Management;
+using System.Net;
+using System.Net.Http;
+using System.Net.Security;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 
 namespace SharpSCCM
 {

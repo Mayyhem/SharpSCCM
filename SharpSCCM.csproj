@@ -132,7 +132,7 @@
     <Compile Include="lib\LDAP.cs" />
     <Compile Include="lib\LSADump.cs" />
     <Compile Include="lib\MgmtPointMessaging.cs" />
-    <Compile Include="lib\MgmtPointWmi.cs" />
+    <Compile Include="lib\SmsProviderWmi.cs" />
     <Compile Include="lib\MgmtUtil.cs" />
     <Compile Include="lib\Credentials.cs" />
     <Compile Include="lib\Helpers.cs" />
@@ -164,9 +164,12 @@
     <PropertyGroup>
       <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
     </PropertyGroup>
+    <Error Condition="!Exists('packages\dnMerge.0.5.15\build\dnMerge.targets')" Text="$([System.String]::Format('$(ErrorText)', 'packages\dnMerge.0.5.15\build\dnMerge.targets'))" />
     <Error Condition="!Exists('packages\ILMerge.3.0.41\build\ILMerge.props')" Text="$([System.String]::Format('$(ErrorText)', 'packages\ILMerge.3.0.41\build\ILMerge.props'))" />
   </Target>
   <PropertyGroup>
-    <PostBuildEvent>$(ProjectDir)packages\ILMerge.3.0.41\tools\net452\ILMerge.exe $(TargetPath) $(TargetDir)System.CommandLine.dll $(TargetDir)System.CommandLine.NamingConventionBinder.dll $(TargetDir)System.Runtime.CompilerServices.Unsafe.dll $(TargetDir)System.Memory.dll $(TargetDir)Microsoft.ConfigurationManagement.Messaging.dll $(TargetDir)Microsoft.ConfigurationManagement.Security.Cryptography.dll $(TargetDir)Newtonsoft.Json.dll $(TargetDir)System.Net.Http.Formatting.dll /out:$(TargetDir)SharpSCCM_merged.exe</PostBuildEvent>
+    <PostBuildEvent>if $(ConfigurationName) == Debug $(ProjectDir)packages\ILMerge.3.0.41\tools\net452\ILMerge.exe $(TargetPath) $(TargetDir)System.CommandLine.dll $(TargetDir)System.CommandLine.NamingConventionBinder.dll $(TargetDir)System.Runtime.CompilerServices.Unsafe.dll $(TargetDir)System.Memory.dll $(TargetDir)Microsoft.ConfigurationManagement.Messaging.dll $(TargetDir)Microsoft.ConfigurationManagement.Security.Cryptography.dll $(TargetDir)Newtonsoft.Json.dll $(TargetDir)System.Net.Http.Formatting.dll /out:$(TargetDir)SharpSCCM_merged.exe
+if $(ConfigurationName) == Debug copy $(TargetDir)SharpSCCM_merged.exe \\192.168.57.101\Users\cthompson\git\SharpSCCM\bin\x64\Debug\SharpSCCM.exe</PostBuildEvent>
   </PropertyGroup>
+  <Import Project="packages\dnMerge.0.5.15\build\dnMerge.targets" Condition="Exists('packages\dnMerge.0.5.15\build\dnMerge.targets')" />
 </Project>

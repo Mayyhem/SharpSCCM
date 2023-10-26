@@ -72,10 +72,6 @@ namespace SharpSCCM
             }
         }
 
-        public static void InvokeLastLogonUpdate(ManagementScope wmiConnection, string collectionName)
-        {
-            // TODO
-        }
         public static void GenerateCCR(string target, string server = null, string siteCode = null)
         {
             ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);

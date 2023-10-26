@@ -17,14 +17,6 @@ namespace SharpSCCM
 {
     static class MgmtPointMessaging
     {
-        static MessageCertificateX509 CreateCertificate()
-        {
-            // Generate certificate for signing and encrypting messages
-            string[] oidPurposes = new string[] { "2.5.29.37" }; // Any extended key usage
-            MessageCertificateX509 certificate = MessageCertificateX509.CreateSelfSignedCertificate("ConfigMgr Client Signing and Encryption", "ConfigMgr Client Signing and Encryption", oidPurposes, DateTime.Now, DateTime.Now.AddMonths(6));
-            return certificate;
-        }
-
         public static MessageCertificateX509Volatile CreateUserCertificate(string subjectName = null, bool store = false)
         {
             // Generate certificate for signing and encrypting messages
@@ -80,11 +72,6 @@ namespace SharpSCCM
             x509Store.Open(OpenFlags.MaxAllowed);
             x509Store.Remove(certificate.X509Certificate);
             Console.WriteLine($"[+] Deleted the \"{certificate.X509Certificate.SubjectName.Name}\" certificate from {x509Store.Name} store for {x509Store.Location}");
-        }
-
-        public static void GetAvailablePackages(string managementPoint = null, string siteCode = null)
-        {
-
         }
 
         public static (MessageCertificateX509, MessageCertificateX509, SmsClientId) GetCertsAndClientId(string managementPoint = null, string siteCode = null, string encodedCertificate = null, string providedClientId = null, string username = null, string password = null, string registerClient = null, string encodedCertPassword = null)

@@ -997,17 +997,6 @@ namespace SharpSCCM
                 newCommand.AddGlobalOption(new Option<string>(new[] { "--site-code", "-sc" }, "The three character site code (e.g., \"PS1\") (default: the site code of the client running SharpSCCM)"));
                 rootCommand.Add(newCommand);
 
-                // new admin
-                //var newAdmin = new Command("admin", "Add a user to the RBAC_Admins table to obtain Full Administrator access to ConfigMgr console and WMI objects (requires local administrator privileges on the server running the site database)");
-                //newCommand.Add(newAdmin);
-                //newAdmin.Add(new Argument<string>("user-name", "The domain and user name you would like to grant Full Administrator privilege to (e.g., DOMAIN-SHORTNAME\\USERNAME)"));
-                //newAdmin.Handler = CommandHandler.Create(
-                //    (string server, string siteCode, string userName) =>
-                //    {
-                //        var connection = Database.Connect(server, siteCode);
-                //        Database.Query(connection, "SELECT * FROM RBAC_Admins");
-                //    });
-
                 // new application
                 var newApplication = new Command("application", "Create an application by contacting an SMS Provider via WMI\n" +
                     "  Permitted security roles:\n" +
