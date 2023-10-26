@@ -3,12 +3,11 @@ using System;
 using System.IO;
 using System.Management;
 using System.Net;
-using System.Resources;
 
 namespace SharpSCCM.UnitTests
 {
     [TestClass]
-    public class MgmtPointWmiTests
+    public class SmsProviderWmiTests
     {
         public TestContext TestContext { get; set; }
 
@@ -68,10 +67,10 @@ namespace SharpSCCM.UnitTests
 
             ManagementScope wmiConnection = MgmtUtil.NewWmiConnection();
             TestContext.WriteLine($"Device name is {deviceName}");
-            MgmtPointWmi.NewCollection(wmiConnection, "device", collectionName);
+            SmsProviderWmi.NewCollection(wmiConnection, "device", collectionName);
             var stringWriter = new StringWriter();
             Console.SetOut(stringWriter);
-            MgmtPointWmi.NewCollectionMember(wmiConnection, collectionName, null, deviceName);
+            SmsProviderWmi.NewCollectionMember(wmiConnection, collectionName, null, deviceName);
             StringAssert.Contains(stringWriter.ToString(), $"Name: {deviceName.ToUpper()}");
             TestContext.WriteLine(stringWriter.ToString());
             Cleanup.RemoveCollection(wmiConnection, collectionName, null);

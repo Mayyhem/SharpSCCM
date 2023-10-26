@@ -1,5 +1,4 @@
-﻿using Microsoft.ConfigurationManagement.Messaging.Framework;
-using System;
+﻿using System;
 using System.Security.Cryptography;
 
 namespace SharpSCCM
@@ -240,7 +239,7 @@ namespace SharpSCCM
                     Interop.CryptReleaseContext(hProv, 0);
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 // Handle any exceptions here
             }

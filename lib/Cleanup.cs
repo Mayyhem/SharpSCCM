@@ -49,7 +49,7 @@ namespace SharpSCCM
 
         public static void RemoveCollection(ManagementScope wmiConnection, string collectionName, string collectionId)
         {
-            ManagementObject collection = MgmtPointWmi.GetCollection(wmiConnection, collectionName, collectionId);
+            ManagementObject collection = SmsProviderWmi.GetCollection(wmiConnection, collectionName, collectionId);
             if (collection != null)
             {
                 try
@@ -57,7 +57,7 @@ namespace SharpSCCM
                     collection.Delete();
                     Console.WriteLine($"[+] Deleted the {collection["Name"]} collection ({collection["CollectionID"]})");
                     Console.WriteLine($"[+] Querying for the {collection["Name"]} collection ({collection["CollectionID"]})");
-                    ManagementObject notDeletedCollection = MgmtPointWmi.GetCollection(wmiConnection, collectionName, collectionId);
+                    ManagementObject notDeletedCollection = SmsProviderWmi.GetCollection(wmiConnection, collectionName, collectionId);
                     if (notDeletedCollection != null)
                     {
                         Console.WriteLine($"[!] A remaining {collection["Name"]} collection ({collection["CollectionID"]}) was found");
@@ -82,11 +82,11 @@ namespace SharpSCCM
             collectionType = !string.IsNullOrEmpty(deviceName) ? "device" : !string.IsNullOrEmpty(userName) ? "user" : collectionType;
 
             // Check whether the specified collection exists
-            ManagementObject collection = MgmtPointWmi.GetCollection(wmiConnection, collectionName, collectionId, true);
+            ManagementObject collection = SmsProviderWmi.GetCollection(wmiConnection, collectionName, collectionId, true);
             if (collection != null)
             {
                 // Check whether the specified resource is a member of the collection
-                ManagementObjectCollection existingMembers = MgmtPointWmi.GetCollectionMembers(wmiConnection, collectionName, collectionId, printOutput: false);
+                ManagementObjectCollection existingMembers = SmsProviderWmi.GetCollectionMembers(wmiConnection, collectionName, collectionId, printOutput: false);
                 if (existingMembers.Count > 0)
                 {
                     bool resourceIsExistingMember = false;
@@ -116,14 +116,14 @@ namespace SharpSCCM
                 }
 
                 // Check whether the specified resource exists
-                ManagementObject matchingResource = MgmtPointWmi.GetDeviceOrUser(wmiConnection, deviceName, resourceId, userName, true);
+                ManagementObject matchingResource = SmsProviderWmi.GetDeviceOrUser(wmiConnection, deviceName, resourceId, userName, true);
                 if (matchingResource != null)
                 {
                     string newCollectionName = $"{collectionType}_{Guid.NewGuid()}";
-                    ManagementObject collectionToExclude = MgmtPointWmi.NewCollection(wmiConnection, collectionType, newCollectionName);
+                    ManagementObject collectionToExclude = SmsProviderWmi.NewCollection(wmiConnection, collectionType, newCollectionName);
                     if (collectionToExclude != null)
                     {
-                        MgmtPointWmi.NewCollectionMember(wmiConnection, newCollectionName, collectionType, collectionId, deviceName, userName, resourceId);
+                        SmsProviderWmi.NewCollectionMember(wmiConnection, newCollectionName, collectionType, collectionId, deviceName, userName, resourceId);
                         ManagementObject newCollectionRule = new ManagementClass(wmiConnection, new ManagementPath("SMS_CollectionRuleExcludeCollection"), null).CreateInstance();
                         newCollectionRule["ExcludeCollectionID"] = collectionToExclude["CollectionID"];
                         newCollectionRule["RuleName"] = $"{newCollectionName}";
@@ -146,7 +146,7 @@ namespace SharpSCCM
                                 Console.WriteLine($"[+] Added rule to exclude resource from {(!string.IsNullOrEmpty(collectionName) ? collectionName : collectionId)}");
                                 Console.WriteLine($"[+] Waiting {waitTime}s for collection to populate");
                                 Thread.Sleep(waitTime * 1000);
-                                ManagementObjectCollection collectionMembers = MgmtPointWmi.GetCollectionMembers(wmiConnection, collectionName, collectionId, printOutput: true);
+                                ManagementObjectCollection collectionMembers = SmsProviderWmi.GetCollectionMembers(wmiConnection, collectionName, collectionId, printOutput: true);
                             }
                             catch (ManagementException ex)
                             {

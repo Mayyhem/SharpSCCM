@@ -7,9 +7,9 @@ using System.Threading;
 
 namespace SharpSCCM
 {
-    public static class MgmtPointWmi
+    public static class SmsProviderWmi
     {
-        public static void Exec(ManagementScope wmiConnection, string collectionId = null, string collectionName = null, string deviceName = null, string applicationPath = null, string relayServer = null, string resourceId = null, bool runAsUser = true, string collectionType = null, string userName = null)
+        public static void Exec(ManagementScope wmiConnection, string collectionId = null, string collectionName = null, string deviceName = null, string applicationPath = null, string relayServer = null, string resourceId = null, bool runAsUser = true, string collectionType = null, string userName = null, int waitTime = 120)
         {
             ManagementObject collection = GetCollection(wmiConnection, collectionName, collectionId);
             // Create a collection is one is not specified
@@ -55,8 +55,8 @@ namespace SharpSCCM
             if (collectionType == "device")
             {
                 UpdateMachinePolicy(wmiConnection, (string)collection["CollectionID"]);
-                Console.WriteLine("[+] Waiting 1 minute for execution to complete...");
-                Thread.Sleep(60000);
+                Console.WriteLine($"[+] Waiting {waitTime} seconds for execution to complete...");
+                Thread.Sleep(waitTime * 1000);
             }
             else if (collectionType == "user")
             {
@@ -72,10 +72,6 @@ namespace SharpSCCM
             }
         }
 
-        public static void InvokeLastLogonUpdate(ManagementScope wmiConnection, string collectionName)
-        {
-            // TODO
-        }
         public static void GenerateCCR(string target, string server = null, string siteCode = null)
         {
             ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(server, null, siteCode);

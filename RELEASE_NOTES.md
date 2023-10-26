@@ -1,5 +1,11 @@
 # SharpSCCM Release Notes
 
+### Version 2.0.2 (October 26, 2023)
+##### Changes
+- Replaced ILMerge with dnMerge for Release builds, merged size down to ~1MB
+- Updated variable, option, and class names and descriptions to reflect the correct SCCM site system roles
+- Added --wait-time option to allow the user to wait for exec propagation longer before cleanup in large environments
+
 ### Version 2.0.1 (May 24, 2023)
 ##### New Commands
 - invoke admin-service (CMPivot queries)
