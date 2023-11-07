@@ -11,7 +11,11 @@ namespace SharpSCCM
     {
         public static void Exec(ManagementScope wmiConnection, string collectionId = null, string collectionName = null, string deviceName = null, string applicationPath = null, string relayServer = null, string resourceId = null, bool runAsUser = true, string collectionType = null, string userName = null, int waitTime = 120)
         {
-            ManagementObject collection = GetCollection(wmiConnection, collectionName, collectionId);
+            ManagementObject collection = null;
+            if (!string.IsNullOrEmpty(collectionName) || !string.IsNullOrEmpty(collectionId))
+            {
+                collection = GetCollection(wmiConnection, collectionName, collectionId);
+            }
             // Create a collection is one is not specified
             if (collection == null)
             {
@@ -1022,7 +1026,7 @@ namespace SharpSCCM
                         try
                         {
                             collection.InvokeMethod("AddMembershipRule", addMembershipRuleParams, null);
-                            Console.WriteLine($"[+] Added {matchingResource["Name"]} {matchingResource["ResourceID"]} to {(!string.IsNullOrEmpty(collectionName) ? collectionName : collectionId)}");
+                            Console.WriteLine($"[+] Added {matchingResource["Name"]} ({matchingResource["ResourceID"]}) to {(!string.IsNullOrEmpty(collectionName) ? collectionName : collectionId)}");
                             Console.WriteLine($"[+] Waiting for new collection member to become available...");
                             bool memberAvailable = false;
                             while (!memberAvailable)
