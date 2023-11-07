@@ -92,7 +92,7 @@ namespace SharpSCCM
                             ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(smsProvider, null, siteCode);
                             if (wmiConnection != null && wmiConnection.IsConnected)
                             {
-                                SmsProviderWmi.Exec(wmiConnection, collectionId, collectionName, device, path, relayServer, resourceId, !runAsSystem, collectionType, user, waitTime);
+                                SmsProviderWmi.Exec(wmiConnection, collectionId, collectionName, device, path, relayServer, resourceId, !runAsSystem, collectionType, user, waitTime = 120);
                             }
                         }
                     });

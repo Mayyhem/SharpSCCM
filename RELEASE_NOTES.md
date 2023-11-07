@@ -1,5 +1,10 @@
 # SharpSCCM Release Notes
 
+### Version 2.0.3 (November 7, 2023)
+##### Changes
+- Fixed SCCM site system role name
+- Fixed default wait-time for exec
+
 ### Version 2.0.2 (October 26, 2023)
 ##### Changes
 - Replaced ILMerge with dnMerge for Release builds, merged size down to ~1MB
