@@ -9,7 +9,7 @@ namespace SharpSCCM
 {
     public static class SmsProviderWmi
     {
-        public static void Exec(ManagementScope wmiConnection, string collectionId = null, string collectionName = null, string deviceName = null, string applicationPath = null, string relayServer = null, string resourceId = null, bool runAsUser = true, string collectionType = null, string userName = null, int waitTime = 120)
+        public static void Exec(ManagementScope wmiConnection, string collectionId = null, string collectionName = null, string deviceName = null, string applicationPath = null, string relayServer = null, string resourceId = null, bool runAsUser = true, string collectionType = null, string userName = null, int waitTime = 300)
         {
             ManagementObject collection = null;
             if (!string.IsNullOrEmpty(collectionName) || !string.IsNullOrEmpty(collectionId))

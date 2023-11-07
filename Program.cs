@@ -71,7 +71,7 @@ namespace SharpSCCM
                 execCommand.Add(new Option<string>(new[] { "--user", "-u" }, "The UniqueUserName of the user to execute an application as or receive NTLM authentication from (e.g., \"APERTURE\\cave.johnson\")"));
                 execCommand.Add(new Option<string>(new[] { "--site-code", "-sc" }, "The three character site code (e.g., \"PS1\") (default: the site code of the client running SharpSCCM)"));
                 execCommand.Add(new Option<string>(new[] { "--sms-provider", "-sms" }, "The IP address, FQDN, or NetBIOS name of the SMS Provider to connect to (default: the current management point of the client running SharpSCCM)"));
-                execCommand.Add(new Option<int>(new[] { "--wait-time", "-w" }, () => 120, "The time (in seconds) to wait for the deployment to execute before cleaning up (default: 120)"));
+                execCommand.Add(new Option<int>(new[] { "--wait-time", "-w" }, () => 300, "The time (in seconds) to wait for the deployment to execute before cleaning up (default: 300)"));
                 execCommand.Handler = CommandHandler.Create(
                     (string device, string collectionId, string collectionName, string path, string relayServer, string resourceId, bool runAsSystem, string collectionType, string user, int waitTime, string smsProvider, string siteCode) =>
                     {
