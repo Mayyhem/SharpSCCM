@@ -160,11 +160,11 @@ namespace SharpSCCM
 
                 foreach (PolicyAssignment policyAssignment in assignmentReply.ReplyAssignments.PolicyAssignments)
                 {
-                    GetSecretsFromPolicy(policyAssignment, managementPoint, clientId, encryptionCertificate, outputPath);
+                    GetSecretsFromPolicy(policyAssignment, managementPoint, clientId, encryptionCertificate, signingCertificate, outputPath);
                 }
             }
         }
-        public static async void GetSecretsFromPolicy(PolicyAssignment policyAssignment, string managementPoint, SmsClientId clientId, MessageCertificateX509 encryptionCertificate, string outputPath = null)
+        public static async void GetSecretsFromPolicy(PolicyAssignment policyAssignment, string managementPoint, SmsClientId clientId, MessageCertificateX509 encryptionCertificate, MessageCertificateX509 signingCertificate, string outputPath = null)
         {
 
             // Get secret policies
@@ -184,7 +184,7 @@ namespace SharpSCCM
                 try
                 {
                     string policyURL = policyAssignment.Policy.Location.Value.Replace("<mp>", managementPoint);
-                    policyDownloadResponse = SendPolicyDownloadRequest(policyURL, clientId, encryptionCertificate);
+                    policyDownloadResponse = SendPolicyDownloadRequest(policyURL, clientId, signingCertificate);
                     byte[] policyDownloadResponseBytes = await policyDownloadResponse.Content.ReadAsByteArrayAsync();
                     Console.WriteLine($"[+] Received encoded response from server for policy {policyAssignment.Policy.Id}");
                 }
@@ -760,7 +760,7 @@ namespace SharpSCCM
                                 policyAssignment.Policy.Location = policyLocation;
                             }
 
-                            GetSecretsFromPolicy(policyAssignment, szMPHostname, new SmsClientId(szMediaGUIDPlain), encryptioncertificate);
+                            GetSecretsFromPolicy(policyAssignment, szMPHostname, new SmsClientId(szMediaGUIDPlain), encryptioncertificate, signingCertificate);
                         }
                     }
                 }
