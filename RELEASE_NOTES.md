@@ -1,5 +1,9 @@
 # SharpSCCM Release Notes
 
+### Version 2.0.4 (January 29, 2024)
+##### Changes
+- Fixed issue 39
+
 ### Version 2.0.3 (November 7, 2023)
 ##### Changes
 - Fixed SCCM site system role name
