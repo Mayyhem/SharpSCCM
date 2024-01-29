@@ -146,6 +146,9 @@
   <ItemGroup>
     <None Include="App.config" />
     <None Include="packages.config" />
+    <None Include="PULL_REQUEST_TEMPLATE.md" />
+    <None Include="README.md" />
+    <None Include="RELEASE_NOTES.md" />
   </ItemGroup>
   <ItemGroup>
     <BootstrapperPackage Include=".NETFramework,Version=v4.7.2">
