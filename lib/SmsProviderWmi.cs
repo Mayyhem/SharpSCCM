@@ -1033,11 +1033,19 @@ namespace SharpSCCM
                             {
                                 Thread.Sleep(millisecondsTimeout: 5000);
                                 ManagementObjectCollection collectionMembers = GetCollectionMembers(wmiConnection, collectionName, collectionId);
-                                if (collectionMembers.Count == 1)
+                                if (collectionMembers.Count > 0)
                                 {
-                                    Console.WriteLine($"[+] Successfully added {matchingResource["Name"]} {matchingResource["ResourceID"]} to {(!string.IsNullOrEmpty(collectionName) ? collectionName : collectionId)}");
-                                    memberAvailable = true;
-                                    collectionMember = collectionMembers.Cast<ManagementObject>().First();
+                                    foreach (ManagementObject member in collectionMembers)
+                                    {
+                                        if ((!string.IsNullOrEmpty(deviceName) && (string)member.GetPropertyValue("Name") == deviceName) ||
+                                        (!string.IsNullOrEmpty(userName) && member.GetPropertyValue("Name").ToString().Contains(userName)) ||
+                                        (!string.IsNullOrEmpty(resourceId) && (uint)member.GetPropertyValue("ResourceID") == Convert.ToUInt32(resourceId)))
+                                        {
+                                            Console.WriteLine($"[+] Successfully added {matchingResource["Name"]} ({matchingResource["ResourceID"]}) to {(!string.IsNullOrEmpty(collectionName) ? collectionName : collectionId)}");
+                                            memberAvailable = true;
+                                            collectionMember = collectionMembers.Cast<ManagementObject>().First();
+                                        }
+                                    }
                                 }
                                 else
                                 {
