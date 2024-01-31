@@ -188,7 +188,7 @@ namespace SharpSCCM
                 {
                     // Here we display the output as JSON after the user supplies the required flag
                     Console.WriteLine($"\r----------------  CMPivot data  ------------------\r");
-                    return jsonObject.ToString();
+                    Console.WriteLine(jsonObject.ToString());
                 }
 
                 // The file content query returns files line by line. We use this to output lines together
@@ -203,6 +203,7 @@ namespace SharpSCCM
                         return null;
                     }
 
+                    Console.WriteLine("----------------------------------------");
                     foreach (JObject valueObject in values)
                     {
                         JArray results = (JArray)valueObject["Result"];
@@ -229,47 +230,34 @@ namespace SharpSCCM
 
                 // For other queries, print each key value pair
                 JObject parsedJsonA = JObject.Parse(jsonBody);
-                JArray valuesA = (JArray)parsedJsonA["value"];
 
-                if (valuesA == null) return null;
-
-                Console.WriteLine("----------------------------------------");
-                foreach (JObject valueObject in valuesA)
+                // Check if 'value' is a JArray or a JObject and process accordingly
+                var valueToken = parsedJsonA["value"];
+                if (valueToken is JArray valuesA)
                 {
-                    // Check if 'Result' exists, is not null, and is a JArray
-                    if (valueObject["Result"] is JArray results)
+                    Console.WriteLine("----------------------------------------");
+                    
+                    // Process each value in the array
+                    foreach (JObject valueObject in valuesA)
                     {
-                        foreach (JObject result in results)
-                        {
-                            string device = result["Device"]?.ToString();
-                            Console.WriteLine("Device: " + device);
-
-                            foreach (var property in result)
-                            {
-                                string key = property.Key;
-                                JToken value = property.Value;
-
-                                if (key != "Device")  // Skip Device as it's already printed
-                                {
-                                    Console.WriteLine($"{key}: {value}");
-                                }
-                            }
-                            Console.WriteLine("----------------------------------------");
-                        }
+                        ProcessResult(valueObject);
                     }
                 }
-                return jsonObject.ToString();
-            }
-            else
-            {
-                string fail = "";
-                if (status == 404)
+                else if (valueToken is JObject valueObject)
                 {
-                    //Note we also get a 404 while results are not ready so when this message is for when 404 is received after we got an operationId and the timeout limit was reached
-                    fail = $"[!] Received a 404 response after the set timeout was reached. It might mean that the device is not online or timeout value is too short. You can also try to retrieve results manually using the retrieved OperationId {opId}";
+                    // Process the single value object
+                    ProcessResult(valueObject);
                 }
-                return fail;
+                return string.Empty;
             }
+
+            string fail = "";
+            if (status == 404)
+            {
+                //Note we also get a 404 while results are not ready so when this message is for when 404 is received after we got an operationId and the timeout limit was reached
+                fail = $"[!] Received a 404 response after the set timeout was reached. It might mean that the device is not online, the query returned an error, or timeout value is too short. You can also try to retrieve results manually using the retrieved OperationId {opId}";
+            }
+            return fail;
         }
 
         public static uint InitiateClientOperationExMethodCall(string query, string managementPoint, string sitecode, string CollectionName, string deviceId)
@@ -320,11 +308,9 @@ namespace SharpSCCM
                     Console.WriteLine("[+] Fallback Method call succeeded");
                     return returnValue;
                 }
-                else
-                {
-                    Console.WriteLine("[!] Method call failed with error code {0}.", returnValue);
-                    return 0;
-                }
+
+                Console.WriteLine("[!] Method call failed with error code {0}.", returnValue);
+                return 0;
             }
             catch (ManagementException e)
             {
@@ -333,16 +319,33 @@ namespace SharpSCCM
             }
         }
 
-        // Entry point with arguments provided by user or defaults from command handler
-        public static async Task Main(string managementPoint, string sitecode, string query, string collectionName, string deviceId, string[] timeoutValues, bool json)
+        // Method to process each 'Result' in a 'value' object
+        public static void ProcessResult(JObject valueObject)
         {
-            var CMPdata = await CheckOperationStatusAsync(managementPoint, sitecode, query, collectionName, deviceId, timeoutValues, json);
-            if (!string.IsNullOrWhiteSpace(CMPdata))
+            if (valueObject["Result"] is JArray results && results != null)
             {
-                Console.WriteLine("\r" + CMPdata + "\r");
+                Console.WriteLine("----------------------------------------");
+
+                foreach (JObject result in results)
+                {
+                    string device = result["Device"]?.ToString();
+                    Console.WriteLine("Device: " + device);
+
+                    foreach (var property in result)
+                    {
+                        string key = property.Key;
+                        JToken value = property.Value;
+
+                        // Skip Device as it's already printed
+                        if (key != "Device")  
+                        {
+                            Console.WriteLine($"{key}: {value}");
+                        }
+                    }
+                    Console.WriteLine("----------------------------------------");
+                }
             }
         }
-
     }
     public class JsonResponse
     {
