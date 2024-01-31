@@ -1,0 +1,48 @@
+name: .NET Framework Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+    tags:
+      - "v*.*.*"
+jobs:
+
+  build:
+    strategy:
+      matrix:
+        configuration: [ Release ]
+
+    runs-on: windows-latest  
+                             
+    env:
+      Solution_Name: SharpSCCM.sln                         
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+
+    # Add  MSBuild to the PATH: https://github.com/microsoft/setup-msbuild
+    - name: Setup MSBuild.exe
+      uses: microsoft/setup-msbuild@v1.0.2
+
+    # Restore the application to populate the obj folder with RuntimeIdentifiers
+    - name: Restore the application
+      run: msbuild $env:Solution_Name /t:Restore /p:Configuration=$env:Configuration
+      env:
+        Configuration: ${{ matrix.configuration }}
+
+    # Release
+    - name: Update release
+      uses: softprops/action-gh-release@v1
+      with:
+        name: Rolling Release
+        tag_name: rolling
+        prerelease: true
+        token: ${{ secrets.GITHUB_TOKEN }}
+        body: |
+          This is the rolling release of SharpSCCM compiled from source (${{ github.sha }}).
+          The repository updates releases automatically to keep them up-to-date with the `${{ github.ref_name }}` ${{ github.ref_type }}.
+          Releases were last built on ${{ env.BUILD_DATE }}.
