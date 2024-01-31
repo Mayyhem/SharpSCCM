@@ -108,7 +108,7 @@ namespace SharpSCCM
                             break;
                         default:
                             // Handle other HTTP errors
-                            fail = $"An error message was received from the API. Please try again";
+                            fail = $"[!] Received {response.StatusCode.GetHashCode()} ({response.StatusCode}) status code from: {request.RequestUri}";
                             break;
                     }
 
