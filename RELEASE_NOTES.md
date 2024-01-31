@@ -1,5 +1,9 @@
 # SharpSCCM Release Notes
 
+### Version 2.0.5 (January 31, 2024)
+##### Changes
+- Fixed issue 40
+
 ### Version 2.0.4 (January 29, 2024)
 ##### Changes
 - Fixed issue 39

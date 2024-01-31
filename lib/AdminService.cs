@@ -130,9 +130,7 @@ namespace SharpSCCM
         //This function will periodically check the response status we get when check that an operation has completed
         //By default it will make 5 attempts before exiting this value might need to be modified when working on larger environments
         public static async Task<string> CheckOperationStatusAsync(string managementPoint, string sitecode, string query, string collectionName, string deviceId, string[] timeoutValues, bool json)
-
         {
-
             query = !string.IsNullOrEmpty(query) ? Helpers.EscapeBackslashes(query) : null;
             var opId = TriggerAdminServiceQuery(managementPoint, sitecode, query, collectionName, deviceId);
             string url = null;
@@ -179,7 +177,6 @@ namespace SharpSCCM
 
             if (status == 200)
             {
-
                 //Success message after retrieving operation results data
                 Console.WriteLine("[+] Successfully retrieved results from AdminService\r");
                 //Here we start deserializing the received JSON
@@ -191,141 +188,76 @@ namespace SharpSCCM
                 {
                     // Here we display the output as JSON after the user supplies the required flag
                     Console.WriteLine($"\r----------------  CMPivot data  ------------------\r");
-                    return jsonObject.ToString();
+                    Console.WriteLine(jsonObject.ToString());
                 }
 
                 // The file content query returns files line by line. We use this to output lines together
                 if (query.Contains("FileContent("))
                 {
-                    JObject obj = JObject.Parse(jsonBody);
-                    JArray results = (JArray)obj["value"]["Result"];
-                    if (results.Count != 0)
-                    {
-                        StringBuilder sb = new StringBuilder();
-                        foreach (JObject result in results)
-                        {
-                            sb.AppendLine(result["Content"].ToString());
-                        }
+                    JObject parsedJson = JObject.Parse(jsonBody);
+                    JArray values = (JArray)parsedJson["value"];
 
-                        string contentString = sb.ToString();
-                        Console.WriteLine("\r--------------- File Contents ---------------\r");
-                        Console.WriteLine(contentString + "\r--------------------------------------------\r");
+                    if (values == null)
+                    {
+                        Console.WriteLine("[!] The retrieved results for the FileContent operation came back empty. Make sure the file exists or check query syntax");
                         return null;
                     }
-                    Console.WriteLine("[!] The retrieved results for the FileContent operation came back empty. Make sure the file exists or check query syntax");
-                    return null;
-                }
 
-                //This section deals with the variation in nesting between single device queries and collection queries
-                JToken result1 = null;
-                JObject jsonObject2 = JObject.Parse(reqBody);
-                int resultIndex = -1; // if "Result" property not found
-
-                //Find "Result" within dictionary
-                foreach (JToken token in jsonObject2.Descendants())
-                {
-                    if (token.Type == JTokenType.Property && ((JProperty)token).Name == "Result")
+                    Console.WriteLine("----------------------------------------");
+                    foreach (JObject valueObject in values)
                     {
-                        JContainer parent = token.Parent;
-                        if (parent is JObject)
+                        JArray results = (JArray)valueObject["Result"];
+                        if (results == null) continue;
+
+                        StringBuilder fileContent = new StringBuilder();
+                        string device = string.Empty;
+
+                        foreach (JObject result in results)
                         {
-                            resultIndex = ((JObject)parent).Properties().ToList().IndexOf((JProperty)token);
-                            result1 = ((JProperty)token).Value;
-                        }
-                        else if (parent is JArray)
-                        {
-                            resultIndex = ((JArray)parent).IndexOf(token);
-                        }
-                        break;
-                    }
-                }
-
-                var output = new StringBuilder();
-                int counter2 = 1;
-                string header;
-
-                // Here we start parsing the JSON to display it in a command line and make it as readable as possible
-                foreach (var item in result1)
-                {
-                    header = $"---------------- CMPivot data #{counter2} ------------------";
-                    output.AppendLine(string.Format(header));
-                    counter2++;
-
-                    foreach (JProperty property in item.Children())
-                    {
-                        output.AppendLine();
-                        int numSpaces = 30 - property.Name.Length;
-                        string pad1 = new string(' ', numSpaces);
-                        output.Append(property.Name + pad1 + ": ");
-
-                        //When testing against Windows EventLog queries. The EventLog message contains very long string which contains a mix of nested
-                        //Json-like key:value pairs and some regular strings. This was difficult to parse but here follows my attempt at making it presentable in a commandline
-                        if (property.Value is JValue jValue)
-                        {
-                            if (jValue.Type == JTokenType.String && jValue.ToString().Contains(Environment.NewLine))
+                            device = result["Device"]?.ToString();
+                            string contentLine = result["Content"]?.ToString();
+                            if (contentLine != null)
                             {
-                                output.AppendLine();
-
-                                //Separating actual JSON from strings that contain mix of key:value pairs and single strings
-                                string[] lines = jValue.ToString().Split(new[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
-                                for (int i = 0; i < lines.Length; i++)
-                                {
-                                    string _line = lines[i];
-                                    string pattern = @".*?:[A-Za-z0-9-]*";
-
-                                    if (!Regex.IsMatch(_line, pattern))
-                                    {
-                                        output.AppendLine();
-                                    }
-
-                                    string[] line_string = lines[i].Split(':');
-
-                                    //Here we assign padding/indentation according to nesting level
-                                    if (line_string.Length > 1)
-                                    {
-                                        for (int x = 0; x < line_string.Length - 1; x += 2)
-                                        {
-                                            int lineNumSpaces = 30 - line_string[x].Length;
-                                            string pad2 = new string(' ', Math.Max(0, lineNumSpaces));
-                                            int lineNumSpaces2 = 15;
-                                            string pad3 = new string(' ', Math.Max(0, lineNumSpaces2));
-
-                                            if (x + 1 < line_string.Length)
-                                            {
-                                                output.AppendLine(pad3 + line_string[x] + pad2 + ": " + line_string[x + 1]);
-                                            }
-                                            else
-                                            {
-                                                output.AppendLine(line_string[x] + pad2 + ": [empty]");
-                                            }
-                                        }
-                                    }
-                                    else
-                                    {
-                                        output.AppendLine(lines[i]);
-                                    }
-                                }
-                            }
-                            else
-                            {
-                                output.AppendLine(jValue.ToString());
+                                fileContent.AppendLine(contentLine);
                             }
                         }
+                        Console.WriteLine("Device: " + device);
+                        Console.WriteLine("Content:\n" + fileContent);
+                        Console.WriteLine("----------------------------------------");
                     }
-                    output.AppendLine("\n--------------------------------------------");
+                    return jsonObject.ToString();
                 }
-                return output.ToString();
+
+                // For other queries, print each key value pair
+                JObject parsedJsonA = JObject.Parse(jsonBody);
+
+                // Check if 'value' is a JArray or a JObject and process accordingly
+                var valueToken = parsedJsonA["value"];
+                if (valueToken is JArray valuesA)
+                {
+                    Console.WriteLine("----------------------------------------");
+                    
+                    // Process each value in the array
+                    foreach (JObject valueObject in valuesA)
+                    {
+                        ProcessResult(valueObject);
+                    }
+                }
+                else if (valueToken is JObject valueObject)
+                {
+                    // Process the single value object
+                    ProcessResult(valueObject);
+                }
+                return string.Empty;
             }
-            else
+
+            string fail = "";
+            if (status == 404)
             {
-                string fail = "";
-                if (status == 404)
-                {
-                    //Note we also get a 404 while results are not ready so when this message is for when 404 is received after we got an operationId and the timeout limit was reached
-                    fail = $"[!] Received a 404 response after the set timeout was reached. It might mean that the device is not online or timeout value is too short. You can also try to retrieve results manually using the retrieved OpeartionId {opId}";
-                }
-                return fail.ToString();
+                //Note we also get a 404 while results are not ready so when this message is for when 404 is received after we got an operationId and the timeout limit was reached
+                fail = $"[!] Received a 404 response after the set timeout was reached. It might mean that the device is not online, the query returned an error, or timeout value is too short. You can also try to retrieve results manually using the retrieved OperationId {opId}";
             }
+            return fail;
         }
 
         public static uint InitiateClientOperationExMethodCall(string query, string managementPoint, string sitecode, string CollectionName, string deviceId)
@@ -376,11 +308,9 @@ namespace SharpSCCM
                     Console.WriteLine("[+] Fallback Method call succeeded");
                     return returnValue;
                 }
-                else
-                {
-                    Console.WriteLine("[!] Method call failed with error code {0}.", returnValue);
-                    return 0;
-                }
+
+                Console.WriteLine("[!] Method call failed with error code {0}.", returnValue);
+                return 0;
             }
             catch (ManagementException e)
             {
@@ -389,16 +319,33 @@ namespace SharpSCCM
             }
         }
 
-        // Entry point with arguments provided by user or defaults from command handler
-        public static async Task Main(string managementPoint, string sitecode, string query, string collectionName, string deviceId, string[] timeoutValues, bool json)
+        // Method to process each 'Result' in a 'value' object
+        public static void ProcessResult(JObject valueObject)
         {
-            var CMPdata = await CheckOperationStatusAsync(managementPoint, sitecode, query, collectionName, deviceId, timeoutValues, json);
-            if (!string.IsNullOrWhiteSpace(CMPdata))
+            if (valueObject["Result"] is JArray results && results != null)
             {
-                Console.WriteLine("\r" + CMPdata + "\r");
+                Console.WriteLine("----------------------------------------");
+
+                foreach (JObject result in results)
+                {
+                    string device = result["Device"]?.ToString();
+                    Console.WriteLine("Device: " + device);
+
+                    foreach (var property in result)
+                    {
+                        string key = property.Key;
+                        JToken value = property.Value;
+
+                        // Skip Device as it's already printed
+                        if (key != "Device")  
+                        {
+                            Console.WriteLine($"{key}: {value}");
+                        }
+                    }
+                    Console.WriteLine("----------------------------------------");
+                }
             }
         }
-
     }
     public class JsonResponse
     {
