@@ -13,7 +13,6 @@ jobs:
     runs-on: windows-latest  
                              
     env:
-      Binary: SharpSCCM.exe
       Configuration: Release
       Solution: SharpSCCM.sln
 
@@ -48,5 +47,5 @@ jobs:
           Releases were last built on ${{ env.BUILD_DATE }}.
         fail_on_unmatched_files: true  
         files: |
-          ${{ env:Binary }}
+          SharpSCCM.exe
           RELEASE_NOTES.md
