@@ -47,5 +47,5 @@ jobs:
           Releases were last built on ${{ env.BUILD_DATE }}.
         fail_on_unmatched_files: true  
         files: |
-          SharpSCCM.exe
+          D:/a/SharpSCCM/SharpSCCM/bin/Release/SharpSCCM.exe
           RELEASE_NOTES.md
