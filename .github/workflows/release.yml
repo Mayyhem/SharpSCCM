@@ -9,41 +9,45 @@ on:
 jobs:
 
   build:
-    strategy:
-      matrix:
-        configuration: [ Release ]
 
     runs-on: windows-latest  
                              
     env:
-      Solution_Name: SharpSCCM.sln
-      Arfifact_Name: SharpSCCM.exe
+      Binary: SharpSCCM.exe
+      Configuration: Release
+      Solution: SharpSCCM.sln
 
     steps:
+
+    # Checkout repository
     - name: Checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@latest
       with:
         fetch-depth: 0
 
-    # Add  MSBuild to the PATH: https://github.com/microsoft/setup-msbuild
-    - name: Setup MSBuild.exe
-      uses: microsoft/setup-msbuild@v1.0.2
+    # Setup packages
+    - name: Setup NuGet
+      uses: NuGet/setup-nuget@latest
+    - run: nuget restore $env:Solution
 
+    # Build
+    - name: Setup MSBuild.exe
+      uses: microsoft/setup-msbuild@latest
     - name: Build solution
-      run: msbuild $env:Solution_Name -t:rebuild -property:Configuration=${{ matrix.configuration }}
+      run: msbuild $env:Solution -t:rebuild -property:Configuration=$env:Configuration
 
     # Release
     - name: Update release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@latest
       with:
         name: Rolling Release
         tag_name: rolling
         prerelease: true
         token: ${{ secrets.GITHUB_TOKEN }}
         body: |
-          This is the rolling release of  ${{ env.Solution_Name }} compiled from source (${{ github.sha }}).
+          This is the rolling release of  ${{ env.Solution }} compiled from source (${{ github.sha }}).
           The repository updates releases automatically to keep them up-to-date with the `${{ github.ref_name }}` ${{ github.ref_type }}.
           Releases were last built on ${{ env.BUILD_DATE }}.
         files: |
-          $env:Artifact_Name
+          $env:Binary
           RELEASE_NOTES.md
