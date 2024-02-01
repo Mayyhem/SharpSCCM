@@ -3,9 +3,9 @@ name: .NET Framework Release
 on:
   workflow_dispatch:
   push:
-    branches: [ "main" ]
     tags:
       - "v*.*.*"
+      
 jobs:
 
   build:
@@ -48,5 +48,5 @@ jobs:
           Releases were last built on ${{ env.BUILD_DATE }}.
         fail_on_unmatched_files: true  
         files: |
-          $env:Binary
+          ${{ env:Binary }}
           RELEASE_NOTES.md
