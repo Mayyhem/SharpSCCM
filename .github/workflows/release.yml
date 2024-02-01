@@ -27,7 +27,7 @@ jobs:
 
     # Setup packages
     - name: Setup NuGet
-      uses: NuGet/setup-nuget@latest
+      uses: NuGet/setup-nuget@v2
     - run: nuget restore $env:Solution
 
     # Build
@@ -42,12 +42,11 @@ jobs:
       with:
         name: Rolling Release
         tag_name: rolling
-        prerelease: true
-        token: ${{ secrets.GITHUB_TOKEN }}
         body: |
           This is the rolling release of  ${{ env.Solution }} compiled from source (${{ github.sha }}).
           The repository updates releases automatically to keep them up-to-date with the `${{ github.ref_name }}` ${{ github.ref_type }}.
           Releases were last built on ${{ env.BUILD_DATE }}.
+        fail_on_unmatched_files: true  
         files: |
           $env:Binary
           RELEASE_NOTES.md
