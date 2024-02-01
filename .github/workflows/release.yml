@@ -16,7 +16,8 @@ jobs:
     runs-on: windows-latest  
                              
     env:
-      Solution_Name: SharpSCCM.sln                         
+      Solution_Name: SharpSCCM.sln
+      Arfifact_Name: SharpSCCM.exe
 
     steps:
     - name: Checkout
@@ -28,11 +29,8 @@ jobs:
     - name: Setup MSBuild.exe
       uses: microsoft/setup-msbuild@v1.0.2
 
-    # Restore the application to populate the obj folder with RuntimeIdentifiers
-    - name: Restore the application
-      run: msbuild $env:Solution_Name /t:Restore /p:Configuration=$env:Configuration
-      env:
-        Configuration: ${{ matrix.configuration }}
+    - name: Build solution
+      run: msbuild $env:Solution_Name -t:rebuild -property:Configuration=${{ matrix.configuration }}
 
     # Release
     - name: Update release
@@ -43,6 +41,9 @@ jobs:
         prerelease: true
         token: ${{ secrets.GITHUB_TOKEN }}
         body: |
-          This is the rolling release of SharpSCCM compiled from source (${{ github.sha }}).
+          This is the rolling release of  ${{ env.Solution_Name }} compiled from source (${{ github.sha }}).
           The repository updates releases automatically to keep them up-to-date with the `${{ github.ref_name }}` ${{ github.ref_type }}.
           Releases were last built on ${{ env.BUILD_DATE }}.
+        files: |
+          $env:Artifact_Name
+          RELEASE_NOTES.md
