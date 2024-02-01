@@ -39,10 +39,11 @@ jobs:
     - name: Update release
       uses: softprops/action-gh-release@v1
       with:
-        name: Rolling Release
-        tag_name: rolling
+        name: ${{ github.ref_name }}
+        tag_name: ${{ github.ref_name }}
+        prerelease: false
         body: |
-          This is the rolling release of  ${{ env.Solution }} compiled from source (${{ github.sha }}).
+          This is the release of  ${{ env.Solution }} compiled from source (${{ github.sha }}).
           The repository updates releases automatically to keep them up-to-date with the `${{ github.ref_name }}` ${{ github.ref_type }}.
         fail_on_unmatched_files: true  
         files: |
