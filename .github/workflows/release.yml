@@ -44,7 +44,7 @@ jobs:
         prerelease: false
         body: |
           This is the release of  ${{ env.Solution }} compiled from source (${{ github.sha }}).
-          The repository updates releases automatically to keep them up-to-date with the `${{ github.ref_name }}` ${{ github.ref_type }}.
+          The repository updates releases automatically to keep them up-to-date with the latest tagged version.
         fail_on_unmatched_files: true  
         files: |
           D:/a/SharpSCCM/SharpSCCM/bin/Release/SharpSCCM.exe
