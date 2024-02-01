@@ -21,7 +21,7 @@ jobs:
 
     # Checkout repository
     - name: Checkout
-      uses: actions/checkout@latest
+      uses: actions/checkout@v4
       with:
         fetch-depth: 0
 
@@ -32,13 +32,13 @@ jobs:
 
     # Build
     - name: Setup MSBuild.exe
-      uses: microsoft/setup-msbuild@latest
+      uses: microsoft/setup-msbuild@v2
     - name: Build solution
       run: msbuild $env:Solution -t:rebuild -property:Configuration=$env:Configuration
 
     # Release
     - name: Update release
-      uses: softprops/action-gh-release@latest
+      uses: softprops/action-gh-release@v1
       with:
         name: Rolling Release
         tag_name: rolling
