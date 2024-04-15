@@ -127,6 +127,42 @@ namespace SharpSCCM
                 rootCommand.Add(getCommand);
                 getCommand.AddGlobalOption(new Option<string>(new[] { "--site-code", "-sc" }, "The three character site code (e.g., PS1) (default: the site code of the client running SharpSCCM)"));
 
+                // get admins
+                var getAdmins = new Command("admins", "Get information on SCCM administrators and security roles from an SMS Provider via WMI\n" +
+                    "  Permitted security roles:\n" +
+                    "    - Any (SMS Admins local group)");
+                getCommand.Add(getAdmins);
+                getAdmins.Add(new Option<bool>(new[] { "--count", "-c" }, "Returns the number of rows that match the specified criteria"));
+                getAdmins.Add(new Option<string>(new[] { "--id", "-i" }, "A string to search for in collection CollectionIDs (returns all collections where the CollectionID contains the provided string)"));
+                getAdmins.Add(new Option<string>(new[] { "--name", "-n" }, "A string to search for in collection names (returns all collections where the collections name contains the provided string)"));
+                getAdmins.Add(new Option<string>(new[] { "--order-by", "-o" }, "An ORDER BY clause to set the order of data returned by the query (e.g., \"Name DESC\") (default: ascending (ASC) order)"));
+                getAdmins.Add(new Option<string[]>(new[] { "--properties", "-p" }, "Specify this option for each property to query (e.g., \"-p Name -p MemberCount\"") { Arity = ArgumentArity.OneOrMore });
+                getAdmins.Add(new Option<string>(new[] { "--sms-provider", "-sms" }, "The IP address, FQDN, or NetBIOS name of the SMS Provider to connect to (default: the current management point of the client running SharpSCCM)"));
+                getAdmins.Add(new Option<bool>(new[] { "--verbose", "-v" }, "Display all class properties and their values"));
+                getAdmins.Add(new Option<string>(new[] { "--where-condition", "-w" }, "A WHERE condition to narrow the scope of data returned by the query (e.g., \"Name='collection0'\" or \"Name LIKE '%collection%'\")"));
+                getAdmins.Add(new Option<bool>(new[] { "--dry-run", "-z" }, "Display the resulting WQL query but do not connect to the specified server and execute it"));
+                getAdmins.Handler = CommandHandler.Create(
+                    (string smsProvider, string siteCode, bool count, string id, string name, string orderBy, string[] properties, bool verbose, string whereCondition, bool dryRun) =>
+                    {
+                        if (!string.IsNullOrEmpty(id))
+                        {
+                            whereCondition = $"AdminID LIKE '%{id}%'";
+                        }
+                        else if (!string.IsNullOrEmpty(name))
+                        {
+                            whereCondition = $"LogonName LIKE '%{name}%'";
+                        }
+                        if (properties.Length == 0 && !verbose)
+                        {
+                            properties = new[] { "AdminID", "AdminSid", "DisplayName", "LogonName", "RoleNames", "SourceSite" };
+                        }
+                        ManagementScope wmiConnection = MgmtUtil.NewWmiConnection(smsProvider, null, siteCode);
+                        if (wmiConnection != null && wmiConnection.IsConnected)
+                        {
+                            MgmtUtil.GetClassInstances(wmiConnection, "SMS_Admin", null, count, properties, whereCondition, orderBy, dryRun, verbose, printOutput: true);
+                        }
+                    });
+
                 // get applications
                 var getApplications = new Command("applications", "Get information on applications from an SMS Provider via WMI\n" +
                     "  Permitted security roles:\n" +
