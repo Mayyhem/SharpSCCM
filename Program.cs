@@ -59,15 +59,21 @@ namespace SharpSCCM
                 deobCommand.Handler = CommandHandler.Create(
                     (string secretString) =>
                     {
-                        string deobfuscatedString;
-                        bool bDecryptSuccess = Helpers.DecryptDESSecret(secretString, out deobfuscatedString);
-                        if (bDecryptSuccess)
+                        try
                         {
-                            Console.WriteLine($"[+] Deobfuscated secret: {deobfuscatedString}\n");
+                            bool bDecryptSuccess = Helpers.DecryptDESSecret(secretString, out string deobfuscatedString);
+                            if (bDecryptSuccess)
+                            {
+                                Console.WriteLine($"[+] Deobfuscated secret: {deobfuscatedString}");
+                            }
+                            else
+                            {
+                                Console.WriteLine("[!] Could not deobuscate secret!");
+                            }
                         }
-                        else
+                        catch (Exception ex)
                         {
-                            Console.WriteLine("[!] Could not deobuscate secret!\n");
+                            Console.WriteLine($"[!] Could not deobuscate secret: {ex.Message}");
                         }
                     });
 

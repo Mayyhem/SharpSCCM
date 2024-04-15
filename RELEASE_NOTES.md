@@ -1,5 +1,9 @@
 # SharpSCCM Release Notes
 
+### Version 2.0.9 (April 15, 2024)
+##### Changes
+- Added option to deobfuscate a secret string offline
+
 ### Version 2.0.8 (March 19, 2024)
 ##### Changes
 - Fix from @subat0mik for machines that require FIPS-compliant algorithms (PR #53)
