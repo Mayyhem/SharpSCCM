@@ -1,5 +1,9 @@
 # SharpSCCM Release Notes
 
+### Version 2.0.10 (April 15, 2024)
+##### Changes
+- Added get admins command to list SCCM admin users
+
 ### Version 2.0.9 (April 15, 2024)
 ##### Changes
 - Added option to deobfuscate a secret string offline
