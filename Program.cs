@@ -52,6 +52,25 @@ namespace SharpSCCM
                 // Subcommands
                 //
 
+                // deobfuscate command
+                var deobCommand = new Command("deob", "Deobfuscate a policy secret hex string");
+                rootCommand.Add(deobCommand);
+                deobCommand.Add(new Argument<string>("secret-string", "The policy secret hex string to deobfuscate"));
+                deobCommand.Handler = CommandHandler.Create(
+                    (string secretString) =>
+                    {
+                        string deobfuscatedString;
+                        bool bDecryptSuccess = Helpers.DecryptDESSecret(secretString, out deobfuscatedString);
+                        if (bDecryptSuccess)
+                        {
+                            Console.WriteLine($"[+] Deobfuscated secret: {deobfuscatedString}\n");
+                        }
+                        else
+                        {
+                            Console.WriteLine("[!] Could not deobuscate secret!\n");
+                        }
+                    });
+
                 // exec command
                 var execCommand = new Command("exec", "Execute a command, binary, or script on a client or request NTLM authentication from a client\n" +
                     "  Permitted security roles:\n" +
