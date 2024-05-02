@@ -808,7 +808,7 @@ namespace SharpSCCM
                                 <Provider>Script</Provider>
                                 <Args>
                                     <Arg Name=""InstallCommandLine"" Type=""String"">{path}</Arg>
-                                    <Arg Name=""WorkingDirectory"" Type=""String""/>{workingDir}</Arg>
+                                    <Arg Name=""WorkingDirectory"" Type=""String"">{workingDir}</Arg>
                                     <Arg Name=""ExecutionContext"" Type=""String"">{(runAsUser ? "User" : "System")}</Arg>
                                     <Arg Name=""RequiresLogOn"" Type=""String""/>
                                     <Arg Name=""RequiresElevatedRights"" Type=""Boolean"">false</Arg>
