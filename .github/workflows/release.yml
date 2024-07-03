@@ -2,22 +2,16 @@ name: .NET Framework Release
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - "v*.*.*"
       
 jobs:
-
   build:
-
-    runs-on: windows-latest  
+    runs-on: windows-latest
                              
     env:
       Configuration: Release
       Solution: SharpSCCM.sln
 
     steps:
-
     # Checkout repository
     - name: Checkout
       uses: actions/checkout@v4
@@ -27,25 +21,71 @@ jobs:
     # Setup packages
     - name: Setup NuGet
       uses: NuGet/setup-nuget@v2
-    - run: nuget restore $env:Solution
+    - name: Restore NuGet packages
+      run: nuget restore $env:Solution
+      shell: pwsh
 
     # Build
     - name: Setup MSBuild.exe
       uses: microsoft/setup-msbuild@v2
     - name: Build solution
       run: msbuild $env:Solution -t:rebuild -property:Configuration=$env:Configuration
+      shell: pwsh
 
-    # Release
-    - name: Update release
+    - name: Get the latest version from RELEASE_NOTES.md
+      id: get_version
+      run: |
+        # Read the latest version from RELEASE_NOTES.md
+        $latest_version = (Get-Content RELEASE_NOTES.md | Select-String -Pattern '### Version (\d+\.\d+\.\d+)' | ForEach-Object { $_.Matches.Groups[1].Value })[0]
+        Write-Host "Latest version found: $latest_version"
+        
+        # Set the latest version as an output
+        echo "::set-output name=latest_version::$latest_version"
+      shell: pwsh
+
+    - name: Create Tag
+      id: create_tag
+      run: |
+        $latest_version = "${{ steps.get_version.outputs.latest_version }}"
+        git tag "v$latest_version"
+        git push origin "v$latest_version"
+      shell: pwsh
+
+    - name: Create Release
+      id: create_release
       uses: softprops/action-gh-release@v1
       with:
-        name: ${{ github.ref_name }}
-        tag_name: ${{ github.ref_name }}
+        tag_name: "v${{ steps.get_version.outputs.latest_version }}"
+        release_name: "v${{ steps.get_version.outputs.latest_version }}"
         prerelease: false
         body: |
-          This is the release of  ${{ env.Solution }} compiled from source (${{ github.sha }}).
+          This is the release of ${{ env.Solution }} compiled from source (${{ github.sha }}).
           The repository updates releases automatically to keep them up-to-date with the latest tagged version.
-        fail_on_unmatched_files: true  
+        fail_on_unmatched_files: true
         files: |
           D:/a/SharpSCCM/SharpSCCM/bin/Release/SharpSCCM.exe
           RELEASE_NOTES.md
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}      
+
+    - name: Get Release ID
+      id: get_release_id
+      run: |
+        $tag_name = "v${{ steps.get_version.outputs.latest_version }}"
+        $repo = "${{ github.repository }}"
+        $url = "https://api.github.com/repos/$repo/releases/tags/$tag_name"
+        $response = Invoke-RestMethod -Uri $url -Headers @{ Authorization = "token $env:GITHUB_TOKEN" }
+        $release_id = $response.id
+        Write-Host "Release ID: $release_id"
+        echo "::set-output name=release_id::$release_id"
+      shell: pwsh
+
+    - name: Set Release Date
+      run: |
+        $release_id = "${{ steps.get_release_id.outputs.release_id }}"
+        $release_url = "https://api.github.com/repos/${{ github.repository }}/releases/$release_id"
+        $release_date = Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ"
+        $json = @{ "published_at" = $release_date } | ConvertTo-Json -Compress
+        $headers = @{ "Authorization" = "token $env:GITHUB_TOKEN" }
+        Invoke-RestMethod -Method Patch -Uri $release_url -Headers $headers -Body $json
+      shell: pwsh
