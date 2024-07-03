@@ -74,7 +74,10 @@ jobs:
         $tag_name = "v${{ steps.get_version.outputs.latest_version }}"
         $repo = "${{ github.repository }}"
         $url = "https://api.github.com/repos/$repo/releases/tags/$tag_name"
-        $headers = @{ Authorization = "token $env:GITHUB_TOKEN" }
+        $headers = @{
+          Authorization = "token $env:GITHUB_TOKEN"
+          Accept = "application/vnd.github.v3+json"
+        }
         $response = Invoke-RestMethod -Uri $url -Headers $headers
         $release_id = $response.id
         Write-Host "Release ID: $release_id"
@@ -89,8 +92,13 @@ jobs:
         $release_url = "https://api.github.com/repos/${{ github.repository }}/releases/$release_id"
         $release_date = Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ"
         $json = @{ "published_at" = $release_date } | ConvertTo-Json -Compress
-        $headers = @{ Authorization = "token $env:GITHUB_TOKEN" }
+        $headers = @{
+          Authorization = "token $env:GITHUB_TOKEN"
+          "Content-Type" = "application/json"
+          Accept = "application/vnd.github.v3+json"
+        }
         Invoke-RestMethod -Method Patch -Uri $release_url -Headers $headers -Body $json
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       shell: pwsh
+
