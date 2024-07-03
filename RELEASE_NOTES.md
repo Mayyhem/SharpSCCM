@@ -1,5 +1,10 @@
 # SharpSCCM Release Notes
 
+### Version 2.0.11 (July 3, 2024)
+##### Changes
+- Added working directory to exec command
+- Added -mp back to invoke command
+
 ### Version 2.0.10 (April 15, 2024)
 ##### Changes
 - Added get admins command to list SCCM admin users
