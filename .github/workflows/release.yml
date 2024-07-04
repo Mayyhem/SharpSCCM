@@ -56,7 +56,7 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         tag_name: "v${{ steps.get_version.outputs.latest_version }}"
-        release_name: "v${{ steps.get_version.outputs.latest_version }}"
+        name: "v${{ steps.get_version.outputs.latest_version }}"
         prerelease: false
         body: |
           This is the release of ${{ env.Solution }} compiled from source (${{ github.sha }}).
@@ -101,4 +101,3 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       shell: pwsh
-
