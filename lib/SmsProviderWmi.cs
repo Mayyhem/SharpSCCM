@@ -1037,13 +1037,17 @@ namespace SharpSCCM
                                 {
                                     foreach (ManagementObject member in collectionMembers)
                                     {
-                                        if ((!string.IsNullOrEmpty(deviceName) && (string)member.GetPropertyValue("Name") == deviceName) ||
-                                        (!string.IsNullOrEmpty(userName) && member.GetPropertyValue("Name").ToString().Contains(userName)) ||
+                                        if ((!string.IsNullOrEmpty(deviceName) && member.GetPropertyValue("Name").ToString().ToLower() == deviceName.ToLower()) ||
+                                        (!string.IsNullOrEmpty(userName) && member.GetPropertyValue("Name").ToString().ToLower().Contains(userName.ToLower())) ||
                                         (!string.IsNullOrEmpty(resourceId) && (uint)member.GetPropertyValue("ResourceID") == Convert.ToUInt32(resourceId)))
                                         {
                                             Console.WriteLine($"[+] Successfully added {matchingResource["Name"]} ({matchingResource["ResourceID"]}) to {(!string.IsNullOrEmpty(collectionName) ? collectionName : collectionId)}");
                                             memberAvailable = true;
                                             collectionMember = collectionMembers.Cast<ManagementObject>().First();
+                                        }
+                                        else
+                                        {
+                                            Console.WriteLine($"[+] Member {member.GetPropertyValue("Name").ToString()} did not match the specified resource");
                                         }
                                     }
                                 }
