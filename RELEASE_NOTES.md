@@ -1,5 +1,9 @@
 # SharpSCCM Release Notes
 
+### Version 2.0.12 (September 16, 2024)
+##### Changes
+- Fixed case matching issue in exec command
+
 ### Version 2.0.11 (July 3, 2024)
 ##### Changes
 - Added working directory to exec command
