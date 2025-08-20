@@ -1376,13 +1376,14 @@ namespace SharpSCCM
                 timer.Stop();
                 Console.WriteLine($"[+] Completed execution in {timer.Elapsed}");
 
-                // Delay completion when debugging
-                if (Debugger.IsAttached)
-                    Console.ReadLine();
-
                 // Flush any pending trace messages, remove the console trace listener from the collection, and close the console trace listener.
                 if (debug)
                 {
+                    // Delay completion when debugging to troubleshoot output
+                    if (Debugger.IsAttached)
+                        Console.WriteLine("\nPress any key to exit... ");
+                        Console.ReadLine();
+
                     Trace.Flush();
                     Trace.Listeners.Remove(consoleTracer);
                     consoleTracer.Close();
