@@ -1,5 +1,9 @@
 # SharpSCCM Release Notes
 
+### Version 2.0.13 (August 20, 2025)
+##### Changes
+- Added --delay-exit option instead of holding open when debugging by default
+
 ### Version 2.0.12 (September 16, 2024)
 ##### Changes
 - Fixed case matching issue in exec command
