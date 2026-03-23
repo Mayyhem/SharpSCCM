@@ -1093,7 +1093,7 @@ namespace SharpSCCM
                 {
                     Console.WriteLine($"[+] Creating new deployment of {applicationName} to {collection["Name"]} ({collection["CollectionID"]})");
                     string siteCode = wmiConnection.Path.ToString().Split('_').Last();
-                    string now = DateTime.Now.ToString("yyyyMMddHHmmss" + ".000000+***");
+                    string now = DateTime.UtcNow.ToString("yyyyMMddHHmmss" + ".000000+000");
                     deployment = new ManagementClass(wmiConnection, new ManagementPath("SMS_ApplicationAssignment"), null).CreateInstance();
                     deployment["ApplicationName"] = applicationName;
                     deployment["AssignmentName"] = $"{applicationName}_{collection["CollectionID"]}_Install";
