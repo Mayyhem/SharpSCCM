@@ -572,7 +572,7 @@ namespace SharpSCCM
             string szMediaGUIDPlain = szMediaGUID.Trim(new char[] { '{', '}' });
             string szMediaGUIDCurlyBrackets = $"{{{szMediaGUIDPlain}}}";
 
-            (MessageCertificateX509 signingCertificate, MessageCertificateX509 encryptioncertificate, SmsClientId _) = GetCertsAndClientId(null, null, szEncodedSigningCert, machineGUID, null, null, null, szMediaGUIDCurlyBrackets.Substring(0, 31));
+            (MessageCertificateX509 signingCertificate, MessageCertificateX509 encryptioncertificate, SmsClientId _) = GetCertsAndClientId(null, null, szEncodedSigningCert, machineGUID, null, null, null, szMediaGUIDCurlyBrackets.Substring(1, 31));
             if (signingCertificate == null)
             {
                 return;
