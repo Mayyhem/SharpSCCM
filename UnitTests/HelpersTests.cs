@@ -28,7 +28,8 @@ namespace SharpSCCM.UnitTests
             }
 
             XmlDocument document = new XmlDocument();
-            document.LoadXml($"<Root><Policy Compression=\"zlib\">{BitConverter.ToString(compressedBytes).Replace(\"-\", string.Empty)}</Policy></Root>");
+            string compressedHex = BitConverter.ToString(compressedBytes).Replace("-", string.Empty);
+            document.LoadXml($"<Root><Policy Compression=\"zlib\">{compressedHex}</Policy></Root>");
 
             Helpers.DecompressXMLNodes(document.DocumentElement);
 
