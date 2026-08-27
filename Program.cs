@@ -544,42 +544,39 @@ namespace SharpSCCM
                 getSecretsFromPolicy.Handler = CommandHandler.Create(
                     (string managementPoint, string siteCode, string certificate, string clientId, string mediaId, string outputFile, string password, string registerClient, string username) =>
                     {
-                        if (managementPoint == null || siteCode == null)
-                        {
-                            (managementPoint, siteCode) = ClientWmi.GetCurrentManagementPointAndSiteCode();
-                        }
-                        if (!string.IsNullOrEmpty(managementPoint) && !string.IsNullOrEmpty(siteCode))
-                        {
-                            if (!string.IsNullOrEmpty(certificate) && !string.IsNullOrEmpty(mediaId))
+                        ResolveClientAndInvoke(managementPoint, siteCode, certificate, clientId, username, password, registerClient, outputFile,
+                            MgmtPointMessaging.GetSecretsFromPolicies,
+                            (resolvedManagementPoint, resolvedSiteCode) =>
                             {
-                                string szHTTPProxyAddress = null;
-                                MgmtPointMessaging.SendPolicyAssignmentRequestWithExplicitData(clientId, mediaId, certificate, managementPoint, siteCode, szHTTPProxyAddress);
-                            }
-                            else if (!string.IsNullOrEmpty(certificate) && !string.IsNullOrEmpty(clientId))
-                            {
-                                MgmtPointMessaging.GetSecretsFromPolicies(managementPoint, siteCode, certificate, clientId, null, null, null, outputFile);
-                            }
-                            else if (!string.IsNullOrEmpty(certificate) && string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(certificate) && !string.IsNullOrEmpty(clientId))
-                            {
-                                Console.WriteLine("[!] Both a certificate (-c) and SMS client GUID (-i) for a previously registered client must be specified when using this option");
-                            }
-                            else if (!string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(password) && !string.IsNullOrEmpty(registerClient))
-                            {
-                                MgmtPointMessaging.GetSecretsFromPolicies(managementPoint, siteCode, null, null, username, password, registerClient, outputFile);
-                            }
-                            else if (!string.IsNullOrEmpty(registerClient) && (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password)))
-                            {
-                                Console.WriteLine("[!] Both a computer account name (-u) and computer account password (-p) must be specified when using the register client (-r) option");
-                            }
-                            else if (Helpers.IsHighIntegrity())
-                            {
-                                MgmtPointMessaging.GetSecretsFromPolicies(managementPoint, siteCode, certificate, clientId, username, password, registerClient, outputFile);
-                            }
-                            else
-                            {
-                                Console.WriteLine("[!] A client name to register (-r), computer account name (-u), and computer account password (-p) must be specified when the user is not a local administrator");
-                            }
-                        }
+                                if (!string.IsNullOrEmpty(certificate) && !string.IsNullOrEmpty(mediaId))
+                                {
+                                    string szHTTPProxyAddress = null;
+                                    MgmtPointMessaging.SendPolicyAssignmentRequestWithExplicitData(clientId, mediaId, certificate, resolvedManagementPoint, resolvedSiteCode, szHTTPProxyAddress);
+                                    return true;
+                                }
+                                return false;
+                            });
+                    });
+
+                // get policies
+                var getPolicies = new Command("policies", "Request the full machine policy from a management point via HTTP, including policies not flagged \"Secret\" (get secrets only returns the latter)\n" +
+                    "  Requirements:\n" +
+                    "    - Domain computer account credentials\n" +
+                    "        OR\n" +
+                    "    - Local Administrators group membership on a client");
+                getCommand.Add(getPolicies);
+                getPolicies.Add(new Option<string>(new[] { "--certificate", "-c" }, "The encoded X509 certificate blob to use that corresponds to a previously registered device"));
+                getPolicies.Add(new Option<string>(new[] { "--client-id", "-i" }, "The SMS client GUID to use that corresponds to a previously registered device and certificate"));
+                getPolicies.Add(new Option<string>(new[] { "--management-point", "-mp" }, "The IP address, FQDN, or NetBIOS name of the management point to connect to (default: the current management point of the client running SharpSCCM)"));
+                getPolicies.Add(new Option<string>(new[] { "--output-dir", "-o" }, "The directory to write each policy's XML to (one file per policy, named by policy ID); prints to console if omitted"));
+                getPolicies.Add(new Option<string>(new[] { "--password", "-p" }, "The password for the specified computer account"));
+                getPolicies.Add(new Option<string>(new[] { "--register-client", "-r" }, "The name of the device to register as a new client (required when user is not a local administrator)"));
+                getPolicies.Add(new Option<string>(new[] { "--username", "-u" }, "The name of the computer account to register the new device record with, including the trailing \"$\""));
+
+                getPolicies.Handler = CommandHandler.Create(
+                    (string managementPoint, string siteCode, string certificate, string clientId, string outputDir, string password, string registerClient, string username) =>
+                    {
+                        ResolveClientAndInvoke(managementPoint, siteCode, certificate, clientId, username, password, registerClient, outputDir, MgmtPointMessaging.GetPolicies);
                     });
 
                 var getSiteInfo = new Command("site-info", "Get information about the site, including the site server name, from a domain controller via LDAP");
@@ -1402,6 +1399,61 @@ namespace SharpSCCM
                     Console.WriteLine(ex.InnerException);
                 }
             }
-        }   
+        }
+
+        // Shared by "get secrets" and "get policies": resolves the management point/site code if not
+        // provided, then picks the right client-auth path (existing cert+client-id, register a new
+        // client, or fall back to the local machine's own cert when running as admin) and invokes the
+        // matching MgmtPointMessaging method. A caller with an extra auth path of its own (e.g. "get
+        // secrets"'s PXE cert+media-GUID flow) can handle it via trySpecialCase, checked after
+        // resolution but before the standard ladder - matching where that check ran previously.
+        static void ResolveClientAndInvoke(
+            string managementPoint,
+            string siteCode,
+            string certificate,
+            string clientId,
+            string username,
+            string password,
+            string registerClient,
+            string outputPath,
+            Action<string, string, string, string, string, string, string, string> invoke,
+            Func<string, string, bool> trySpecialCase = null)
+        {
+            if (managementPoint == null || siteCode == null)
+            {
+                (managementPoint, siteCode) = ClientWmi.GetCurrentManagementPointAndSiteCode();
+            }
+            if (!string.IsNullOrEmpty(managementPoint) && !string.IsNullOrEmpty(siteCode))
+            {
+                if (trySpecialCase != null && trySpecialCase(managementPoint, siteCode))
+                {
+                    return;
+                }
+                if (!string.IsNullOrEmpty(certificate) && !string.IsNullOrEmpty(clientId))
+                {
+                    invoke(managementPoint, siteCode, certificate, clientId, null, null, null, outputPath);
+                }
+                else if (!string.IsNullOrEmpty(certificate) && string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(certificate) && !string.IsNullOrEmpty(clientId))
+                {
+                    Console.WriteLine("[!] Both a certificate (-c) and SMS client GUID (-i) for a previously registered client must be specified when using this option");
+                }
+                else if (!string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(password) && !string.IsNullOrEmpty(registerClient))
+                {
+                    invoke(managementPoint, siteCode, null, null, username, password, registerClient, outputPath);
+                }
+                else if (!string.IsNullOrEmpty(registerClient) && (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password)))
+                {
+                    Console.WriteLine("[!] Both a computer account name (-u) and computer account password (-p) must be specified when using the register client (-r) option");
+                }
+                else if (Helpers.IsHighIntegrity())
+                {
+                    invoke(managementPoint, siteCode, certificate, clientId, username, password, registerClient, outputPath);
+                }
+                else
+                {
+                    Console.WriteLine("[!] A client name to register (-r), computer account name (-u), and computer account password (-p) must be specified when the user is not a local administrator");
+                }
+            }
+        }
     }
 }

@@ -1,5 +1,13 @@
 # SharpSCCM Release Notes
 
+### Version 2.0.14 (August 27, 2026)
+##### New Commands
+- Added `get policies` to retrieve all machine policy assignments
+##### Changes
+- Wait for policy downloads to complete before requesting the next policy
+- Handle policy decompression and decoding failures without terminating the command
+- Preserve valid XML when decompressed policy content includes an XML declaration
+
 ### Version 2.0.13 (August 20, 2025)
 ##### Changes
 - Added --delay-exit option instead of holding open when debugging by default
