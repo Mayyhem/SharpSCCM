@@ -347,11 +347,30 @@ namespace SharpSCCM
                             Array.Copy(decompressedBytes, 2, decompressedXMLBytes, 0, decompressedBytes.Length - 2);
                             szDecompressedStr = System.Text.Encoding.Unicode.GetString(decompressedXMLBytes);
                         }
+                        else
+                        {
+                            // Content didn't start with the UTF-16LE BOM we know how to decode; leaving the node's
+                            // raw (still-compressed) content in place rather than silently dropping it unannounced.
+                            Console.WriteLine($"[!] Decompressed a \"{compressionNode.Name}\" node's content but it didn't start with the expected UTF-16 BOM, so it was left un-decompressed");
+                        }
                         // Update node content
                         if (szDecompressedStr.Length > 0)
                         {
                             // remove "\r", "\n", "\t", etc.
                             string szCleanedXmlStr = new string(szDecompressedStr.Where(c => !char.IsControl(c)).ToArray());
+                            // Decompressed content is often itself a full XML document starting with its own
+                            // "<?xml ...?>" declaration. Since it's about to become InnerXml of an existing
+                            // element rather than a standalone document, a nested declaration would make the
+                            // final serialized document invalid (XML disallows a declaration except at the very start).
+                            string szTrimmedXmlStr = szCleanedXmlStr.TrimStart();
+                            if (szTrimmedXmlStr.StartsWith("<?xml", StringComparison.OrdinalIgnoreCase))
+                            {
+                                int declEndIndex = szTrimmedXmlStr.IndexOf("?>");
+                                if (declEndIndex >= 0)
+                                {
+                                    szCleanedXmlStr = szTrimmedXmlStr.Substring(declEndIndex + 2);
+                                }
+                            }
                             compressionNode.InnerXml = szCleanedXmlStr;
                             // Recursive decompress
                             foreach (System.Xml.XmlNode childNode in compressionNode.ChildNodes)
