@@ -82,7 +82,7 @@ namespace SharpSCCM
                 }
                 if (recurse)
                 {
-                    foreach (string subdirPath in Directory.GetDirectories(dirPath))
+                    foreach (string subdirPath in Directory.EnumerateDirectories(dirPath))
                     {
                         GetDirectoryContentsAndPermissions(subdirPath, true);
                     }
