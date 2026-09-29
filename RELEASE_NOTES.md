@@ -1,6 +1,6 @@
 # SharpSCCM Release Notes
 
-### Version 2.0.14 (August 27, 2026)
+### Version 2.0.14 (September 29, 2026)
 ##### New Commands
 - Added `get policies` to retrieve all machine policy assignments
 ##### Changes
